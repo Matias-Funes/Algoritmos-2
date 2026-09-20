@@ -1,32 +1,55 @@
-﻿# Visualización base del almacén
+﻿# 🚀 Comandos Git Bash para trabajar en el proyecto de Algoritmos 2
 
-Este proyecto contiene el primer paso del proyecto semestral: un almacén
-representado por un grafo no dirigido con lista de adyacencia. El programa
-dibuja los pasillos, nodos transitables, racks y la zona de despacho usando
-Pygame.
+# 1. Entrar a la carpeta del proyecto (si ya está clonado)
+cd (pongan la ruta)
 
-## Requisitos
+# 2. Clonar el repositorio (solo la primera vez)
+git clone https://github.com/Matias-Funes/Algoritmos-2.git
+cd Algoritmos-2
 
-- Python 3.10 o superior
-- Pygame
+# 3. Ver en qué rama estás
+git branch
 
-Instalación de la dependencia:
+# 4. Crear una nueva rama para trabajar
+git checkout -b (nombre de la rama)
 
-```bash
-python -m pip install pygame
-```
+# 4. Entrar a tu rama (si ya existe y querés trabajar en ella)
+git checkout (nombre de la rama)
 
-## Ejecución
 
-Desde la carpeta del proyecto:
 
-```bash
-python main.py
-```
+# 5. Activar el entorno virtual (si aún no existe)
+python -m venv .venv
+source .venv/Scripts/activate
 
-La ventana se puede cerrar con el botón de cierre o presionando `Esc`.
+# 6. Instalar las dependencias necesarias
+pip install -r requirements.txt
 
-La clase `Graph` y la función `build_warehouse` contienen la lógica del mundo.
-`draw_warehouse` y `run` se ocupan exclusivamente de la visualización y del
-bucle de Pygame. Esta versión no incluye todavía ruteo, pedidos ni simulación
-del operario.
+# 7. Verificar los cambios realizados
+git status
+
+# 8. Agregar los cambios al área de preparación
+git add .
+
+# 9. Guardar los cambios con un mensaje descriptivo
+git commit -m "Descripción corta de lo que hiciste"
+
+# 10. Subir los cambios a tu rama en GitHub
+git push origin (nombre de rama)
+# Ejemplo:
+# git push origin juan-funcion-movimiento
+
+# 11. Actualizar tu rama con los cambios del grupo (antes de subir algo nuevo)
+git pull origin main
+
+# 12. Cambiar de rama (si necesitás ir a otra)
+git checkout nombre-de-rama
+
+# 13. Ver todas las ramas disponibles
+git branch -a
+
+# 14. Borrar una rama local que ya no uses
+git branch -d nombre-de-rama
+
+# 15. Borrar una rama remota (si ya fue mergeada)
+git push origin --delete nombre-de-rama
