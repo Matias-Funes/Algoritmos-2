@@ -9,3 +9,18 @@ __pycache__/
 
 # Ajustes de editor
 .vscode/
+
+# Neovim / Vim
+*.swp
+*.swo
+*~
+.nvim.lsp.log
+
+# Por si alguien usa windows
+Thumbs.db
+
+# Linux
+.directory
+core
+core.*
+
