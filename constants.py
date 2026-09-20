@@ -1,1 +1,2 @@
 WIDTH, HEIGHT = 800, 600
+juli = 3
