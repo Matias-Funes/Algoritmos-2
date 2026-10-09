@@ -106,7 +106,7 @@ class Node:
 
 
 # ---------------------------------------------------------------------------
-# 4. Grafo del Warehouse (listas de adyacencia)
+# 4. Grafo del Warehouse (listas de adyacencia))
 # ---------------------------------------------------------------------------
 class WarehouseGraph:
     """
