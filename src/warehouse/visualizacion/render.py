@@ -26,30 +26,38 @@ def dibujar_warehouse(
     margen: int,
 ) -> dict[tuple[int, int], tuple[float, float, float, float]]:
     """
-    Dibuja el warehouse y devuelve el mapa (x, y) -> (x0, y0, x1, y1) en píxeles.
-    El eje y se invierte para que (0,0) quede abajo (despacho abajo, racks arriba).
+    Dibuja el warehouse centrado en el canvas.
+    El canvas debe tener width/height configurados.
     """
     coords: dict[tuple[int, int], tuple[float, float, float, float]] = {}
-    ancho_px = warehouse.ancho * celda_px
-    alto_px = warehouse.alto * celda_px
+
+    ancho_warehouse = warehouse.ancho * celda_px
+    alto_warehouse = warehouse.alto * celda_px
+
+    ancho_canvas = int(canvas["width"])
+    alto_canvas = int(canvas["height"])
+
+    # Offset para centrar (mínimo margen)
+    offset_x = max((ancho_canvas - ancho_warehouse) // 2, margen)
+    offset_y = max((alto_canvas - alto_warehouse) // 2, margen)
 
     def celda_a_px(x: int, y: int) -> tuple[float, float, float, float]:
-        x0 = margen + x * celda_px
-        y0 = margen + (warehouse.alto - 1 - y) * celda_px
+        x0 = offset_x + x * celda_px
+        y0 = offset_y + (warehouse.alto - 1 - y) * celda_px
         return (x0, y0, x0 + celda_px, y0 + celda_px)
 
-    # Rectángulo de fondo
+    # Rectángulo exterior
     canvas.create_rectangle(
-        margen - 2,
-        margen - 2,
-        margen + ancho_px + 2,
-        margen + alto_px + 2,
+        offset_x - 2,
+        offset_y - 2,
+        offset_x + ancho_warehouse + 2,
+        offset_y + alto_warehouse + 2,
         fill="white",
         outline=COLOR_BORDE_EXT,
         width=2,
     )
 
-    # Pasillos / despacho / puertas (nodos del grafo)
+    # Pasillos, despacho, puertas (nodos del grafo)
     for nodo in warehouse.grafo.nodos():
         x, y = nodo.posicion.x, nodo.posicion.y
         coords[(x, y)] = celda_a_px(x, y)
