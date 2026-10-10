@@ -4,19 +4,41 @@ from warehouse.dominio.tipo_nodo import TipoNodo
 from warehouse.warehouse.warehouse import Warehouse
 
 COLORES_TIPO = {
-    TipoNodo.PASILLO: "#f5f5f5",
-    TipoNodo.RACK: "#8b7355",
+    TipoNodo.PASILLO: "#ffffff",
+    TipoNodo.RACK: "#a1887f",
     TipoNodo.DESPACHO: "#c8e6c9",
-    TipoNodo.PUERTA: "#ffb74d",
+    TipoNodo.PUERTA: "#ffcc80",
 }
 
-COLOR_BORDE_CELDA = "#dddddd"
-COLOR_BORDE_EXT = "#333333"
+COLOR_BORDE_CELDA = "#e0e0e0"
+COLOR_BORDE_RACK = "#8d6e63"
+COLOR_BORDE_EXT = "#424242"
+
 COLOR_PICKER = "#1565c0"
-COLOR_PRODUCTO_PENDIENTE = "#e53935"
-COLOR_PRODUCTO_RECOGIDO = "#43a047"
-COLOR_RECORRIDO_HECHO = "#1e88e5"
-COLOR_RECORRIDO_PENDIENTE = "#bbbbbb"
+COLOR_PICKER_BORDE = "#ffffff"
+
+COLOR_PRODUCTO_PENDIENTE = "#ef5350"
+COLOR_PRODUCTO_RECOGIDO = "#66bb6a"
+
+COLOR_RECORRIDO_HECHO = "#2196f3"
+COLOR_RECORRIDO_PENDIENTE = "#cfd8dc"
+
+COLOR_CANVAS_FONDO = "#fafafa"
+
+# COLORES_TIPO = {
+#     TipoNodo.PASILLO: "#f5f5f5",
+#     TipoNodo.RACK: "#8b7355",
+#     TipoNodo.DESPACHO: "#c8e6c9",
+#     TipoNodo.PUERTA: "#ffb74d",
+# }
+#
+# COLOR_BORDE_CELDA = "#dddddd"
+# COLOR_BORDE_EXT = "#333333"
+# COLOR_PICKER = "#1565c0"
+# COLOR_PRODUCTO_PENDIENTE = "#e53935"
+# COLOR_PRODUCTO_RECOGIDO = "#43a047"
+# COLOR_RECORRIDO_HECHO = "#1e88e5"
+# COLOR_RECORRIDO_PENDIENTE = "#bbbbbb"
 
 
 def dibujar_warehouse(
@@ -82,7 +104,7 @@ def dibujar_warehouse(
             x1,
             y1,
             fill=COLORES_TIPO[TipoNodo.RACK],
-            outline=COLOR_BORDE_CELDA,
+            outline=COLOR_BORDE_RACK,
         )
 
     return coords
