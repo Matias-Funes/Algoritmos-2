@@ -283,6 +283,10 @@ Distancia total promedio por tamaño y estrategia:
 
 **Vecino más cercano ganó en 9 de 9 escenarios.**
 
+![Distancia total por tamaño y estrategia](data/resultados/grafico_distancias.png)
+
+**Figura 1.** Distancia total promedio por tamaño y estrategia. El gap crece con el tamaño del escenario.
+
 ### Análisis
 
 1. **La mejora crece con el tamaño.** A mayor cantidad de paradas, más
@@ -292,12 +296,24 @@ Distancia total promedio por tamaño y estrategia:
 2. **Menor varianza.** El boxplot muestra que `vecino_mas_cercano` no solo
    tiene menor mediana; también menor dispersión. Es más predecible.
 
+![Distribución de distancias por wave](data/resultados/grafico_boxplot.png)
+
+**Figura 2.** Distribución de distancias por wave. `vecino_mas_cercano` no solo tiene menor mediana, también menor dispersión.
+
 3. **Sin costo extra en tiempo.** El cache de distancias hace que el costo
    de las O(k²) consultas sea despreciable frente al costo de los Dijkstra
    iniciales. Ambas estrategias tienen tiempos casi idénticos.
 
+![Escalado del tiempo con el tamaño del warehouse](data/resultados/grafico_tiempos.png)
+
+**Figura 3.** Tiempo total de recorrido según cantidad de nodos. Ambas estrategias escalan de forma casi idéntica.
+
 4. **Trade-off distancia vs tiempo: inexistente en este experimento.**
    Vecino más cercano domina en ambas dimensiones.
+
+![Trade-off distancia vs tiempo](data/resultados/grafico_tradeoff.png)
+
+**Figura 4.** Los puntos de `vecino_mas_cercano` están a la izquierda (menor distancia) con tiempos similares. Domina en ambas dimensiones.
 
 ---
 
@@ -315,6 +331,10 @@ contra un layout con pasillos cada 3 filas.
 | Grande | 0 | 3838.7 | 2118.7 | 44.8% |
 | Grande | 3 | 3183.3 | 1733.3 | 45.5% |
 
+![Efecto de pasillos horizontales por tamaño](data/resultados/grafico_pasillos_h.png)
+
+**Figura 5.** Efecto de los pasillos horizontales sobre la distancia total por tamaño.
+
 **Observaciones:**
 
 1. Los pasillos horizontales **reducen la distancia total** entre 8% y 18%
@@ -326,6 +346,10 @@ contra un layout con pasillos cada 3 filas.
    rutas adicionales.
 3. En el grande, la brecha se mantiene (44.8% → 45.5%), porque `vecino_mas_cercano`
    también aprovecha los pasillos horizontales para reducir sus trayectos.
+
+![Efecto relativo de pasillos H y estrategia](data/resultados/grafico_efecto_relativo.png)
+
+**Figura 6.** Efecto relativo normalizado a `orden_pedidos, ph=0`. Permite comparar los tres tamaños en la misma escala.
 
 ---
 
