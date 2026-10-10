@@ -201,16 +201,16 @@ BFS.
 Usado por el validador para verificar que todos los nodos de picking son
 alcanzables desde la zona de despacho.
 
-- **Tiempo:** O(V + E)
-- **Espacio:** O(V)
+- **Tiempo:** O(|V| + |E|)
+- **Espacio:** O(|V|)
 
 ### Dijkstra
 
 Calcula distancias mínimas desde un nodo origen a todos los demás, con cola
 de prioridad (heap binario).
 
-- **Tiempo:** O((V + E) log V)
-- **Espacio:** O(V)
+- **Tiempo:** O((|V| + |E|) log |V|)
+- **Espacio:** O(|V|)
 
 ### Cache de distancias
 
@@ -218,7 +218,7 @@ Como el cálculo de recorridos consulta distancias muchas veces entre los
 mismos nodos, se cachea el resultado de Dijkstra por origen. La primera
 consulta desde un origen corre Dijkstra; las siguientes son O(1).
 
-- **Costo total:** a lo sumo O(k · (V + E) log V), donde k = orígenes
+- **Costo total:** a lo sumo O(k · (|V| + |E|) log |V|), donde k = orígenes
   distintos consultados.
 
 ### Generación de waves
@@ -335,9 +335,9 @@ Para cada algoritmo, complejidad temporal y espacial:
 
 | Algoritmo | Tiempo | Espacio |
 |---|---|---|
-| BFS | O(V + E) | O(V) |
-| Dijkstra (heap) | O((V + E) log V) | O(V) |
-| Cache de distancias | O(k · Dijkstra) amortizado | O(k · V) |
+| BFS | O(|V| + |E|) | O(|V|) |
+| Dijkstra (heap) | O((|V| + |E|) log |V|) | O(|V|) |
+| Cache de distancias | O(k · Dijkstra) amortizado | O(k · |V|) |
 | Generación de waves (prioridad) | O(n log n + n · m) | O(n) |
 | Generación de waves (cercanía) | O(n log n + n² · p) | O(n) |
 | Recorrido (orden pedidos) | O(k) consultas | O(k) |
@@ -375,7 +375,7 @@ bloqueadas que **no** son nodos del grafo; cada producto tiene un
 
 - Los grafos de warehouse son **dispersos**: cada nodo tiene a lo sumo 4
   vecinos.
-- La lista de adyacencia usa O(V + E) espacio, contra O(V²) de la matriz.
+- La lista de adyacencia usa O(|V| + |E|) espacio, contra O(V²) de la matriz.
 - Iterar vecinos es O(grado), esencial para BFS y Dijkstra.
 - Flexibilidad para agregar/quitar nodos sin reasignar memoria.
 
@@ -393,7 +393,7 @@ necesario para construir el grafo por grilla.
 ### 4. ¿Por qué eligieron dichos algoritmos?
 
 - **BFS** es la forma natural de validar alcanzabilidad con complejidad
-  óptima O(V + E).
+  óptima O(|V| + |E|).
 - **Dijkstra** es correcto y eficiente con pesos no negativos (los nuestros
   son positivos). Alternativas como Bellman-Ford o Floyd-Warshall son más
   costosas sin beneficio en este caso.
