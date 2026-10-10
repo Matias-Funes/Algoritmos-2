@@ -15,6 +15,7 @@ from warehouse.algoritmos.recorridos import ESTRATEGIAS, recorrer_wave
 from warehouse.generacion.generador import ConfigGeneracion, generar_escenario
 from warehouse.generacion.validador import validar_escenario
 from warehouse.simulacion.estado import EstadoSimulacion
+from warehouse.visualizacion.render import COLOR_CANVAS_FONDO, crear_panel_leyenda
 from warehouse.waves.generador_waves import EstrategiaWaves, generar_waves
 
 # Tamaño fijo del área de dibujo
@@ -158,14 +159,34 @@ class SimulacionSecuencial:
         self._cargar_wave(0)
 
     def _construir_ui(self) -> None:
-        # Canvas de tamaño fijo (sin scrollbar)
+        # Header
+        header = tk.Frame(self.root, bg=COLOR_CANVAS_FONDO)
+        header.pack(side="top", fill="x", padx=10, pady=(10, 0))
+        self.lbl_titulo = tk.Label(
+            header,
+            text="",
+            anchor="w",
+            bg=COLOR_CANVAS_FONDO,
+            font=("sans-serif", 14, "bold"),
+        )
+        self.lbl_titulo.pack(side="left")
+
+        # Frame horizontal: canvas + leyenda
+        frame_principal = tk.Frame(self.root, bg=COLOR_CANVAS_FONDO)
+        frame_principal.pack(side="top", padx=10, pady=10)
+
         self.canvas = tk.Canvas(
-            self.root,
-            bg="#eeeeee",
+            frame_principal,
+            bg=COLOR_CANVAS_FONDO,
             width=self.ancho_canvas,
             height=self.alto_canvas,
+            highlightthickness=1,
+            highlightbackground="#cccccc",
         )
-        self.canvas.pack(side="top")
+        self.canvas.pack(side="left")
+
+        panel_leyenda = crear_panel_leyenda(frame_principal)
+        panel_leyenda.pack(side="left", fill="y", padx=(10, 0))
 
         # Panel de controles
         panel = tk.Frame(self.root)
@@ -294,6 +315,11 @@ class SimulacionSecuencial:
     def _actualizar_label(self) -> None:
         if self.estado is None:
             return
+        wave = self.resultados[self.indice_actual][0]
+        self.lbl_titulo.config(
+            text=f"Wave {wave.id}  ·  {self.estrategia}  ·  "
+            f"{wave.cantidad_pedidos()} pedidos"
+        )
         idx = self.estado.indice_actual
         total = len(self.estado.camino) - 1
         rec = len(self.estado.productos_recogidos())

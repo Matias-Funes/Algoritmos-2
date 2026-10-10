@@ -176,3 +176,59 @@ def dibujar_zonas(
             width=2,
             dash=(4, 4),
         )
+
+
+def crear_panel_leyenda(parent: tk.Widget) -> tk.Frame:
+    """Crea un frame con la leyenda de colores."""
+    frame = tk.LabelFrame(
+        parent,
+        text="Leyenda",
+        padx=10,
+        pady=8,
+        font=("sans-serif", 10, "bold"),
+        bg=COLOR_CANVAS_FONDO,
+    )
+
+    items = [
+        ("Pasillo", COLORES_TIPO[TipoNodo.PASILLO], COLOR_BORDE_CELDA),
+        ("Rack", COLORES_TIPO[TipoNodo.RACK], COLOR_BORDE_RACK),
+        ("Zona de despacho", COLORES_TIPO[TipoNodo.DESPACHO], "#2e7d32"),
+        ("Puerta", COLORES_TIPO[TipoNodo.PUERTA], ""),
+        ("Producto pendiente", COLOR_PRODUCTO_PENDIENTE, ""),
+        ("Producto recogido", COLOR_PRODUCTO_RECOGIDO, ""),
+        ("Picker", COLOR_PICKER, COLOR_PICKER_BORDE),
+        ("Recorrido hecho", COLOR_RECORRIDO_HECHO, ""),
+        ("Recorrido pendiente", COLOR_RECORRIDO_PENDIENTE, ""),
+    ]
+
+    for texto, color, borde in items:
+        fila = tk.Frame(frame, bg=COLOR_CANVAS_FONDO)
+        fila.pack(fill="x", pady=2)
+
+        swatch = tk.Canvas(
+            fila,
+            width=20,
+            height=20,
+            bg=COLOR_CANVAS_FONDO,
+            highlightthickness=0,
+        )
+        swatch.pack(side="left", padx=(0, 8))
+        swatch.create_rectangle(
+            3,
+            3,
+            17,
+            17,
+            fill=color,
+            outline=borde if borde else color,
+            width=1,
+        )
+
+        tk.Label(
+            fila,
+            text=texto,
+            anchor="w",
+            bg=COLOR_CANVAS_FONDO,
+            font=("sans-serif", 9),
+        ).pack(side="left", fill="x", expand=True)
+
+    return frame
