@@ -301,6 +301,34 @@ Distancia total promedio por tamaño y estrategia:
 
 ---
 
+### Efecto de los pasillos horizontales
+
+Se comparó el layout con solo dos pasillos horizontales (arriba y abajo)
+contra un layout con pasillos cada 3 filas.
+
+| Tamaño | Pasillos H | orden_pedidos | vecino_mas_cercano | Mejora |
+|---|---|---|---|---|
+| Chico | 0 | 96.7 | 72.7 | 24.8% |
+| Chico | 3 | 79.3 | 66.7 | 16.0% |
+| Mediano | 0 | 490.7 | 338.7 | 31.0% |
+| Mediano | 3 | 412.0 | 304.0 | 26.2% |
+| Grande | 0 | 3838.7 | 2118.7 | 44.8% |
+| Grande | 3 | 3183.3 | 1733.3 | 45.5% |
+
+**Observaciones:**
+
+1. Los pasillos horizontales **reducen la distancia total** entre 8% y 18%
+   en todos los tamaños y estrategias, porque proveen rutas alternativas
+   entre racks verticalmente lejanos.
+2. En warehouses chicos y medianos, el efecto **reduce la brecha** entre
+   las estrategias (la mejora baja de 24.8% a 16.0% en el chico y de 31.0%
+   a 26.2% en el mediano), porque `orden_pedidos` se beneficia más de las
+   rutas adicionales.
+3. En el grande, la brecha se mantiene (44.8% → 45.5%), porque `vecino_mas_cercano`
+   también aprovecha los pasillos horizontales para reducir sus trayectos.
+
+---
+
 ## Análisis de complejidad
 
 Para cada algoritmo, complejidad temporal y espacial:

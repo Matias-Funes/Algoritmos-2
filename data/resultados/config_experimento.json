@@ -4,6 +4,10 @@
     2,
     3
   ],
+  "pasillos_h": [
+    0,
+    3
+  ],
   "estrategia_waves": "prioridad_y_cercania",
   "estrategias_recorrido": [
     "orden_pedidos",
@@ -15,6 +19,7 @@
       "ancho_pasillo": 1,
       "ancho_bloque_racks": 2,
       "alto": 5,
+      "cada_cuantas_filas_pasillo_horizontal": 0,
       "productos_por_rack": 2,
       "stock_min": 10,
       "stock_max": 50,
@@ -29,6 +34,7 @@
       "ancho_pasillo": 1,
       "ancho_bloque_racks": 2,
       "alto": 8,
+      "cada_cuantas_filas_pasillo_horizontal": 0,
       "productos_por_rack": 2,
       "stock_min": 10,
       "stock_max": 50,
@@ -43,6 +49,7 @@
       "ancho_pasillo": 1,
       "ancho_bloque_racks": 2,
       "alto": 12,
+      "cada_cuantas_filas_pasillo_horizontal": 0,
       "productos_por_rack": 3,
       "stock_min": 10,
       "stock_max": 50,
