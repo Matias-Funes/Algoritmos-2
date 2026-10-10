@@ -98,3 +98,63 @@ def test_config_invalida_falla():
         ConfigGeneracion(alto=2)
     with pytest.raises(ValueError):
         ConfigGeneracion(stock_min=100, stock_max=10)
+
+
+def test_pasillos_horizontales_intermedios():
+    """Con cada_cuantas_filas_pasillo_horizontal=3, las filas 0, 3, 6, 9 son pasillos."""
+    cfg = ConfigGeneracion(
+        n_bloques_racks=2, alto=10, cada_cuantas_filas_pasillo_horizontal=3, seed=1
+    )
+    esc = generar_escenario(cfg)
+    w = esc.warehouse
+
+    ancho = w.ancho
+    for y in (0, 3, 6, 9):
+        for x in range(ancho):
+            assert (x, y) in w._nodo_por_xy, f"Falta nodo en ({x}, {y})"
+
+
+def test_sin_pasillos_horizontales_solo_arriba_y_abajo():
+    cfg = ConfigGeneracion(
+        n_bloques_racks=3, alto=8, cada_cuantas_filas_pasillo_horizontal=0, seed=1
+    )
+    esc = generar_escenario(cfg)
+    w = esc.warehouse
+
+    # Las filas 0 y 7 son horizontales, las demás solo columnas P
+    for y in (0, 7):
+        for x in range(w.ancho):
+            assert (x, y) in w._nodo_por_xy
+
+    # En la fila 4 (no horizontal), las columnas R no deben ser transitables
+    patron = _patron_columnas(cfg)
+    for x, tipo in enumerate(patron):
+        if tipo == "R":
+            assert (x, 4) not in w._nodo_por_xy
+
+
+def test_mas_pasillos_horizontales_mas_nodos():
+    """Agregar pasillos horizontales intermedios debe aumentar la cantidad de nodos."""
+    cfg_sin = ConfigGeneracion(
+        n_bloques_racks=3, alto=12, cada_cuantas_filas_pasillo_horizontal=0, seed=1
+    )
+    cfg_con = ConfigGeneracion(
+        n_bloques_racks=3, alto=12, cada_cuantas_filas_pasillo_horizontal=3, seed=1
+    )
+    esc_sin = generar_escenario(cfg_sin)
+    esc_con = generar_escenario(cfg_con)
+
+    assert len(esc_con.warehouse.grafo) > len(esc_sin.warehouse.grafo)
+
+
+def test_generacion_con_pasillos_h_validada():
+    cfg = ConfigGeneracion(
+        n_bloques_racks=4, alto=10, cada_cuantas_filas_pasillo_horizontal=2, seed=7
+    )
+    esc = generar_escenario(cfg)
+    validar_escenario(esc)  # no debe lanzar
+
+
+def test_config_pasillos_h_negativo_falla():
+    with pytest.raises(ValueError):
+        ConfigGeneracion(cada_cuantas_filas_pasillo_horizontal=-1)

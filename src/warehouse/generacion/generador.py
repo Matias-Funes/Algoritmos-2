@@ -14,6 +14,7 @@ class ConfigGeneracion:
     ancho_pasillo: int = 1
     ancho_bloque_racks: int = 2
     alto: int = 8
+    cada_cuantas_filas_pasillo_horizontal: int = 0  # 0 = solo arriba/abajo
 
     # productos
     productos_por_rack: int = 2
@@ -44,6 +45,8 @@ class ConfigGeneracion:
             raise ValueError("productos_por_rack debe ser > 0")
         if self.stock_min > self.stock_max:
             raise ValueError("stock_min no puede ser mayor que stock_max")
+        if self.cada_cuantas_filas_pasillo_horizontal < 0:
+            raise ValueError("cada_cuantas_filas_pasillo_horizontal debe ser >= 0")
 
 
 # --- helpers de geometría ---
@@ -68,22 +71,31 @@ def _patron_columnas(config: ConfigGeneracion) -> list[str]:
     return patron
 
 
+def _es_fila_pasillo_horizontal(y: int, config: ConfigGeneracion) -> bool:
+    """Devuelve True si la fila y debe ser un pasillo horizontal completo."""
+    if y == 0 or y == config.alto - 1:
+        return True
+    if config.cada_cuantas_filas_pasillo_horizontal <= 0:
+        return False
+    return y % config.cada_cuantas_filas_pasillo_horizontal == 0
+
+
 def _celdas_transitables(
     config: ConfigGeneracion, patron: list[str]
 ) -> set[tuple[int, int]]:
     ancho = len(patron)
     celdas: set[tuple[int, int]] = set()
 
-    # filas superior e inferior: todo transitable
-    for x in range(ancho):
-        celdas.add((x, 0))
-        celdas.add((x, config.alto - 1))
-
-    # filas intermedias: solo columnas 'P'
-    for y in range(1, config.alto - 1):
-        for x in range(ancho):
-            if patron[x] == "P":
+    for y in range(config.alto):
+        if _es_fila_pasillo_horizontal(y, config):
+            # Toda la fila es transitable
+            for x in range(ancho):
                 celdas.add((x, y))
+        else:
+            # Solo columnas P (pasillos verticales)
+            for x in range(ancho):
+                if patron[x] == "P":
+                    celdas.add((x, y))
 
     return celdas
 
@@ -93,7 +105,9 @@ def _posiciones_racks(
 ) -> list[tuple[int, int]]:
     ancho = len(patron)
     posiciones: list[tuple[int, int]] = []
-    for y in range(1, config.alto - 1):
+    for y in range(config.alto):
+        if _es_fila_pasillo_horizontal(y, config):
+            continue
         for x in range(ancho):
             if patron[x] == "R":
                 posiciones.append((x, y))
@@ -182,7 +196,14 @@ def generar_escenario(config: ConfigGeneracion) -> Escenario:
     productos = _generar_productos(config, w, rack_ids, rng)
     pedidos = _generar_pedidos(config, productos, rng)
 
-    nombre = f"gen_b{config.n_bloques_racks}_a{config.alto}_p{len(productos)}_o{len(pedidos)}"
+    nombre = (
+        f"gen_b{config.n_bloques_racks}"
+        f"_a{config.alto}"
+        f"_p{len(productos)}"
+        f"_o{len(pedidos)}"
+    )
+    if config.cada_cuantas_filas_pasillo_horizontal > 0:
+        nombre += f"_ph{config.cada_cuantas_filas_pasillo_horizontal}"
     if config.seed is not None:
         nombre += f"_s{config.seed}"
 
