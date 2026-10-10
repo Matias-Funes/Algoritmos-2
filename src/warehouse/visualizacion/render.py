@@ -126,8 +126,15 @@ def dibujar_punto(
     radio: float,
     color: str,
 ) -> None:
+    borde = COLOR_PICKER_BORDE
     canvas.create_oval(
-        cx - radio, cy - radio, cx + radio, cy + radio, fill=color, outline=""
+        cx - radio,
+        cy - radio,
+        cx + radio,
+        cy + radio,
+        fill=color,
+        outline=borde if borde else "",
+        width=2 if borde else 0,
     )
 
 
