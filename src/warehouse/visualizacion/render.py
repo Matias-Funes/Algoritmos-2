@@ -141,7 +141,12 @@ def dibujar_polilinea(
     if len(puntos) < 2:
         return
     flat = [c for p in puntos for c in p]
-    kwargs = {"fill": color, "width": grosor}
+    kwargs = {
+        "fill": color,
+        "width": grosor,
+        "capstyle": tk.ROUND,
+        "joinstyle": tk.ROUND,
+    }
     if dash:
         kwargs["dash"] = dash
     canvas.create_line(*flat, **kwargs)
