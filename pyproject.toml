@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "warehouse-picking"
+version = "0.1.0"
+description = "Simulador de Wave Picking en un Warehouse"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pandas>=2.2",
+    "matplotlib>=3.8",
+    "jupyter>=1.0",
+    ]
+
+nvim = [
+    "pynvim>=0.5",
+    "jupyter_client>=8.0",
+    "nbformat>=5.0",
+    "pillow>=10.0",
+    "cairosvg>=2.7",
+    "plotly>=5.0",
+    "kaleido>=0.2",
+    "pnglatex>=1.0",
+    "pyperclip>=1.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,56 @@
+{
+  "seeds": [
+    1,
+    2,
+    3
+  ],
+  "estrategia_waves": "prioridad_y_cercania",
+  "estrategias_recorrido": [
+    "orden_pedidos",
+    "vecino_mas_cercano"
+  ],
+  "tamanos": {
+    "chico": {
+      "n_bloques_racks": 2,
+      "ancho_pasillo": 1,
+      "ancho_bloque_racks": 2,
+      "alto": 5,
+      "productos_por_rack": 2,
+      "stock_min": 10,
+      "stock_max": 50,
+      "n_pedidos": 10,
+      "max_productos_por_pedido": 3,
+      "max_pedidos_wave": 3,
+      "max_productos_wave": 20,
+      "seed": null
+    },
+    "mediano": {
+      "n_bloques_racks": 4,
+      "ancho_pasillo": 1,
+      "ancho_bloque_racks": 2,
+      "alto": 8,
+      "productos_por_rack": 2,
+      "stock_min": 10,
+      "stock_max": 50,
+      "n_pedidos": 30,
+      "max_productos_por_pedido": 4,
+      "max_pedidos_wave": 4,
+      "max_productos_wave": 30,
+      "seed": null
+    },
+    "grande": {
+      "n_bloques_racks": 8,
+      "ancho_pasillo": 1,
+      "ancho_bloque_racks": 2,
+      "alto": 12,
+      "productos_por_rack": 3,
+      "stock_min": 10,
+      "stock_max": 50,
+      "n_pedidos": 100,
+      "max_productos_por_pedido": 5,
+      "max_pedidos_wave": 5,
+      "max_productos_wave": 50,
+      "seed": null
+    }
+  }
+}

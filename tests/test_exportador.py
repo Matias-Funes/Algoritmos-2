@@ -1,0 +1,95 @@
+import json
+from pathlib import Path
+
+import pytest
+
+from warehouse.generacion.generador import ConfigGeneracion, generar_escenario
+from warehouse.io.cargador_json import cargar_escenario
+from warehouse.io.exportador import escenario_a_dict, exportar_escenario
+
+
+def test_exportar_escenario_crea_archivo(tmp_path):
+    esc = generar_escenario(ConfigGeneracion(seed=42))
+    out = tmp_path / "salida.json"
+    exportar_escenario(esc, out)
+    assert out.exists()
+
+
+def test_dict_tiene_campos_esperados():
+    esc = generar_escenario(ConfigGeneracion(seed=42))
+    d = escenario_a_dict(esc)
+    for campo in (
+        "version",
+        "nombre",
+        "warehouse",
+        "productos",
+        "pedidos",
+        "wave_config",
+    ):
+        assert campo in d
+    for campo in ("ancho", "alto", "celdas_transitables", "racks"):
+        assert campo in d["warehouse"]
+
+
+def test_round_trip_generador_exportador_cargador(tmp_path):
+    """Generar → exportar → cargar debe dar el mismo escenario."""
+    esc_original = generar_escenario(ConfigGeneracion(seed=42, n_pedidos=5))
+    out = tmp_path / "esc.json"
+    exportar_escenario(esc_original, out)
+
+    esc_cargado = cargar_escenario(out)
+
+    # Dimensiones
+    assert esc_cargado.warehouse.ancho == esc_original.warehouse.ancho
+    assert esc_cargado.warehouse.alto == esc_original.warehouse.alto
+
+    # Racks
+    assert set(esc_cargado.warehouse.racks.keys()) == set(
+        esc_original.warehouse.racks.keys()
+    )
+
+    # Productos
+    assert set(esc_cargado.warehouse.productos.keys()) == set(
+        esc_original.warehouse.productos.keys()
+    )
+    for pid in esc_original.warehouse.productos:
+        p1 = esc_original.warehouse.productos[pid]
+        p2 = esc_cargado.warehouse.productos[pid]
+        assert p1.nombre == p2.nombre
+        assert p1.rack_id == p2.rack_id
+        assert p1.z == p2.z
+        assert p1.stock == p2.stock
+
+    # Pedidos
+    assert len(esc_cargado.pedidos) == len(esc_original.pedidos)
+    for p1, p2 in zip(esc_original.pedidos, esc_cargado.pedidos):
+        assert p1.id == p2.id
+        assert p1.prioridad == p2.prioridad
+        assert p1.productos_ids() == p2.productos_ids()
+
+
+def test_round_trip_mantiene_nodos_de_picking(tmp_path):
+    """Los nodos de picking deben apuntar al mismo lugar tras round-trip."""
+    esc_original = generar_escenario(ConfigGeneracion(seed=42))
+    out = tmp_path / "esc.json"
+    exportar_escenario(esc_original, out)
+
+    esc_cargado = cargar_escenario(out)
+
+    for pid, prod in esc_original.warehouse.productos.items():
+        orig_nodo = prod.nodo_picking
+        nuevo_nodo = esc_cargado.warehouse.productos[pid].nodo_picking
+
+        pos_orig = esc_original.warehouse.grafo.nodo(orig_nodo).posicion
+        pos_nuevo = esc_cargado.warehouse.grafo.nodo(nuevo_nodo).posicion
+        assert pos_orig == pos_nuevo
+
+
+def test_exportar_escenario_chico(tmp_path):
+    """El chico.json cargado se puede exportar y recargar."""
+    ruta = Path(__file__).parent.parent / "data" / "escenarios" / "chico.json"
+    esc = cargar_escenario(ruta)
+    out = tmp_path / "chico_re.json"
+    exportar_escenario(esc, out)
+    esc2 = cargar_escenario(out)
+    assert set(esc2.warehouse.productos.keys()) == set(esc.warehouse.productos.keys())
