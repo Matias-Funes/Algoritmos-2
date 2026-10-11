@@ -47,6 +47,10 @@ def main() -> None:
     parser.add_argument("--max-productos-wave", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
+        "--productos-por-rack", type=int, default=2,
+        help="Cantidad de productos por rack (alturas z)"
+    )
+    parser.add_argument(
         "--estrategia", choices=list(ESTRATEGIAS.keys()), default="vecino_mas_cercano"
     )
     parser.add_argument(
@@ -62,6 +66,7 @@ def main() -> None:
         n_bloques_racks=args.bloques,
         alto=args.alto,
         n_pedidos=args.pedidos,
+        productos_por_rack=args.productos_por_rack,
         cada_cuantas_filas_pasillo_horizontal=args.pasillos_h,
         seed=args.seed,
     )
