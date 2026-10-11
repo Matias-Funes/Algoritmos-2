@@ -178,14 +178,15 @@ def crear_panel_leyenda(parent: tk.Widget) -> tk.Frame:
     items = [
         ("Pasillo", COLORES_TIPO[TipoNodo.PASILLO], COLOR_BORDE_CELDA),
         ("Rack", COLORES_TIPO[TipoNodo.RACK], COLOR_BORDE_RACK),
+        ("Estante vacío", "#ffffff", "#d0d0d0"),
         ("Zona de despacho", COLORES_TIPO[TipoNodo.DESPACHO], "#2e7d32"),
         ("Puerta", COLORES_TIPO[TipoNodo.PUERTA], ""),
+        ("Producto en inventario", COLOR_PRODUCTO_INVENTARIO, ""),
         ("Producto pendiente", COLOR_PRODUCTO_PENDIENTE, ""),
         ("Producto recogido", COLOR_PRODUCTO_RECOGIDO, ""),
         ("Picker", COLOR_PICKER, COLOR_PICKER_BORDE),
         ("Recorrido hecho", COLOR_RECORRIDO_HECHO, ""),
         ("Recorrido pendiente", COLOR_RECORRIDO_PENDIENTE, ""),
-        ("Producto en inventario", COLOR_PRODUCTO_INVENTARIO, ""),
     ]
 
     for texto, color, borde in items:
@@ -219,3 +220,22 @@ def crear_panel_leyenda(parent: tk.Widget) -> tk.Frame:
         ).pack(side="left", fill="x", expand=True)
 
     return frame
+
+
+def dibujar_circulo_hueco(
+    canvas: tk.Canvas,
+    cx: float,
+    cy: float,
+    radio: float,
+    color: str = "#d0d0d0",
+) -> None:
+    """Dibuja un círculo con solo borde (estante vacío)."""
+    canvas.create_oval(
+        cx - radio,
+        cy - radio,
+        cx + radio,
+        cy + radio,
+        fill="",
+        outline=color,
+        width=1,
+    )

@@ -34,7 +34,7 @@ def escenario_a_dict(escenario: Escenario) -> dict:
     celdas = [list(c) for c in celdas]
 
     racks = [
-        {"id": r.id, "x": r.x, "y": r.y}
+        {"id": r.id, "x": r.x, "y": r.y, "niveles": r.niveles}
         for r in sorted(w.racks.values(), key=lambda r: r.id)
     ]
 

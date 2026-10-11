@@ -158,3 +158,37 @@ def test_generacion_con_pasillos_h_validada():
 def test_config_pasillos_h_negativo_falla():
     with pytest.raises(ValueError):
         ConfigGeneracion(cada_cuantas_filas_pasillo_horizontal=-1)
+
+
+def test_niveles_por_rack_mayor_que_productos():
+    """Si niveles > productos, algunos estantes quedan vacíos."""
+    cfg = ConfigGeneracion(
+        n_bloques_racks=2,
+        alto=5,
+        niveles_por_rack=5,
+        productos_por_rack=2,
+        seed=42,
+    )
+    esc = generar_escenario(cfg)
+    w = esc.warehouse
+
+    # Cada rack tiene exactamente 2 productos
+    for rack in w.racks.values():
+        productos_del_rack = [p for p in w.productos.values() if p.rack_id == rack.id]
+        assert len(productos_del_rack) == 2
+        # Los z de esos productos están entre 1 y 5
+        for p in productos_del_rack:
+            assert 1 <= p.z <= 5
+        # Y son distintos
+        zs = [p.z for p in productos_del_rack]
+        assert len(zs) == len(set(zs))
+
+
+def test_config_productos_mayor_que_niveles_falla():
+    with pytest.raises(ValueError, match="no puede ser mayor"):
+        ConfigGeneracion(niveles_por_rack=2, productos_por_rack=5)
+
+
+def test_config_niveles_cero_falla():
+    with pytest.raises(ValueError):
+        ConfigGeneracion(niveles_por_rack=0)

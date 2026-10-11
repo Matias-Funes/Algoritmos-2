@@ -57,7 +57,7 @@ class Warehouse:
         self._conectar_vecinos()
 
     # --- racks ---
-    def agregar_rack(self, rack_id: str, x: int, y: int) -> None:
+    def agregar_rack(self, rack_id: str, x: int, y: int, niveles: int = 4) -> None:
         """Registra un rack como obstáculo físico. NO crea nodo en el grafo.
         La celda del rack no debe ser transitable."""
         if (x, y) in self._nodo_por_xy:
@@ -66,7 +66,7 @@ class Warehouse:
             )
         if (x, y) in self._racks_ocupados:
             raise ValueError(f"Ya hay un rack en ({x}, {y})")
-        self.racks[rack_id] = Rack(rack_id, x, y)
+        self.racks[rack_id] = Rack(rack_id, x, y, niveles)
         self._racks_ocupados.add((x, y))
 
     def _nodo_picking_de_rack(self, rack: Rack) -> Optional[int]:

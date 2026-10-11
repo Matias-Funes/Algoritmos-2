@@ -15,10 +15,10 @@ class ConfigGeneracion:
     ancho_bloque_racks: int = 2
     alto: int = 8
     cada_cuantas_filas_pasillo_horizontal: int = 0  # 0 = solo arriba/abajo
-    niveles_por_rack: int = 4  # altura física del rack
 
     # productos
-    productos_por_rack: int = 2  # cuántos de esos niveles del rack están ocupados
+    niveles_por_rack: int = 4  # altura física del rack
+    productos_por_rack: int = 2  # niveles efectivamente ocupados
     stock_min: int = 10
     stock_max: int = 50
 
@@ -42,8 +42,13 @@ class ConfigGeneracion:
             raise ValueError("ancho_bloque_racks debe ser > 0")
         if self.alto < 3:
             raise ValueError("alto debe ser >= 3 (pasillos arriba y abajo + racks)")
-        if self.productos_por_rack <= 0:
-            raise ValueError("productos_por_rack debe ser > 0")
+        if self.niveles_por_rack <= 0:
+            raise ValueError("niveles_por_rack debe ser > 0")
+        if self.productos_por_rack > self.niveles_por_rack:
+            raise ValueError(
+                f"productos_por_rack ({self.productos_por_rack}) no puede ser mayor "
+                f"que niveles_por_rack ({self.niveles_por_rack})"
+            )
         if self.stock_min > self.stock_max:
             raise ValueError("stock_min no puede ser mayor que stock_max")
         if self.cada_cuantas_filas_pasillo_horizontal < 0:
@@ -139,7 +144,7 @@ def _construir_estructura(
     rack_ids: list[str] = []
     for i, (x, y) in enumerate(posiciones, start=1):
         rid = f"R{i:03d}"
-        w.agregar_rack(rid, x, y)
+        w.agregar_rack(rid, x, y, niveles=config.niveles_por_rack)
         rack_ids.append(rid)
 
     return w, rack_ids
@@ -154,11 +159,14 @@ def _generar_productos(
     productos: list[Producto] = []
     pid = 1
     for rack_id in rack_ids:
-        # Cuántos de los niveles tendrán producto
-        ocupados = min(config.productos_por_rack, config.niveles_por_rack)
-        # Elegir al azar CUÁLES niveles tienen producto (0..niveles-1)
-        niveles = sorted(rng.sample(range(1, config.niveles_por_rack + 1), ocupados))
-        for z in niveles:
+        # Elegir AL AZAR cuáles niveles están ocupados
+        niveles_ocupados = sorted(
+            rng.sample(
+                range(1, config.niveles_por_rack + 1),
+                config.productos_por_rack,
+            )
+        )
+        for z in niveles_ocupados:
             prod = Producto(
                 id=f"P{pid:04d}",
                 nombre=f"Producto {pid}",

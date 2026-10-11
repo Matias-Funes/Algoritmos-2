@@ -48,7 +48,9 @@ def _construir_warehouse(data_wh: dict) -> Warehouse:
 
     for r in data_wh["racks"]:
         try:
-            w.agregar_rack(r["id"], int(r["x"]), int(r["y"]))
+            w.agregar_rack(
+                r["id"], int(r["x"]), int(r["y"]), niveles=int(r.get("niveles", 4))
+            )
         except ValueError as e:
             raise ErrorDeCarga(str(e)) from e
 

@@ -24,6 +24,7 @@ from warehouse.visualizacion.render import (COLOR_CANVAS_FONDO, COLOR_PICKER,
                                             COLOR_RECORRIDO_PENDIENTE,
                                             centro_celda_px,
                                             crear_panel_leyenda,
+                                            dibujar_circulo_hueco,
                                             dibujar_polilinea, dibujar_punto,
                                             dibujar_warehouse)
 from warehouse.waves.generador_waves import EstrategiaWaves, generar_waves
@@ -52,6 +53,10 @@ def main() -> None:
         help="Cantidad de productos por rack (alturas z)"
     )
     parser.add_argument(
+        "--niveles-por-rack", type=int, default=4,
+        help="Cantidad de estantes físicos por rack"
+    )
+    parser.add_argument(
         "--estrategia", choices=list(ESTRATEGIAS.keys()), default="vecino_mas_cercano"
     )
     parser.add_argument(
@@ -67,6 +72,7 @@ def main() -> None:
         n_bloques_racks=args.bloques,
         alto=args.alto,
         n_pedidos=args.pedidos,
+        niveles_por_rack=args.niveles_por_rack,
         productos_por_rack=args.productos_por_rack,
         cada_cuantas_filas_pasillo_horizontal=args.pasillos_h,
         seed=args.seed,
@@ -338,51 +344,39 @@ class SimulacionSecuencial:
                 grosor=3,
             )
 
-        # Productos: mostramos TODOS los del warehouse en gris claro,
-        # y destacamos los de la wave actual en rojo/verde.
+        # Productos: un punto por nivel del rack.
+        # Los niveles vacíos se dibujan como círculos huecos.
+        # Los ocupados: gris (inventario), rojo (pendiente), verde (recogido).
         recogidos = self.estado.productos_recogidos()
         productos_de_la_wave = self.estado.productos_totales
 
-        # Agrupar TODOS los productos del warehouse por rack
-        productos_por_rack: dict[str, list[str]] = {}
+        # Productos por rack
+        productos_por_rack: dict[str, dict[int, str]] = {}
         for pid, prod in self.escenario.warehouse.productos.items():
-            productos_por_rack.setdefault(prod.rack_id, []).append(pid)
+            productos_por_rack.setdefault(prod.rack_id, {})[prod.z] = pid
 
-        for rack_id, pids in productos_por_rack.items():
-            rack = self.escenario.warehouse.racks[rack_id]
+        for rack_id, rack in self.escenario.warehouse.racks.items():
             cx_rack, cy_rack = centro_celda_px(self.coords, rack.x, rack.y)
 
-            # Ordenar por z
-            pids_ordenados = sorted(
-                pids,
-                key=lambda p: self.escenario.warehouse.productos[p].z,
-            )
-            n = len(pids_ordenados)
-
-            if n == 0:
-                continue
-
-            # Si hay demasiados, un solo punto grande
-            if n > 6:
-                dibujar_punto(
-                    self.canvas,
-                    cx_rack,
-                    cy_rack,
-                    radio=self.celda_px * 0.18,
-                    color=COLOR_PRODUCTO_INVENTARIO,
-                )
-                continue
-
-            # Distribuir verticalmente
-            radio = self.celda_px * 0.10
+            niveles = rack.niveles
+            radio = self.celda_px * 0.09
             separacion = self.celda_px * 0.22
 
-            for i, pid in enumerate(pids_ordenados):
-                if n == 1:
+            prods_en_rack = productos_por_rack.get(rack_id, {})
+
+            for z in range(1, niveles + 1):
+                if niveles == 1:
                     y = cy_rack
                 else:
-                    y = cy_rack - (n - 1) * separacion / 2 + i * separacion
+                    y = cy_rack - (niveles - 1) * separacion / 2 + (z - 1) * separacion
 
+                pid = prods_en_rack.get(z)
+                if pid is None:
+                    # Estante vacío
+                    dibujar_circulo_hueco(self.canvas, cx_rack, y, radio=radio)
+                    continue
+
+                # Elegir color según el rol del producto
                 if pid in recogidos:
                     color = COLOR_PRODUCTO_RECOGIDO
                 elif pid in productos_de_la_wave:
@@ -391,9 +385,6 @@ class SimulacionSecuencial:
                     color = COLOR_PRODUCTO_INVENTARIO
 
                 dibujar_punto(self.canvas, cx_rack, y, radio=radio, color=color)
-
-
-
 
         # Picker
         cx, cy = centro(self.estado.nodo_actual)
