@@ -15,6 +15,7 @@ class ResultadoRecorrido:
     nodos_visitados: int
     aristas_recorridas: int
     tiempo_segundos: float
+    indices_de_paradas: list[int]
 
 
 # --- helpers ---
@@ -54,18 +55,21 @@ def _paradas_de_wave(wave: Wave, warehouse: Warehouse) -> list[int]:
 def _armar_camino(
     secuencia: list[int],
     cache: CacheDistancias,
-) -> tuple[list[int], float]:
+) -> tuple[list[int], float, list[int]]:
     """Dada una secuencia de nodos [n0, n1, ..., nk] (paradas a visitar en orden),
     arma el camino completo concatenando los subcaminos mínimos entre cada par.
 
-    Devuelve (camino_completo, distancia_total).
+    Devuelve (camino_completo, distancia_total, indices_destino). donde
+    indices_destino[i] es el índice en camino_completo donde se alcanza
+    secuencia[i+1].
     Lanza ValueError si algún par no tiene camino.
     """
     if len(secuencia) < 2:
-        return list(secuencia), 0.0
+        return list(secuencia), 0.0, []
 
     camino_total: list[int] = []
     distancia_total = 0.0
+    indices_destino: list[int] = []
 
     for i in range(len(secuencia) - 1):
         origen = secuencia[i]
@@ -79,8 +83,9 @@ def _armar_camino(
         else:
             camino_total.extend(sub)
         distancia_total += cache.distancia(origen, destino)
+        indices_destino.append(len(camino_total) - 1)
 
-    return camino_total, distancia_total
+    return camino_total, distancia_total, indices_destino
 
 
 # --- estrategias ---
@@ -97,7 +102,7 @@ def _estrategia_orden_pedidos(
     paradas = _paradas_de_wave(wave, warehouse)
     secuencia = [nodo_despacho] + paradas + [nodo_despacho]
 
-    camino, distancia = _armar_camino(secuencia, cache)
+    camino, distancia, indices = _armar_camino(secuencia, cache)
 
     t1 = perf_counter()
     return ResultadoRecorrido(
@@ -108,6 +113,7 @@ def _estrategia_orden_pedidos(
         nodos_visitados=len(camino),
         aristas_recorridas=max(0, len(camino) - 1),
         tiempo_segundos=t1 - t0,
+        indices_de_paradas=indices[: len(paradas)],
     )
 
 
@@ -131,6 +137,7 @@ def _estrategia_vecino_mas_cercano(
             nodos_visitados=1,
             aristas_recorridas=0,
             tiempo_segundos=t1 - t0,
+            indices_de_paradas=[],
         )
 
     pendientes = set(paradas)
@@ -154,7 +161,7 @@ def _estrategia_vecino_mas_cercano(
 
     secuencia.append(nodo_despacho)
 
-    camino, distancia = _armar_camino(secuencia, cache)
+    camino, distancia, indices = _armar_camino(secuencia, cache)
 
     t1 = perf_counter()
     return ResultadoRecorrido(
@@ -165,6 +172,7 @@ def _estrategia_vecino_mas_cercano(
         nodos_visitados=len(camino),
         aristas_recorridas=max(0, len(camino) - 1),
         tiempo_segundos=t1 - t0,
+        indices_de_paradas=indices[: len(secuencia) - 2],
     )
 
 

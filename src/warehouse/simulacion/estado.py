@@ -11,6 +11,8 @@ class EstadoSimulacion:
     camino: list[int]  # secuencia completa de nodos
     nodo_a_productos: dict[int, list[str]]  # nodo_picking -> [producto_ids]
     productos_totales: set[str]
+    indices_de_paradas: list[int]
+    nodos_paradas: list[int]
     indice_actual: int = 0
 
     # --- construcción ---
@@ -36,6 +38,8 @@ class EstadoSimulacion:
             camino=list(resultado.camino_completo),
             nodo_a_productos=mapa,
             productos_totales=set(wave.ubicaciones_requeridas()),
+            indices_de_paradas=list(resultado.indices_de_paradas),
+            nodos_paradas=list(resultado.orden_paradas),
         )
 
     # --- consultas ---
@@ -53,11 +57,14 @@ class EstadoSimulacion:
         return self.al_final and self.productos_recogidos() == self.productos_totales
 
     def productos_recogidos(self) -> set[str]:
-        """Productos recogidos hasta el paso actual (inclusive)."""
+        """Productos recogidos hasta el paso actual (inclusive), contando solo las
+        paradas que el picker ya alcanzó."""
         recogidos: set[str] = set()
-        for i in range(self.indice_actual + 1):
-            nodo = self.camino[i]
-            recogidos.update(self.nodo_a_productos.get(nodo, ()))
+        for i, nodo_parada in enumerate(self.nodos_paradas):
+            if i >= len(self.indices_de_paradas):
+                break
+            if self.indice_actual >= self.indices_de_paradas[i]:
+                recogidos.update(self.nodo_a_productos.get(nodo_parada, ()))
         return recogidos
 
     def productos_pendientes(self) -> set[str]:

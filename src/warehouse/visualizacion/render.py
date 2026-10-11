@@ -25,21 +25,6 @@ COLOR_RECORRIDO_PENDIENTE = "#cfd8dc"
 
 COLOR_CANVAS_FONDO = "#fafafa"
 
-# COLORES_TIPO = {
-#     TipoNodo.PASILLO: "#f5f5f5",
-#     TipoNodo.RACK: "#8b7355",
-#     TipoNodo.DESPACHO: "#c8e6c9",
-#     TipoNodo.PUERTA: "#ffb74d",
-# }
-#
-# COLOR_BORDE_CELDA = "#dddddd"
-# COLOR_BORDE_EXT = "#333333"
-# COLOR_PICKER = "#1565c0"
-# COLOR_PRODUCTO_PENDIENTE = "#e53935"
-# COLOR_PRODUCTO_RECOGIDO = "#43a047"
-# COLOR_RECORRIDO_HECHO = "#1e88e5"
-# COLOR_RECORRIDO_PENDIENTE = "#bbbbbb"
-
 
 def dibujar_warehouse(
     canvas: tk.Canvas,
