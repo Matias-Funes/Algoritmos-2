@@ -332,18 +332,59 @@ class SimulacionSecuencial:
                 grosor=3,
             )
 
-        # Productos
+        # Productos: un punto por producto, dibujado en la celda del rack.
+        # Los ya recogidos no se dibujan (desaparecen).
         recogidos = self.estado.productos_recogidos()
+
+        # Agrupar por rack
+        productos_por_rack: dict[str, list[str]] = {}
         for pid in self.estado.productos_totales:
             prod = self.escenario.warehouse.productos[pid]
-            nodo = self.escenario.warehouse.grafo.nodo(prod.nodo_picking)
-            cx, cy = centro_celda_px(self.coords, nodo.posicion.x, nodo.posicion.y)
-            color = (
-                COLOR_PRODUCTO_RECOGIDO
-                if pid in recogidos
-                else COLOR_PRODUCTO_PENDIENTE
+            productos_por_rack.setdefault(prod.rack_id, []).append(pid)
+
+        for rack_id, pids in productos_por_rack.items():
+            rack = self.escenario.warehouse.racks[rack_id]
+            cx_rack, cy_rack = centro_celda_px(self.coords, rack.x, rack.y)
+
+            # Ordenar por z y filtrar los ya recogidos
+            pids_ordenados = sorted(
+                pids,
+                key=lambda p: self.escenario.warehouse.productos[p].z,
             )
-            dibujar_punto(self.canvas, cx, cy, radio=self.celda_px * 0.22, color=color)
+            pendientes = [p for p in pids_ordenados if p not in recogidos]
+            n = len(pendientes)
+
+            if n == 0:
+                continue
+
+            # Si hay muchos, un solo punto grande en lugar de saturar
+            if n > 4:
+                dibujar_punto(
+                    self.canvas,
+                    cx_rack,
+                    cy_rack,
+                    radio=self.celda_px * 0.18,
+                    color=COLOR_PRODUCTO_PENDIENTE,
+                )
+                continue
+
+            # Distribuir verticalmente dentro de la celda
+            radio = self.celda_px * 0.10
+            separacion = self.celda_px * 0.28
+
+            for i, pid in enumerate(pendientes):
+                if n == 1:
+                    y = cy_rack
+                else:
+                    y = cy_rack - (n - 1) * separacion / 2 + i * separacion
+
+                dibujar_punto(
+                    self.canvas,
+                    cx_rack,
+                    y,
+                    radio=radio,
+                    color=COLOR_PRODUCTO_PENDIENTE,
+                )
 
         # Picker
         cx, cy = centro(self.estado.nodo_actual)
