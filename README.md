@@ -68,9 +68,10 @@ El extra `dev` instala `pytest`, `pandas`, `matplotlib` y `jupyter`.
 pytest -v
 ```
 
-Se ejecutan ~129 tests unitarios que cubren:
+Se ejecutan 145 tests unitarios que cubren:
 - Grafo y warehouse
 - Dominio (productos, pedidos, waves)
+- Niveles de rack y productos
 - Cargador y exportador JSON
 - Generador de escenarios y validador
 - BFS, Dijkstra y cache de distancias
@@ -83,30 +84,44 @@ Se ejecutan ~129 tests unitarios que cubren:
 python scripts/comparar_estrategias.py
 ```
 
-Corre 9 escenarios (3 tamaños × 3 seeds), genera waves y compara las dos
+Corre 18 escenarios (3 tamaños × 3 seeds × 2 configuraciones de pasillos
+horizontales), genera waves y compara las dos
 estrategias de recorrido. Guarda resultados en `data/resultados/`:
 
 - `resultados_waves.csv` — una fila por wave × estrategia
 - `resultados_resumen.csv` — agregados por escenario × estrategia
 - `config_experimento.json` — configuración exacta (reproducibilidad)
 
-### Visualizar una wave
+### Visualizar waves
+
+Abre una ventana que simula todas las waves en secuencia. Controles:
+
+- **Play / Pause**: reproducir o detener la wave actual (botón toggle).
+- **Step atrás / Step**: avanzar o retroceder un paso.
+- **Reset**: reiniciar la wave actual.
+- **Wave ant. / Wave sig.**: navegar entre waves.
+- **Cerrar**: terminar la aplicación.
+
+La ventana incluye leyenda de colores, panel de estado (paso, productos
+recogidos, prioridad máxima, lista de productos con stock) y barra de
+progreso.
+
+Opciones útiles
 
 ```bash
-python scripts/visualizar_wave.py --wave 0 --estrategia vecino_mas_cercano
+python scripts/demo_completa.py --wave 2
+python scripts/demo_completa.py --estrategia orden_pedidos
+python scripts/demo_completa.py --niveles-por-rack 5 --productos-por-rack 2
 ```
 
-Se abre una ventana tkinter con:
-- Warehouse renderizado (pasillos, racks, zona de despacho, puerta).
-- Productos pendientes en rojo, recogidos en verde.
-- Recorrido completo punteado en gris, ya recorrido en azul.
-- Picker como círculo azul.
-- Controles: **Play**, **Pause**, **Step**, **Reset**.
+### Punto de entrada unificado
 
-Opciones:
+Alternativa a los scripts individuales:
 
 ```bash
-python scripts/visualizar_wave.py --wave 2 --estrategia orden_pedidos --celda 30
+python main.py experimentos
+python main.py simular --bloques 6
+python main.py simular --wave 2 --estrategia orden_pedidos
 ```
 
 ### Notebook de análisis
@@ -182,6 +197,22 @@ horizontales arriba y abajo que conectan todas las columnas.
 **Invariante clave:** todo nodo de picking es alcanzable desde la zona de
 despacho caminando exclusivamente por pasillos. El validador lo verifica con
 BFS.
+
+### Racks, niveles y productos
+
+Cada rack es una columna física con `niveles` estantes (por defecto 4). Cada
+estante almacena **un solo producto** a una altura `z` específica. Un rack
+puede tener estantes vacíos: la cantidad de productos efectivamente
+almacenados se configura por separado con `productos_por_rack`, que debe
+ser ≤ `niveles_por_rack`.
+
+Cada producto tiene un **stock finito** (por defecto entre 10 y 50 unidades).
+La simulación recoge cantidades pedidas, no unidades infinitas.
+
+Además, el modelo distingue **niveles físicos de rack** (estantes) de
+**productos almacenados**: un rack puede tener N niveles, de los cuales
+solo algunos están ocupados. Cada producto ocupa un nivel único dentro de
+su rack.
 
 ### Justificación del modelo
 
@@ -274,14 +305,14 @@ Estrategias de recorrido comparadas: `ORDEN_PEDIDOS` vs `VECINO_MAS_CERCANO`.
 ### Resultados
 
 Distancia total promedio por tamaño y estrategia:
-
 | Tamaño | orden_pedidos | vecino_mas_cercano | Mejora |
 |---|---|---|---|
-| Chico | 93.3 | 72.7 | **22.1%** |
-| Mediano | 464.7 | 338.7 | **27.1%** |
-| Grande | 3835.3 | 2118.7 | **44.8%** |
+| Chico | 86.7 | 71.3 | **17.7%** |
+| Mediano | 494.0 | 331.7 | **32.9%** |
+| Grande | 3555.7 | 1937.3 | **45.5%** |
 
-**Vecino más cercano ganó en 9 de 9 escenarios.**
+**Vecino más cercano ganó en 18 de 18 escenarios** (3 tamaños × 3 seeds × 2
+configuraciones de pasillos horizontales).
 
 ![Distancia total por tamaño y estrategia](data/resultados/grafico_distancias.png)
 
@@ -321,15 +352,14 @@ Distancia total promedio por tamaño y estrategia:
 
 Se comparó el layout con solo dos pasillos horizontales (arriba y abajo)
 contra un layout con pasillos cada 3 filas.
-
 | Tamaño | Pasillos H | orden_pedidos | vecino_mas_cercano | Mejora |
 |---|---|---|---|---|
-| Chico | 0 | 96.7 | 72.7 | 24.8% |
-| Chico | 3 | 79.3 | 66.7 | 16.0% |
-| Mediano | 0 | 490.7 | 338.7 | 31.0% |
-| Mediano | 3 | 412.0 | 304.0 | 26.2% |
-| Grande | 0 | 3838.7 | 2118.7 | 44.8% |
-| Grande | 3 | 3183.3 | 1733.3 | 45.5% |
+| Chico | 0 | 94.7 | 78.7 | 16.9% |
+| Chico | 3 | 78.7 | 64.0 | 18.6% |
+| Mediano | 0 | 523.3 | 353.3 | 32.5% |
+| Mediano | 3 | 464.7 | 310.0 | 33.3% |
+| Grande | 0 | 4137.3 | 2182.7 | 47.2% |
+| Grande | 3 | 2974.0 | 1692.0 | 43.1% |
 
 ![Efecto de pasillos horizontales por tamaño](data/resultados/grafico_pasillos_h.png)
 
@@ -545,8 +575,9 @@ Trabajo futuro: medir con k > 1000 paradas.
   local 2-opt** sobre el resultado greedy.
 - El modelo no soporta pasillos dirigidos ni costos variables.
 - La simulación es de un solo picker. No hay concurrencia.
-- Los experimentos se limitan a 3 tamaños × 3 seeds. Extender con más
-  configuraciones daría mayor confianza estadística.
+- Los experimentos se limitan a 3 tamaños × 3 seeds × 2 configuraciones de
+  pasillos horizontales. Extender con más configuraciones daría mayor confianza
+  estadística.
 - El tiempo de generación de escenarios grandes puede mejorarse con
   estructuras más eficientes (por ejemplo, índices espaciales).
 - Falta interfaz de usuario para seleccionar waves desde la app.
@@ -554,8 +585,6 @@ Trabajo futuro: medir con k > 1000 paradas.
 ---
 
 ## Estructuras de datos y algoritmos usados (referencia)
-
-Alineado con lo visto en clase:
 
 - **Grafo** con lista de adyacencia
 - **Hash table** (dict) para productos, pedidos, racks, zonas, puertas
