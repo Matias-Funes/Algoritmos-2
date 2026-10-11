@@ -244,12 +244,11 @@ class SimulacionSecuencial:
         panel = tk.Frame(self.root)
         panel.pack(side="bottom", fill="x", padx=10, pady=8)
 
-        tk.Button(panel, text="▶ Play", command=self.play, width=8).pack(
-            side="left", padx=2
+        self.btn_play_pause = tk.Button(
+            panel, text="▶ Play", command=self.toggle_play_pause, width=10
         )
-        tk.Button(panel, text="⏸ Pause", command=self.pause, width=8).pack(
-            side="left", padx=2
-        )
+        self.btn_play_pause.pack(side="left", padx=2)
+
         tk.Button(panel, text="⏮ Step atrás", command=self.step_atras, width=12).pack(
             side="left", padx=2
         )
@@ -433,6 +432,19 @@ class SimulacionSecuencial:
                 lbl.config(fg=nuevo_color)
 
     # --- controles ---
+
+    def toggle_play_pause(self) -> None:
+        if self.after_id is not None:
+            self.pause()
+        else:
+            self.play()
+
+    def _actualizar_boton_play_pause(self) -> None:
+        """Sincroniza el texto del botón con el estado de reproducción."""
+        if self.after_id is not None:
+            self.btn_play_pause.config(text="⏸ Pause")
+        else:
+            self.btn_play_pause.config(text="▶ Play")
 
     def play(self) -> None:
         if self.after_id is not None or self.estado is None or self.estado.completada:
