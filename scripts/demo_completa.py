@@ -183,6 +183,10 @@ class SimulacionSecuencial:
         )
         self.lbl_titulo.pack(side="left")
 
+        # Barra de progreso
+        self.progress = ttk.Progressbar(header, length=400, mode="determinate")
+        self.progress.pack(side="left", padx=20)
+
         # Frame horizontal: canvas + leyenda
         frame_principal = tk.Frame(self.root, bg=COLOR_CANVAS_FONDO)
         frame_principal.pack(side="top", padx=10, pady=10)
@@ -418,6 +422,12 @@ class SimulacionSecuencial:
         self.lbl_info_paso.config(text=f"Paso: {idx} / {total}")
         self.lbl_info_prod.config(text=f"Productos: {rec} / {tot}")
         self.lbl_info_prio.config(text=f"Prioridad máx: {wave.prioridad_maxima()}")
+
+        # Barra de progreso
+        if total > 0:
+            self.progress["value"] = (idx / total) * 100
+        else:
+            self.progress["value"] = 0
 
         # Solo actualizar el color de cada label. No destruir ni recrear.
         recogidos = self.estado.productos_recogidos()
