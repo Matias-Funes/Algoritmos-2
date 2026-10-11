@@ -64,6 +64,10 @@ def main() -> None:
         choices=[e.value for e in EstrategiaWaves],
         default=EstrategiaWaves.PRIORIDAD_Y_CERCANIA.value,
     )
+    parser.add_argument(
+        "--wave", type=int, default=0,
+        help="Índice de la wave inicial (0-based)"
+    )
     args = parser.parse_args()
 
     # 1. Generar escenario
@@ -138,6 +142,7 @@ def main() -> None:
         celda_px=celda_px,
         ancho_canvas=ancho_canvas,
         alto_canvas=alto_canvas,
+        indice_inicial=args.wave,
     )
 
     # Centrar la ventana en pantalla
@@ -163,6 +168,7 @@ class SimulacionSecuencial:
         celda_px: int = 30,
         ancho_canvas: int = ANCHO_CANVAS,
         alto_canvas: int = ALTO_CANVAS,
+        indice_inicial: int = 0,
     ) -> None:
         self.root = root
         self.escenario = escenario
@@ -180,7 +186,7 @@ class SimulacionSecuencial:
 
         self.root.title(f"Demo — {len(resultados)} waves — {estrategia}")
         self._construir_ui()
-        self._cargar_wave(0)
+        self._cargar_wave(indice_inicial)
 
     def _construir_ui(self) -> None:
         # Header
