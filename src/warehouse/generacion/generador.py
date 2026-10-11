@@ -15,9 +15,10 @@ class ConfigGeneracion:
     ancho_bloque_racks: int = 2
     alto: int = 8
     cada_cuantas_filas_pasillo_horizontal: int = 0  # 0 = solo arriba/abajo
+    niveles_por_rack: int = 4  # altura física del rack
 
     # productos
-    productos_por_rack: int = 2
+    productos_por_rack: int = 2  # cuántos de esos niveles del rack están ocupados
     stock_min: int = 10
     stock_max: int = 50
 
@@ -153,7 +154,11 @@ def _generar_productos(
     productos: list[Producto] = []
     pid = 1
     for rack_id in rack_ids:
-        for z in range(1, config.productos_por_rack + 1):
+        # Cuántos de los niveles tendrán producto
+        ocupados = min(config.productos_por_rack, config.niveles_por_rack)
+        # Elegir al azar CUÁLES niveles tienen producto (0..niveles-1)
+        niveles = sorted(rng.sample(range(1, config.niveles_por_rack + 1), ocupados))
+        for z in niveles:
             prod = Producto(
                 id=f"P{pid:04d}",
                 nombre=f"Producto {pid}",

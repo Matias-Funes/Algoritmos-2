@@ -19,6 +19,7 @@ COLOR_PICKER_BORDE = "#ffffff"
 
 COLOR_PRODUCTO_PENDIENTE = "#ef5350"
 COLOR_PRODUCTO_RECOGIDO = "#66bb6a"
+COLOR_PRODUCTO_INVENTARIO = "#d0d0d0"
 
 COLOR_RECORRIDO_HECHO = "#2196f3"
 COLOR_RECORRIDO_PENDIENTE = "#cfd8dc"
@@ -184,6 +185,7 @@ def crear_panel_leyenda(parent: tk.Widget) -> tk.Frame:
         ("Picker", COLOR_PICKER, COLOR_PICKER_BORDE),
         ("Recorrido hecho", COLOR_RECORRIDO_HECHO, ""),
         ("Recorrido pendiente", COLOR_RECORRIDO_PENDIENTE, ""),
+        ("Producto en inventario", COLOR_PRODUCTO_INVENTARIO, ""),
     ]
 
     for texto, color, borde in items:

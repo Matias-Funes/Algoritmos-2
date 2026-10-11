@@ -17,6 +17,7 @@ from warehouse.generacion.generador import ConfigGeneracion, generar_escenario
 from warehouse.generacion.validador import validar_escenario
 from warehouse.simulacion.estado import EstadoSimulacion
 from warehouse.visualizacion.render import (COLOR_CANVAS_FONDO, COLOR_PICKER,
+                                            COLOR_PRODUCTO_INVENTARIO,
                                             COLOR_PRODUCTO_PENDIENTE,
                                             COLOR_PRODUCTO_RECOGIDO,
                                             COLOR_RECORRIDO_HECHO,
@@ -337,59 +338,62 @@ class SimulacionSecuencial:
                 grosor=3,
             )
 
-        # Productos: un punto por producto, dibujado en la celda del rack.
-        # Los ya recogidos no se dibujan (desaparecen).
+        # Productos: mostramos TODOS los del warehouse en gris claro,
+        # y destacamos los de la wave actual en rojo/verde.
         recogidos = self.estado.productos_recogidos()
+        productos_de_la_wave = self.estado.productos_totales
 
-        # Agrupar por rack
+        # Agrupar TODOS los productos del warehouse por rack
         productos_por_rack: dict[str, list[str]] = {}
-        for pid in self.estado.productos_totales:
-            prod = self.escenario.warehouse.productos[pid]
+        for pid, prod in self.escenario.warehouse.productos.items():
             productos_por_rack.setdefault(prod.rack_id, []).append(pid)
 
         for rack_id, pids in productos_por_rack.items():
             rack = self.escenario.warehouse.racks[rack_id]
             cx_rack, cy_rack = centro_celda_px(self.coords, rack.x, rack.y)
 
-            # Ordenar por z y filtrar los ya recogidos
+            # Ordenar por z
             pids_ordenados = sorted(
                 pids,
                 key=lambda p: self.escenario.warehouse.productos[p].z,
             )
-            pendientes = [p for p in pids_ordenados if p not in recogidos]
-            n = len(pendientes)
+            n = len(pids_ordenados)
 
             if n == 0:
                 continue
 
-            # Si hay muchos, un solo punto grande en lugar de saturar
-            if n > 4:
+            # Si hay demasiados, un solo punto grande
+            if n > 6:
                 dibujar_punto(
                     self.canvas,
                     cx_rack,
                     cy_rack,
                     radio=self.celda_px * 0.18,
-                    color=COLOR_PRODUCTO_PENDIENTE,
+                    color=COLOR_PRODUCTO_INVENTARIO,
                 )
                 continue
 
-            # Distribuir verticalmente dentro de la celda
+            # Distribuir verticalmente
             radio = self.celda_px * 0.10
-            separacion = self.celda_px * 0.28
+            separacion = self.celda_px * 0.22
 
-            for i, pid in enumerate(pendientes):
+            for i, pid in enumerate(pids_ordenados):
                 if n == 1:
                     y = cy_rack
                 else:
                     y = cy_rack - (n - 1) * separacion / 2 + i * separacion
 
-                dibujar_punto(
-                    self.canvas,
-                    cx_rack,
-                    y,
-                    radio=radio,
-                    color=COLOR_PRODUCTO_PENDIENTE,
-                )
+                if pid in recogidos:
+                    color = COLOR_PRODUCTO_RECOGIDO
+                elif pid in productos_de_la_wave:
+                    color = COLOR_PRODUCTO_PENDIENTE
+                else:
+                    color = COLOR_PRODUCTO_INVENTARIO
+
+                dibujar_punto(self.canvas, cx_rack, y, radio=radio, color=color)
+
+
+
 
         # Picker
         cx, cy = centro(self.estado.nodo_actual)
@@ -443,10 +447,20 @@ class SimulacionSecuencial:
         if self.estado is None:
             return
 
+
+        wave = self.resultados[self.indice_actual][0]
+
         for pid in sorted(self.estado.productos_totales):
+            prod = self.escenario.warehouse.productos[pid]
+            cantidad_pedida = sum(
+                item.cantidad
+                for pedido in wave.pedidos
+                for item in pedido.items
+                if item.producto_id == pid
+                )
             lbl = tk.Label(
                 self.frame_productos,
-                text=f"● {pid}",
+                text=f"● {pid} stock={prod.stock}  pide={cantidad_pedida}",
                 anchor="w",
                 bg=COLOR_CANVAS_FONDO,
                 fg=COLOR_PRODUCTO_PENDIENTE,  # arranca rojo
