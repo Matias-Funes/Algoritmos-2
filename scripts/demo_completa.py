@@ -15,7 +15,19 @@ from warehouse.algoritmos.recorridos import ESTRATEGIAS, recorrer_wave
 from warehouse.generacion.generador import ConfigGeneracion, generar_escenario
 from warehouse.generacion.validador import validar_escenario
 from warehouse.simulacion.estado import EstadoSimulacion
-from warehouse.visualizacion.render import COLOR_CANVAS_FONDO, crear_panel_leyenda
+from warehouse.visualizacion.render import (
+    COLOR_CANVAS_FONDO,
+    COLOR_PICKER,
+    COLOR_PRODUCTO_PENDIENTE,
+    COLOR_PRODUCTO_RECOGIDO,
+    COLOR_RECORRIDO_HECHO,
+    COLOR_RECORRIDO_PENDIENTE,
+    centro_celda_px,
+    crear_panel_leyenda,
+    dibujar_polilinea,
+    dibujar_punto,
+    dibujar_warehouse,
+)
 from warehouse.waves.generador_waves import EstrategiaWaves, generar_waves
 
 # Tamaño fijo del área de dibujo
@@ -96,7 +108,7 @@ def main() -> None:
     ancho_pantalla = root.winfo_screenwidth()
     root.deiconify()
 
-    ancho_canvas = min(1200, ancho_pantalla - 200)
+    ancho_canvas = min(950, ancho_pantalla - 400)
     alto_canvas = min(700, alto_pantalla - 250)
 
     margen = 20
@@ -153,6 +165,7 @@ class SimulacionSecuencial:
         self.after_id = None
         self.estado: EstadoSimulacion | None = None
         self.coords: dict = {}
+        self.labels_productos: dict[str, tk.Label] = {}
 
         self.root.title(f"Demo — {len(resultados)} waves — {estrategia}")
         self._construir_ui()
@@ -183,10 +196,49 @@ class SimulacionSecuencial:
             highlightthickness=1,
             highlightbackground="#cccccc",
         )
-        self.canvas.pack(side="left")
 
-        panel_leyenda = crear_panel_leyenda(frame_principal)
-        panel_leyenda.pack(side="left", fill="y", padx=(10, 0))
+        self.canvas.pack(side="left", anchor="n")
+
+        # Columna derecha: leyenda arriba, info abajo
+        panel_derecho = tk.Frame(frame_principal, bg=COLOR_CANVAS_FONDO)
+        panel_derecho.pack(side="left", fill="y", padx=(10, 0))
+
+        panel_leyenda = crear_panel_leyenda(panel_derecho)
+        panel_leyenda.pack(side="top", fill="x")
+
+        # Panel info debajo de la leyenda
+        panel_info = tk.LabelFrame(
+            panel_derecho,
+            text="Estado",
+            padx=10,
+            pady=8,
+            bg=COLOR_CANVAS_FONDO,
+            font=("sans-serif", 10, "bold"),
+        )
+        panel_info.pack(side="top", fill="both", expand=True, pady=(10, 0))
+
+        self.lbl_info_paso = tk.Label(
+            panel_info, anchor="w", bg=COLOR_CANVAS_FONDO, font=("monospace", 9)
+        )
+        self.lbl_info_paso.pack(fill="x")
+        self.lbl_info_prod = tk.Label(
+            panel_info, anchor="w", bg=COLOR_CANVAS_FONDO, font=("monospace", 9)
+        )
+        self.lbl_info_prod.pack(fill="x")
+        self.lbl_info_prio = tk.Label(
+            panel_info, anchor="w", bg=COLOR_CANVAS_FONDO, font=("monospace", 9)
+        )
+        self.lbl_info_prio.pack(fill="x", pady=(0, 6))
+
+        tk.Label(
+            panel_info,
+            text="Productos:",
+            anchor="w",
+            bg=COLOR_CANVAS_FONDO,
+            font=("sans-serif", 9, "bold"),
+        ).pack(fill="x")
+        self.frame_productos = tk.Frame(panel_info, bg=COLOR_CANVAS_FONDO)
+        self.frame_productos.pack(fill="both", expand=True)
 
         # Panel de controles
         panel = tk.Frame(self.root)
@@ -237,22 +289,12 @@ class SimulacionSecuencial:
         self.estado = EstadoSimulacion.desde_wave(
             wave, resultado, self.escenario.warehouse
         )
+        self._construir_lista_productos()
         self._redibujar_todo()
 
     # --- dibujo ---
 
     def _redibujar_todo(self) -> None:
-        from warehouse.visualizacion.render import (
-            COLOR_PICKER,
-            COLOR_PRODUCTO_PENDIENTE,
-            COLOR_PRODUCTO_RECOGIDO,
-            COLOR_RECORRIDO_HECHO,
-            COLOR_RECORRIDO_PENDIENTE,
-            centro_celda_px,
-            dibujar_polilinea,
-            dibujar_punto,
-            dibujar_warehouse,
-        )
 
         self.canvas.delete("all")
 
@@ -309,6 +351,8 @@ class SimulacionSecuencial:
 
         self._actualizar_label()
 
+        self._actualizar_panel_info()
+
     def _redibujar(self) -> None:
         self._redibujar_todo()
 
@@ -341,6 +385,53 @@ class SimulacionSecuencial:
             )
         )
 
+    def _construir_lista_productos(self) -> None:
+        """Crea los labels de productos una sola vez por wave."""
+        # Limpiar labels viejos
+        for widget in self.frame_productos.winfo_children():
+            widget.destroy()
+        self.labels_productos.clear()
+
+        if self.estado is None:
+            return
+
+        for pid in sorted(self.estado.productos_totales):
+            lbl = tk.Label(
+                self.frame_productos,
+                text=f"● {pid}",
+                anchor="w",
+                bg=COLOR_CANVAS_FONDO,
+                fg=COLOR_PRODUCTO_PENDIENTE,  # arranca rojo
+                font=("monospace", 9),
+            )
+            lbl.pack(fill="x")
+            self.labels_productos[pid] = lbl
+
+    def _actualizar_panel_info(self) -> None:
+        if self.estado is None:
+            return
+        wave = self.resultados[self.indice_actual][0]
+
+        idx = self.estado.indice_actual
+        total = len(self.estado.camino) - 1
+        rec = len(self.estado.productos_recogidos())
+        tot = len(self.estado.productos_totales)
+
+        self.lbl_info_paso.config(text=f"Paso: {idx} / {total}")
+        self.lbl_info_prod.config(text=f"Productos: {rec} / {tot}")
+        self.lbl_info_prio.config(text=f"Prioridad máx: {wave.prioridad_maxima()}")
+
+        # Solo actualizar el color de cada label. No destruir ni recrear.
+        recogidos = self.estado.productos_recogidos()
+        for pid, lbl in self.labels_productos.items():
+            nuevo_color = (
+                COLOR_PRODUCTO_RECOGIDO
+                if pid in recogidos
+                else COLOR_PRODUCTO_PENDIENTE
+            )
+            if lbl.cget("fg") != nuevo_color:
+                lbl.config(fg=nuevo_color)
+
     # --- controles ---
 
     def play(self) -> None:
@@ -371,9 +462,10 @@ class SimulacionSecuencial:
 
     def step_atras(self) -> None:
         self.pause()
-        if self.estado is not None:
-            if self.estado.retroceder():
-                self._redibujar()
+        if self.estado is None:
+            return
+        if self.estado.retroceder():
+            self._redibujar()
 
     def reset(self) -> None:
         self.pause()
