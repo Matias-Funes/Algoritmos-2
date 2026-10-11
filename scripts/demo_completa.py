@@ -15,19 +15,15 @@ from warehouse.algoritmos.recorridos import ESTRATEGIAS, recorrer_wave
 from warehouse.generacion.generador import ConfigGeneracion, generar_escenario
 from warehouse.generacion.validador import validar_escenario
 from warehouse.simulacion.estado import EstadoSimulacion
-from warehouse.visualizacion.render import (
-    COLOR_CANVAS_FONDO,
-    COLOR_PICKER,
-    COLOR_PRODUCTO_PENDIENTE,
-    COLOR_PRODUCTO_RECOGIDO,
-    COLOR_RECORRIDO_HECHO,
-    COLOR_RECORRIDO_PENDIENTE,
-    centro_celda_px,
-    crear_panel_leyenda,
-    dibujar_polilinea,
-    dibujar_punto,
-    dibujar_warehouse,
-)
+from warehouse.visualizacion.render import (COLOR_CANVAS_FONDO, COLOR_PICKER,
+                                            COLOR_PRODUCTO_PENDIENTE,
+                                            COLOR_PRODUCTO_RECOGIDO,
+                                            COLOR_RECORRIDO_HECHO,
+                                            COLOR_RECORRIDO_PENDIENTE,
+                                            centro_celda_px,
+                                            crear_panel_leyenda,
+                                            dibujar_polilinea, dibujar_punto,
+                                            dibujar_warehouse)
 from warehouse.waves.generador_waves import EstrategiaWaves, generar_waves
 
 # Tamaño fijo del área de dibujo
@@ -450,14 +446,17 @@ class SimulacionSecuencial:
         if self.after_id is not None or self.estado is None or self.estado.completada:
             return
         self._tick()
+        self._actualizar_boton_play_pause()
 
     def _tick(self) -> None:
         if self.estado is None or not self.estado.avanzar():
             self.after_id = None
+            self._actualizar_boton_play_pause()
             return
         self._redibujar()
         if self.estado.completada:
             self.after_id = None
+            self._actualizar_boton_play_pause()
         else:
             self.after_id = self.root.after(100, self._tick)
 
@@ -465,6 +464,7 @@ class SimulacionSecuencial:
         if self.after_id is not None:
             self.root.after_cancel(self.after_id)
             self.after_id = None
+        self._actualizar_boton_play_pause()
 
     def step(self) -> None:
         self.pause()
