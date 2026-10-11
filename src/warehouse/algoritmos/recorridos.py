@@ -38,7 +38,8 @@ def _paradas_de_wave(wave: Wave, warehouse: Warehouse) -> list[int]:
     paradas: list[int] = []
     vistos: set[int] = set()
     for pedido in wave.pedidos:
-        for producto_id in pedido.productos_ids():
+        for item in pedido.items:
+            producto_id = item.producto_id
             if producto_id not in warehouse.productos:
                 raise ValueError(
                     f"El pedido {pedido.id} referencia producto inexistente: {producto_id}"
