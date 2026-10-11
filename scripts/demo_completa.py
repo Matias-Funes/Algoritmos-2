@@ -10,6 +10,7 @@ Uso:
 
 import argparse
 import tkinter as tk
+from tkinter import ttk
 
 from warehouse.algoritmos.recorridos import ESTRATEGIAS, recorrer_wave
 from warehouse.generacion.generador import ConfigGeneracion, generar_escenario
@@ -99,6 +100,8 @@ def main() -> None:
 
     # 4. Calcular tamaño de canvas y celda_px según la pantalla
     root = tk.Tk()
+    style = ttk.Style()
+    style.theme_use("clam")  # o "alt", "default"
     root.withdraw()
     alto_pantalla = root.winfo_screenheight()
     ancho_pantalla = root.winfo_screenwidth()
@@ -240,28 +243,28 @@ class SimulacionSecuencial:
         panel = tk.Frame(self.root)
         panel.pack(side="bottom", fill="x", padx=10, pady=8)
 
-        self.btn_play_pause = tk.Button(
+        self.btn_play_pause = ttk.Button(
             panel, text="▶ Play", command=self.toggle_play_pause, width=10
         )
         self.btn_play_pause.pack(side="left", padx=2)
 
-        tk.Button(panel, text="⏮ Step atrás", command=self.step_atras, width=12).pack(
+        ttk.Button(panel, text="⏮ Step atrás", command=self.step_atras, width=12).pack(
             side="left", padx=2
         )
-        tk.Button(panel, text="⏭ Step", command=self.step, width=8).pack(
+        ttk.Button(panel, text="⏭ Step", command=self.step, width=8).pack(
             side="left", padx=2
         )
-        tk.Button(panel, text="⟲ Reset", command=self.reset, width=8).pack(
+        ttk.Button(panel, text="⟲ Reset", command=self.reset, width=8).pack(
             side="left", padx=2
         )
 
         tk.Label(panel, text="  |  ").pack(side="left")
 
-        self.btn_prev = tk.Button(
+        self.btn_prev = ttk.Button(
             panel, text="◀ Wave ant.", command=self.wave_anterior, width=12
         )
         self.btn_prev.pack(side="left", padx=2)
-        self.btn_next = tk.Button(
+        self.btn_next = ttk.Button(
             panel, text="Wave sig. ▶", command=self.wave_siguiente, width=12
         )
         self.btn_next.pack(side="left", padx=2)
@@ -269,7 +272,7 @@ class SimulacionSecuencial:
         self.lbl_estado = tk.Label(panel, text="", anchor="w", font=("monospace", 10))
         self.lbl_estado.pack(side="left", padx=20)
 
-        tk.Button(panel, text="✕ Cerrar", command=self.root.destroy, width=10).pack(
+        ttk.Button(panel, text="✕ Cerrar", command=self.root.destroy, width=10).pack(
             side="right", padx=2
         )
 
