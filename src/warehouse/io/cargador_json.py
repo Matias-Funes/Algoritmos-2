@@ -133,4 +133,5 @@ def cargar_escenario(path: str | Path) -> Escenario:
         warehouse=w,
         pedidos=pedidos,
         wave_config=wave_config,
+        seed=data.get("seed"),
     )

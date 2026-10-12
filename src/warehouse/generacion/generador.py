@@ -228,4 +228,5 @@ def generar_escenario(config: ConfigGeneracion) -> Escenario:
             max_pedidos=config.max_pedidos_wave,
             max_productos=config.max_productos_wave,
         ),
+        seed=config.seed,
     )

@@ -57,6 +57,7 @@ def escenario_a_dict(escenario: Escenario) -> dict:
     return {
         "version": "1.0",
         "nombre": escenario.nombre,
+        "seed": escenario.seed,
         "warehouse": {
             "ancho": w.ancho,
             "alto": w.alto,

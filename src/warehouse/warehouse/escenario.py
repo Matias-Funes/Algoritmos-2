@@ -16,3 +16,4 @@ class Escenario:
     warehouse: Warehouse
     pedidos: list[Pedido] = field(default_factory=list)
     wave_config: WaveConfig = field(default_factory=WaveConfig)
+    seed: int | None = None

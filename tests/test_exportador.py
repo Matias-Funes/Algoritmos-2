@@ -93,3 +93,23 @@ def test_exportar_escenario_chico(tmp_path):
     exportar_escenario(esc, out)
     esc2 = cargar_escenario(out)
     assert set(esc2.warehouse.productos.keys()) == set(esc.warehouse.productos.keys())
+
+
+def test_exportar_incluye_seed(tmp_path):
+    """La seed de generación se preserva tras round-trip."""
+    esc = generar_escenario(ConfigGeneracion(seed=42))
+    out = tmp_path / "esc.json"
+    exportar_escenario(esc, out)
+
+    esc2 = cargar_escenario(out)
+    assert esc2.seed == 42
+
+
+def test_exportar_sin_seed(tmp_path):
+    """Un escenario sin seed se exporta con seed=None."""
+    esc = generar_escenario(ConfigGeneracion(seed=None))
+    out = tmp_path / "esc.json"
+    exportar_escenario(esc, out)
+
+    esc2 = cargar_escenario(out)
+    assert esc2.seed is None
