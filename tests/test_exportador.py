@@ -113,3 +113,55 @@ def test_exportar_sin_seed(tmp_path):
 
     esc2 = cargar_escenario(out)
     assert esc2.seed is None
+
+
+def test_round_trip_con_waves_y_resultados(tmp_path):
+    """Guardar y cargar un escenario con waves y resultados."""
+    from warehouse.algoritmos.recorridos import recorrer_wave
+    from warehouse.waves.generador_waves import EstrategiaWaves, generar_waves
+
+    esc = generar_escenario(ConfigGeneracion(seed=42, n_pedidos=10))
+    waves = generar_waves(
+        esc.pedidos,
+        esc.warehouse,
+        max_pedidos=3,
+        max_productos=20,
+        estrategia=EstrategiaWaves.PRIORIDAD_Y_CERCANIA,
+    )
+    esc.waves = waves
+    esc.resultados = {
+        w.id: recorrer_wave(w, esc.warehouse, estrategia="vecino_mas_cercano")
+        for w in waves
+    }
+
+    out = tmp_path / "esc.json"
+    exportar_escenario(esc, out)
+    esc2 = cargar_escenario(out)
+
+    # Verificar waves
+    assert len(esc2.waves) == len(esc.waves)
+    assert {w.id for w in esc2.waves} == {w.id for w in esc.waves}
+    for w1, w2 in zip(esc.waves, esc2.waves):
+        assert w1.id == w2.id
+        assert w1.estado == w2.estado
+        assert {p.id for p in w1.pedidos} == {p.id for p in w2.pedidos}
+
+    # Verificar resultados
+    assert set(esc2.resultados.keys()) == set(esc.resultados.keys())
+    for wid, r1 in esc.resultados.items():
+        r2 = esc2.resultados[wid]
+        assert r1.estrategia == r2.estrategia
+        assert r1.camino_completo == r2.camino_completo
+        assert r1.orden_paradas == r2.orden_paradas
+        assert r1.distancia_total == r2.distancia_total
+        assert r1.indices_de_paradas == r2.indices_de_paradas
+
+
+def test_cargar_sin_waves_ni_resultados(tmp_path):
+    """Un JSON sin waves ni resultados se carga como escenario fresco."""
+    esc = generar_escenario(ConfigGeneracion(seed=42))
+    out = tmp_path / "esc.json"
+    exportar_escenario(esc, out)
+    esc2 = cargar_escenario(out)
+    assert esc2.waves == []
+    assert esc2.resultados == {}

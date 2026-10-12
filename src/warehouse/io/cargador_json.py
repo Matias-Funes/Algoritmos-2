@@ -1,9 +1,12 @@
 import json
 from pathlib import Path
 
+from warehouse.dominio.estado_pedido import EstadoPedido
+from warehouse.dominio.estado_wave import EstadoWave
 from warehouse.dominio.item_pedido import ItemPedido
 from warehouse.dominio.pedido import Pedido
 from warehouse.dominio.producto import Producto
+from warehouse.dominio.wave import Wave
 from warehouse.warehouse.escenario import Escenario, WaveConfig
 from warehouse.warehouse.warehouse import Warehouse
 
@@ -128,10 +131,71 @@ def cargar_escenario(path: str | Path) -> Escenario:
         max_productos=int(cfg.get("max_productos", 20)),
     )
 
+    pedidos_por_id = {p.id: p for p in pedidos}
+    waves = _construir_waves(data.get("waves", []), pedidos_por_id, w)
+    resultados = _construir_resultados(data.get("resultados", {}))
+
     return Escenario(
         nombre=data.get("nombre", path.stem),
         warehouse=w,
         pedidos=pedidos,
         wave_config=wave_config,
         seed=data.get("seed"),
+        waves=waves,
+        resultados=resultados,
     )
+
+
+def _construir_waves(
+    data_waves: list[dict], pedidos_por_id: dict, w: Warehouse
+) -> list[Wave]:
+
+    waves: list[Wave] = []
+    for wave_data in data_waves:
+        wave = Wave(
+            id=wave_data["id"],
+            max_pedidos=wave_data.get("max_pedidos", 3),
+            max_productos=wave_data.get("max_productos", 20),
+        )
+        for pid in wave_data["pedido_ids"]:
+            pedido = pedidos_por_id.get(pid)
+            if pedido is None:
+                raise ErrorDeCarga(
+                    f"La wave {wave.id} referencia pedido inexistente: {pid}"
+                )
+            wave.pedidos.append(pedido)
+            pedido.estado = EstadoPedido.EN_WAVE
+
+        # Restaurar estado de la wave
+        estado_str = wave_data.get("estado", "CERRADA")
+        wave.estado = EstadoWave(estado_str)
+
+        # Después de restaurar el estado de la wave, propagar a los pedidos
+        for pedido in wave.pedidos:
+            if wave.estado == EstadoWave.CERRADA:
+                pedido.estado = EstadoPedido.EN_WAVE
+            elif wave.estado == EstadoWave.EN_PREPARACION:
+                pedido.estado = EstadoPedido.EN_PREPARACION
+            elif wave.estado == EstadoWave.COMPLETADA:
+                pedido.estado = EstadoPedido.PREPARADO
+        waves.append(wave)
+
+    return waves
+
+
+def _construir_resultados(data_resultados: dict) -> dict:
+    from warehouse.algoritmos.recorridos import ResultadoRecorrido
+
+    resultados = {}
+    for wave_id, r in data_resultados.items():
+        resultados[wave_id] = ResultadoRecorrido(
+            estrategia=r["estrategia"],
+            orden_paradas=list(r["orden_paradas"]),
+            camino_completo=list(r["camino_completo"]),
+            distancia_total=r["distancia_total"],
+            nodos_visitados=r["nodos_visitados"],
+            aristas_recorridas=r["aristas_recorridas"],
+            tiempo_segundos=r["tiempo_segundos"],
+            indices_de_paradas=list(r["indices_de_paradas"]),
+        )
+    return resultados

@@ -114,6 +114,10 @@ def main() -> None:
             f"{r.nodos_visitados:>3d} nodos"
         )
 
+    # Adjuntar waves y resultados al escenario, para que se puedan exportar
+    escenario.waves = waves
+    escenario.resultados = {w.id: r for w, r in resultados}
+
     # 4. Calcular tamaño de canvas y celda_px según la pantalla
     root = tk.Tk()
     style = ttk.Style()

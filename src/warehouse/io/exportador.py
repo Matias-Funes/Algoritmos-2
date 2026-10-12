@@ -54,6 +54,11 @@ def escenario_a_dict(escenario: Escenario) -> dict:
 
     pedidos = [_pedido_a_dict(p) for p in escenario.pedidos]
 
+    waves_dict = [_wave_a_dict(w) for w in escenario.waves]
+    resultados_dict = {
+        wave_id: _resultado_a_dict(r) for wave_id, r in escenario.resultados.items()
+    }
+
     return {
         "version": "1.0",
         "nombre": escenario.nombre,
@@ -72,6 +77,8 @@ def escenario_a_dict(escenario: Escenario) -> dict:
             "max_pedidos": escenario.wave_config.max_pedidos,
             "max_productos": escenario.wave_config.max_productos,
         },
+        "waves": waves_dict,
+        "resultados": resultados_dict,
     }
 
 
@@ -84,3 +91,26 @@ def exportar_escenario(escenario: Escenario, path: str | Path) -> None:
         json.dumps(data, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+
+
+def _wave_a_dict(wave) -> dict:
+    return {
+        "id": wave.id,
+        "estado": wave.estado.value,
+        "max_pedidos": wave.max_pedidos,
+        "max_productos": wave.max_productos,
+        "pedido_ids": [p.id for p in wave.pedidos],
+    }
+
+
+def _resultado_a_dict(r) -> dict:
+    return {
+        "estrategia": r.estrategia,
+        "orden_paradas": list(r.orden_paradas),
+        "camino_completo": list(r.camino_completo),
+        "distancia_total": r.distancia_total,
+        "nodos_visitados": r.nodos_visitados,
+        "aristas_recorridas": r.aristas_recorridas,
+        "tiempo_segundos": r.tiempo_segundos,
+        "indices_de_paradas": list(r.indices_de_paradas),
+    }
