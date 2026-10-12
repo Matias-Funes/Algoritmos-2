@@ -352,6 +352,10 @@ class SimulacionSecuencial:
         )
 
         ttk.Button(
+            panel, text="📂 Cargar", command=self.cargar_sesion, width=12
+        ).pack(side="right", padx=2)
+
+        ttk.Button(
             panel, text="💾 Guardar", command=self.guardar_sesion, width=12
         ).pack(side="right", padx=2)
 
@@ -708,6 +712,62 @@ class SimulacionSecuencial:
             self.lbl_estado.config(text=f"Guardado en {path}")
         except Exception as e:
             self.lbl_estado.config(text=f"Error al guardar: {e}")
+
+    def cargar_sesion(self) -> None:
+        """Pide al usuario una sesión guardada y reinicia la app con --cargar."""
+        import subprocess
+        import sys
+        from tkinter import filedialog, messagebox
+
+        from warehouse.io.cargador_json import cargar_escenario
+
+        self.pause()
+
+        directorio_sesiones = Path(__file__).parent.parent / "data" / "sesiones"
+        directorio_sesiones.mkdir(parents=True, exist_ok=True)
+
+        path = filedialog.askopenfilename(
+            initialdir=directorio_sesiones,
+            defaultextension=".json",
+            filetypes=[("JSON", "*.json"), ("Todos", "*.*")],
+            title="Cargar sesión",
+        )
+        if not path:
+            return  # el usuario canceló
+
+        # Validar ANTES de cerrar la app: si el archivo está roto, no perdemos nada.
+        try:
+            cargar_escenario(path)
+        except Exception as e:
+            messagebox.showerror("Error al cargar", f"No se pudo cargar:\n{e}")
+            return
+
+        # Lanzar el nuevo proceso con --cargar
+
+        # Ruta absoluta de este script, para relanzarlo
+        ruta_script = Path(__file__).resolve()
+
+        # Redirigir stdout/stderr a un log y despegar el proceso del terminal
+        log_path = Path(__file__).parent.parent / "data" / "sesiones" / "ultimo_lanzamiento.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(log_path, "w") as log:
+            subprocess.Popen(
+                    [   # uso Popen ya que no bloquea: lanza el proceso y sigue
+                     sys.executable,
+                     str(ruta_script),
+                     "--cargar",
+                     path,
+                     ],
+                    start_new_session=True,
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    )
+
+
+        # Cerrar esta ventana (termina el mainloop)
+        self.root.destroy()
 
 if __name__ == "__main__":
     main()
