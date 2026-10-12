@@ -395,27 +395,6 @@ class SimulacionSecuencial:
 
                 dibujar_punto(self.canvas, cx_rack, y, radio=radio, color=color)
 
-                        # Etiqueta con coordenadas del rack, a la izquierda o derecha
-            # según posición dentro del bloque (bloques de 2, pasillos de 1 → módulo 3)
-            x0, y0, x1, y1 = self.coords[(rack.x, rack.y)]
-            if rack.x % 3 == 1:
-                # rack izquierdo del bloque → etiqueta a la izquierda
-                text_x = x0 - 2
-                anchor = "se"   # sureste: texto crece hacia arriba-izquierda
-            else:
-                # rack derecho del bloque → etiqueta a la derecha
-                text_x = x1 + 2
-                anchor = "sw"   # suroeste: texto crece hacia arriba-derecha
-
-            self.canvas.create_text(
-                text_x,
-                y1 - 2,
-                text=f"{rack.x},{rack.y}",
-                font=("monospace", 6),
-                fill="#333333",
-                anchor=anchor,
-            )
-
 
 
         # Picker
@@ -423,6 +402,45 @@ class SimulacionSecuencial:
         dibujar_punto(
             self.canvas, cx, cy, radio=self.celda_px * 0.32, color=COLOR_PICKER
         )
+
+
+        # Etiqueta de próxima parada
+        proxima = None
+        for i, idx_parada in enumerate(self.estado.indices_de_paradas):
+            if self.estado.indice_actual < idx_parada:
+                proxima = self.estado.nodos_paradas[i]
+                break
+
+        if proxima is not None:
+            pids_parada = self.estado.nodo_a_productos.get(proxima, [])
+            if pids_parada:
+                prod = self.escenario.warehouse.productos[pids_parada[0]]
+                rack = self.escenario.warehouse.racks[prod.rack_id]
+                x0, y0, x1, y1 = self.coords[(rack.x, rack.y)]
+
+                # Alterna izquierda/derecha según bloque del rack:
+                # - rack izquierdo del bloque (x % 3 == 1) → etiqueta a la izquierda
+                # - rack derecho del bloque  (x % 3 == 2) → etiqueta a la derecha
+                if rack.x % 3 == 1:
+                    text_x = x0 - 4
+                    anchor = "e"
+                else:
+                    text_x = x1 + 4
+                    anchor = "w"
+
+                text_y = (y0 + y1) / 2
+
+                self.canvas.create_text(
+                    text_x,
+                    text_y,
+                    text=f"→ {rack.x},{rack.y}",
+                    font=("monospace", 7, "bold"),
+                    fill="#1565c0",
+                    anchor=anchor,
+                )
+
+
+
 
         self._actualizar_label()
 
