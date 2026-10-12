@@ -114,6 +114,33 @@ python scripts/demo_completa.py --estrategia orden_pedidos
 python scripts/demo_completa.py --niveles-por-rack 5 --productos-por-rack 2
 ```
 
+### Persistencia de sesiones
+
+El sistema permite guardar y recuperar el estado completo de una simulación:
+
+- Escenario (warehouse, productos, pedidos).
+- Waves generadas y sus recorridos calculados.
+- Estado actual de la simulación: qué wave está activa y en qué paso va el picker.
+- Configuración de generación (incluida la seed).
+
+#### Guardar
+
+En la app, apretá **💾 Guardar**. Se abre un diálogo para elegir el nombre.
+El archivo se guarda en `data/sesiones/`.
+
+#### Cargar
+
+En la app, apretá **📂 Cargar**. Se abre un diálogo con las sesiones guardadas.
+Al confirmar, la aplicación se reinicia y arranca **pausada** en la wave y el
+paso donde quedó la última vez.
+
+Alternativamente, desde la línea de comandos:
+
+```bash
+python scripts/demo_completa.py --cargar data/sesiones/partida_a.json
+python main.py simular --cargar data/sesiones/partida_a.json
+```
+
 ### Punto de entrada unificado
 
 Alternativa a los scripts individuales:
@@ -180,12 +207,12 @@ El warehouse se modela como un **grafo no dirigido con pesos**:
 ### Layout por defecto (generado)
 
 ```
-y = alto-1  ──────────────────────────────────────
+y = alto-1  ─────────────────────────────────────────
             │ P │ R │ R │ P │ R │ R │ P │ R │ R │ P │
             │ P │ R │ R │ P │ R │ R │ P │ R │ R │ P │
             ...
 y = 1       │ P │ R │ R │ P │ R │ R │ P │ R │ R │ P │
-y = 0       ──────────────────────────────────────
+y = 0       ─────────────────────────────────────────
               ↑                                   ↑
         zona de despacho A                  puerta OUTBOUND
 ```
@@ -389,9 +416,9 @@ Para cada algoritmo, complejidad temporal y espacial:
 
 | Algoritmo | Tiempo | Espacio |
 |---|---|---|
-| BFS | O(|V| + |E|) | O(|V|) |
-| Dijkstra (heap) | O((|V| + |E|) log |V|) | O(|V|) |
-| Cache de distancias | O(k · Dijkstra) amortizado | O(k · |V|) |
+| BFS | $O(\vert V\vert + \vert E\vert)$ | $O(\vert V\vert)$ |
+| Dijkstra (heap) | $O((\vert V\vert  + \vert E\vert ) log \vert V\vert )$ | $O(\vert V\vert )$ |
+| Cache de distancias | O(k · Dijkstra) amortizado | $O(k · \vert V\vert )$ |
 | Generación de waves (prioridad) | O(n log n + n · m) | O(n) |
 | Generación de waves (cercanía) | O(n log n + n² · p) | O(n) |
 | Recorrido (orden pedidos) | O(k) consultas | O(k) |
@@ -423,20 +450,20 @@ transitables (pasillos, zona de despacho, puertas). Los racks son celdas
 bloqueadas que **no** son nodos del grafo; cada producto tiene un
 `nodo_picking` adyacente desde donde el operario lo alcanza.
 
-### 2. ¿Qué representación de la estructura de datos utilizaron y por qué?
+### 2. ¿Qué representación de la estructura de datos se utilizaron y por qué?
 
 **Lista de adyacencia** (`dict[int, list[Arista]]`). Razones:
 
 - Los grafos de warehouse son **dispersos**: cada nodo tiene a lo sumo 4
   vecinos.
-- La lista de adyacencia usa O(|V| + |E|) espacio, contra O(V²) de la matriz.
+- La lista de adyacencia usa O(|V| + |E|) espacio, contra O(|V|²) de la matriz.
 - Iterar vecinos es O(grado), esencial para BFS y Dijkstra.
 - Flexibilidad para agregar/quitar nodos sin reasignar memoria.
 
 Se complementa con un `dict[(x, y)] → id` para mapear posiciones a nodos,
 necesario para construir el grafo por grilla.
 
-### 3. ¿Qué algoritmos utilizaron?
+### 3. ¿Qué algoritmos se utilizaron?
 
 - **BFS** para validar alcanzabilidad desde la zona de despacho.
 - **Dijkstra** para distancias mínimas entre nodos.
