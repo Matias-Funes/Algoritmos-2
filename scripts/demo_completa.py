@@ -395,16 +395,27 @@ class SimulacionSecuencial:
 
                 dibujar_punto(self.canvas, cx_rack, y, radio=radio, color=color)
 
-                        # Etiqueta con coordenadas del rack, en la esquina inferior izquierda
+                        # Etiqueta con coordenadas del rack, a la izquierda o derecha
+            # según posición dentro del bloque (bloques de 2, pasillos de 1 → módulo 3)
             x0, y0, x1, y1 = self.coords[(rack.x, rack.y)]
+            if rack.x % 3 == 1:
+                # rack izquierdo del bloque → etiqueta a la izquierda
+                text_x = x0 - 2
+                anchor = "se"   # sureste: texto crece hacia arriba-izquierda
+            else:
+                # rack derecho del bloque → etiqueta a la derecha
+                text_x = x1 + 2
+                anchor = "sw"   # suroeste: texto crece hacia arriba-derecha
+
             self.canvas.create_text(
-                x0 + 2,
+                text_x,
                 y1 - 2,
                 text=f"{rack.x},{rack.y}",
                 font=("monospace", 6),
                 fill="#333333",
-                anchor="sw",   # ancla al Suroeste = esquina inferior izquierda
+                anchor=anchor,
             )
+
 
 
         # Picker
