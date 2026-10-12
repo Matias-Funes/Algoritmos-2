@@ -344,7 +344,7 @@ class SimulacionSecuencial:
         )
         self.btn_next.pack(side="left", padx=2)
 
-        self.lbl_estado = tk.Label(panel, text="", anchor="w", font=("monospace", 10))
+        self.lbl_estado = tk.Label(panel, text="", anchor="w", font=("monospace", 10), width=45)
         self.lbl_estado.pack(side="left", padx=20)
 
         ttk.Button(panel, text="✕ Cerrar", command=self.root.destroy, width=10).pack(
@@ -709,7 +709,7 @@ class SimulacionSecuencial:
 
         try:
             exportar_escenario(self.escenario, path)
-            self.lbl_estado.config(text=f"Guardado en {path}")
+            self.lbl_estado.config(text=f"Guardado en {Path(path).name}")
         except Exception as e:
             self.lbl_estado.config(text=f"Error al guardar: {e}")
 
