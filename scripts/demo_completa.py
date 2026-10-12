@@ -374,7 +374,10 @@ class SimulacionSecuencial:
                 if niveles == 1:
                     y = cy_rack
                 else:
-                    y = cy_rack - (niveles - 1) * separacion / 2 + (z - 1) * separacion
+                    # z=1 en la base (abajo), z=niveles en la cima (arriba)
+                    # En pantalla "abajo" = y grande, "arriba" = y chico
+                    z_relativo = (z - 1) / (niveles - 1)  # 0 para z=1, 1 para z=niveles
+                    y = cy_rack + separacion * (niveles - 1) / 2 * (1 - 2 * z_relativo)
 
                 pid = prods_en_rack.get(z)
                 if pid is None:
