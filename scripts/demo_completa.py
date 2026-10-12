@@ -11,7 +11,7 @@ Uso:
 import argparse
 import tkinter as tk
 from pathlib import Path
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 from warehouse.algoritmos.recorridos import ESTRATEGIAS, recorrer_wave
 from warehouse.generacion.generador import ConfigGeneracion, generar_escenario
@@ -709,7 +709,11 @@ class SimulacionSecuencial:
 
         try:
             exportar_escenario(self.escenario, path)
-            self.lbl_estado.config(text=f"Guardado en {Path(path).name}")
+            # self.lbl_estado.config(text=f"Guardado en {Path(path).name}")
+            messagebox.showinfo(
+                "Guardado",
+                f"Sesión guardada en:\n{path}",
+            )
         except Exception as e:
             self.lbl_estado.config(text=f"Error al guardar: {e}")
 
@@ -742,8 +746,16 @@ class SimulacionSecuencial:
             messagebox.showerror("Error al cargar", f"No se pudo cargar:\n{e}")
             return
 
-        # Lanzar el nuevo proceso con --cargar
+        # Confirmación
+        confirmar = messagebox.askokcancel(
+            "Confirmar carga",
+            "Se va a reiniciar la aplicación para cargar la sesión seleccionada.\n\n"
+            "¿Continuar?",
+        )
+        if not confirmar:
+            return
 
+        # Lanzar el nuevo proceso con --cargar
         # Ruta absoluta de este script, para relanzarlo
         ruta_script = Path(__file__).resolve()
 
