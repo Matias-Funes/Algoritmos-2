@@ -395,6 +395,18 @@ class SimulacionSecuencial:
 
                 dibujar_punto(self.canvas, cx_rack, y, radio=radio, color=color)
 
+                        # Etiqueta con coordenadas del rack, en la esquina inferior izquierda
+            x0, y0, x1, y1 = self.coords[(rack.x, rack.y)]
+            self.canvas.create_text(
+                x0 + 2,
+                y1 - 2,
+                text=f"{rack.x},{rack.y}",
+                font=("monospace", 6),
+                fill="#333333",
+                anchor="sw",   # ancla al Suroeste = esquina inferior izquierda
+            )
+
+
         # Picker
         cx, cy = centro(self.estado.nodo_actual)
         dibujar_punto(
