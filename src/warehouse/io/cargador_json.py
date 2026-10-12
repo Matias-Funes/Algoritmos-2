@@ -7,7 +7,7 @@ from warehouse.dominio.item_pedido import ItemPedido
 from warehouse.dominio.pedido import Pedido
 from warehouse.dominio.producto import Producto
 from warehouse.dominio.wave import Wave
-from warehouse.warehouse.escenario import Escenario, WaveConfig
+from warehouse.warehouse.escenario import Escenario, Sesion, WaveConfig
 from warehouse.warehouse.warehouse import Warehouse
 
 
@@ -135,6 +135,17 @@ def cargar_escenario(path: str | Path) -> Escenario:
     waves = _construir_waves(data.get("waves", []), pedidos_por_id, w)
     resultados = _construir_resultados(data.get("resultados", {}))
 
+    sesion_data = data.get("sesion")
+    sesion = None
+    if sesion_data:
+        sesion = Sesion(
+            wave_actual=sesion_data.get("wave_actual", 0),
+            indice_actual=sesion_data.get("indice_actual", 0),
+            estrategia_recorrido=sesion_data.get(
+                "estrategia_recorrido", "vecino_mas_cercano"
+            ),
+        )
+
     return Escenario(
         nombre=data.get("nombre", path.stem),
         warehouse=w,
@@ -143,6 +154,7 @@ def cargar_escenario(path: str | Path) -> Escenario:
         seed=data.get("seed"),
         waves=waves,
         resultados=resultados,
+        sesion=sesion,
     )
 
 

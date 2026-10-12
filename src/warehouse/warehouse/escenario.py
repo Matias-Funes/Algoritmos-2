@@ -20,6 +20,13 @@ class WaveConfig:
 
 
 @dataclass
+class Sesion:
+    wave_actual: int = 0
+    indice_actual: int = 0
+    estrategia_recorrido: str = "vecino_mas_cercano"
+
+
+@dataclass
 class Escenario:
     nombre: str
     warehouse: Warehouse
@@ -28,3 +35,4 @@ class Escenario:
     seed: int | None = None
     waves: list[Wave] = field(default_factory=list)
     resultados: dict[str, "ResultadoRecorrido"] = field(default_factory=dict)
+    sesion: Sesion | None = None

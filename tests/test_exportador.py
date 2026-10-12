@@ -165,3 +165,36 @@ def test_cargar_sin_waves_ni_resultados(tmp_path):
     esc2 = cargar_escenario(out)
     assert esc2.waves == []
     assert esc2.resultados == {}
+
+
+def test_exportar_incluye_sesion(tmp_path):
+    """La sesión de simulación se preserva tras round-trip."""
+    from warehouse.warehouse.escenario import Sesion
+
+    esc = generar_escenario(ConfigGeneracion(seed=42, n_pedidos=10))
+    esc.sesion = Sesion(
+        wave_actual=2,
+        indice_actual=15,
+        estrategia_recorrido="orden_pedidos",
+    )
+
+    out = tmp_path / "esc.json"
+    exportar_escenario(esc, out)
+    esc2 = cargar_escenario(out)
+
+    assert esc2.sesion is not None
+    assert esc2.sesion.wave_actual == 2
+    assert esc2.sesion.indice_actual == 15
+    assert esc2.sesion.estrategia_recorrido == "orden_pedidos"
+
+
+def test_exportar_sin_sesion(tmp_path):
+    """Sin sesión, el JSON guarda null y al cargar queda None."""
+    esc = generar_escenario(ConfigGeneracion(seed=42))
+    esc.sesion = None
+
+    out = tmp_path / "esc.json"
+    exportar_escenario(esc, out)
+    esc2 = cargar_escenario(out)
+
+    assert esc2.sesion is None

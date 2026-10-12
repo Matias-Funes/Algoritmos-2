@@ -59,6 +59,14 @@ def escenario_a_dict(escenario: Escenario) -> dict:
         wave_id: _resultado_a_dict(r) for wave_id, r in escenario.resultados.items()
     }
 
+    sesion_dict = None
+    if escenario.sesion is not None:
+        sesion_dict = {
+            "wave_actual": escenario.sesion.wave_actual,
+            "indice_actual": escenario.sesion.indice_actual,
+            "estrategia_recorrido": escenario.sesion.estrategia_recorrido,
+        }
+
     return {
         "version": "1.0",
         "nombre": escenario.nombre,
@@ -79,6 +87,7 @@ def escenario_a_dict(escenario: Escenario) -> dict:
         },
         "waves": waves_dict,
         "resultados": resultados_dict,
+        "sesion": sesion_dict,
     }
 
 
