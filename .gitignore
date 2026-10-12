@@ -32,3 +32,6 @@ core.*
 
 # setuptools / pip
 *.egg-info/
+
+# sesiones guardadas
+data/sesiones/
