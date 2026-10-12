@@ -449,15 +449,22 @@ class SimulacionSecuencial:
 
         for pid in sorted(self.estado.productos_totales):
             prod = self.escenario.warehouse.productos[pid]
+            rack = self.escenario.warehouse.racks[prod.rack_id]
+
             cantidad_pedida = sum(
                 item.cantidad
                 for pedido in wave.pedidos
                 for item in pedido.items
                 if item.producto_id == pid
                 )
+
             lbl = tk.Label(
                 self.frame_productos,
-                text=f"● {pid} stock={prod.stock}  pide={cantidad_pedida}",
+                text=(
+                    f"● {pid} "
+                    f"({rack.x},{rack.y},{prod.z}) "
+                    f"stock={prod.stock} pide={cantidad_pedida}"
+                ),
                 anchor="w",
                 bg=COLOR_CANVAS_FONDO,
                 fg=COLOR_PRODUCTO_PENDIENTE,  # arranca rojo
