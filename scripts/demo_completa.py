@@ -10,6 +10,7 @@ Uso:
 
 import argparse
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 
 from warehouse.algoritmos.recorridos import ESTRATEGIAS, recorrer_wave
@@ -68,57 +69,103 @@ def main() -> None:
         "--wave", type=int, default=0,
         help="Índice de la wave inicial (0-based)"
     )
+    parser.add_argument(
+        "--cargar", type=str, default=None,
+        help="Ruta a un archivo JSON con un escenario guardado"
+    )
     args = parser.parse_args()
 
-    # 1. Generar escenario
-    print("Generando escenario...")
-    cfg = ConfigGeneracion(
-        n_bloques_racks=args.bloques,
-        alto=args.alto,
-        n_pedidos=args.pedidos,
-        niveles_por_rack=args.niveles_por_rack,
-        productos_por_rack=args.productos_por_rack,
-        cada_cuantas_filas_pasillo_horizontal=args.pasillos_h,
-        seed=args.seed,
-    )
-    escenario = generar_escenario(cfg)
-    validar_escenario(escenario)
 
-    print(f"  Warehouse: {escenario.warehouse.ancho} x {escenario.warehouse.alto}")
-    print(f"  Nodos en grafo: {len(escenario.warehouse.grafo)}")
-    print(f"  Racks: {len(escenario.warehouse.racks)}")
-    print(f"  Productos: {len(escenario.warehouse.productos)}")
-    print(f"  Pedidos: {len(escenario.pedidos)}")
+    # --- Rama 1: cargar desde disco ---
+    if args.cargar:
+        print(f"Cargando escenario desde {args.cargar}...")
+        from warehouse.io.cargador_json import cargar_escenario
 
-    # 2. Generar waves
-    print("\nGenerando waves...")
-    estrat_waves = EstrategiaWaves(args.estrategia_waves)
-    waves = generar_waves(
-        escenario.pedidos,
-        escenario.warehouse,
-        max_pedidos=args.max_pedidos_wave,
-        max_productos=args.max_productos_wave,
-        estrategia=estrat_waves,
-    )
-    print(f"  {len(waves)} waves generadas")
+        escenario = cargar_escenario(args.cargar)
+        print(f"  Warehouse: {escenario.warehouse.ancho} x {escenario.warehouse.alto}")
+        print(f"  Racks: {len(escenario.warehouse.racks)}")
+        print(f"  Productos: {len(escenario.warehouse.productos)}")
+        print(f"  Pedidos: {len(escenario.pedidos)}")
+        print(f"  Waves: {len(escenario.waves)}")
 
-    # 3. Calcular recorridos de todas las waves
-    print(f"\nCalculando recorridos ({args.estrategia})...")
-    resultados = []
-    for w in waves:
-        r = recorrer_wave(w, escenario.warehouse, estrategia=args.estrategia)
-        resultados.append((w, r))
-        print(
-            f"  {w.id}: {r.distancia_total:>6.1f} m, "
-            f"{len(r.orden_paradas):>2d} paradas, "
-            f"{r.nodos_visitados:>3d} nodos"
+        if not escenario.waves:
+            raise SystemExit(
+                "El archivo cargado no contiene waves. "
+                "Generá el escenario de cero en lugar de cargarlo."
+            )
+
+        # Convertir el dict de resultados en la lista de tuplas que espera la UI
+        resultados = [
+            (w, escenario.resultados[w.id]) for w in escenario.waves
+        ]
+        estrategia = (
+            escenario.sesion.estrategia_recorrido
+            if escenario.sesion is not None
+            else args.estrategia
+        )
+        indice_inicial = (
+            escenario.sesion.wave_actual if escenario.sesion is not None else 0
+        )
+        paso_inicial = (
+            escenario.sesion.indice_actual if escenario.sesion is not None else 0
         )
 
-    # Adjuntar waves y resultados al escenario, para que se puedan exportar
-    escenario.waves = waves
-    escenario.resultados = {w.id: r for w, r in resultados}
+    # --- Rama 2: generar de cero ---
+    else:
+        # 1. Generar escenario
+        print("Generando escenario...")
+        cfg = ConfigGeneracion(
+            n_bloques_racks=args.bloques,
+            alto=args.alto,
+            n_pedidos=args.pedidos,
+            niveles_por_rack=args.niveles_por_rack,
+            productos_por_rack=args.productos_por_rack,
+            cada_cuantas_filas_pasillo_horizontal=args.pasillos_h,
+            seed=args.seed,
+        )
+        escenario = generar_escenario(cfg)
+        validar_escenario(escenario)
+
+        print(f"  Warehouse: {escenario.warehouse.ancho} x {escenario.warehouse.alto}")
+        print(f"  Nodos en grafo: {len(escenario.warehouse.grafo)}")
+        print(f"  Racks: {len(escenario.warehouse.racks)}")
+        print(f"  Productos: {len(escenario.warehouse.productos)}")
+        print(f"  Pedidos: {len(escenario.pedidos)}")
+
+        # 2. Generar waves
+        print("\nGenerando waves...")
+        estrat_waves = EstrategiaWaves(args.estrategia_waves)
+        waves = generar_waves(
+            escenario.pedidos,
+            escenario.warehouse,
+            max_pedidos=args.max_pedidos_wave,
+            max_productos=args.max_productos_wave,
+            estrategia=estrat_waves,
+        )
+        print(f"  {len(waves)} waves generadas")
+
+        # 3. Calcular recorridos de todas las waves
+        print(f"\nCalculando recorridos ({args.estrategia})...")
+        resultados = []
+        for w in waves:
+            r = recorrer_wave(w, escenario.warehouse, estrategia=args.estrategia)
+            resultados.append((w, r))
+            print(
+                f"  {w.id}: {r.distancia_total:>6.1f} m, "
+                f"{len(r.orden_paradas):>2d} paradas, "
+                f"{r.nodos_visitados:>3d} nodos"
+            )
+
+        # Adjuntar waves y resultados al escenario, para que se puedan exportar
+        escenario.waves = waves
+        escenario.resultados = {w.id: r for w, r in resultados}
+
+        estrategia = args.estrategia
+        indice_inicial = args.wave
+        paso_inicial = 0
 
     # 4. Calcular tamaño de canvas y celda_px según la pantalla
+    # --- Setup de la ventana ---
     root = tk.Tk()
     style = ttk.Style()
     style.theme_use("clam")  # o "alt", "default"
@@ -147,6 +194,7 @@ def main() -> None:
         ancho_canvas=ancho_canvas,
         alto_canvas=alto_canvas,
         indice_inicial=args.wave,
+        paso_inicial=paso_inicial,
     )
 
     # Centrar la ventana en pantalla
@@ -173,6 +221,7 @@ class SimulacionSecuencial:
         ancho_canvas: int = ANCHO_CANVAS,
         alto_canvas: int = ALTO_CANVAS,
         indice_inicial: int = 0,
+        paso_inicial: int = 0,
     ) -> None:
         self.root = root
         self.escenario = escenario
@@ -190,7 +239,7 @@ class SimulacionSecuencial:
 
         self.root.title(f"Demo — {len(resultados)} waves — {estrategia}")
         self._construir_ui()
-        self._cargar_wave(indice_inicial)
+        self._cargar_wave(indice_inicial, paso_inicial=paso_inicial)
 
     def _construir_ui(self) -> None:
         # Header
@@ -302,9 +351,13 @@ class SimulacionSecuencial:
             side="right", padx=2
         )
 
+        ttk.Button(
+            panel, text="💾 Guardar", command=self.guardar_sesion, width=12
+        ).pack(side="right", padx=2)
+
     # --- carga de wave ---
 
-    def _cargar_wave(self, indice: int) -> None:
+    def _cargar_wave(self, indice: int, paso_inicial: int = 0) -> None:
         if not (0 <= indice < len(self.resultados)):
             return
         self.pause()
@@ -313,6 +366,11 @@ class SimulacionSecuencial:
         self.estado = EstadoSimulacion.desde_wave(
             wave, resultado, self.escenario.warehouse
         )
+
+        # Restaurar la posición dentro de la wave
+        if 0 <= paso_inicial <= len(self.estado.camino) - 1:
+            self.estado.indice_actual = paso_inicial
+
         self._construir_lista_productos()
         self._redibujar_todo()
 
@@ -618,6 +676,38 @@ class SimulacionSecuencial:
         if self.indice_actual < len(self.resultados) - 1:
             self._cargar_wave(self.indice_actual + 1)
 
+    def guardar_sesion(self) -> None:
+        from tkinter import filedialog
+
+        from warehouse.io.exportador import exportar_escenario
+        from warehouse.warehouse.escenario import Sesion
+
+        # Determinar la ruta por defecto
+        directorio_sesiones = Path(__file__).parent.parent / "data" / "sesiones"
+        directorio_sesiones.mkdir(parents=True, exist_ok=True)
+
+        path = filedialog.asksaveasfilename(
+            initialdir=directorio_sesiones,
+            initialfile=f"{self.escenario.nombre}.json",
+            defaultextension=".json",
+            filetypes=[("JSON", "*.json"), ("Todos", "*.*")],
+            title="Guardar sesión como...",
+        )
+        if not path:
+            return  # el usuario canceló
+
+        # Sincronizar el estado actual antes de guardar
+        self.escenario.sesion = Sesion(
+            wave_actual=self.indice_actual,
+            indice_actual=self.estado.indice_actual if self.estado else 0,
+            estrategia_recorrido=self.estrategia,
+        )
+
+        try:
+            exportar_escenario(self.escenario, path)
+            self.lbl_estado.config(text=f"Guardado en {path}")
+        except Exception as e:
+            self.lbl_estado.config(text=f"Error al guardar: {e}")
 
 if __name__ == "__main__":
     main()
