@@ -94,17 +94,24 @@ estrategias de recorrido. Guarda resultados en `data/resultados/`:
 
 ### Visualizar waves
 
-Abre una ventana que simula todas las waves en secuencia. Controles:
+Abre una ventana que simula todas las waves en secuencia. 
 
-- **Play / Pause**: reproducir o detener la wave actual (botón toggle).
-- **Step atrás / Step**: avanzar o retroceder un paso.
-- **Reset**: reiniciar la wave actual.
-- **Wave ant. / Wave sig.**: navegar entre waves.
-- **Cerrar**: terminar la aplicación.
+La ventana de simulación incluye:
 
-La ventana incluye leyenda de colores, panel de estado (paso, productos
-recogidos, prioridad máxima, lista de productos con stock) y barra de
-progreso.
+- **Barra de búsqueda**: escribí un prefijo (por ejemplo, `Producto 1`) y el
+  sistema resalta el rack del primer producto que coincide, además de listar
+  los IDs y nombres de los primeros resultados. La búsqueda usa un Trie y
+  es case-insensitive.
+- **Leyenda de colores, panel de estado y barra de progreso** con la información de la
+  wave actual (paso, productos recogidos, prioridad máxima, lista de productos con stock)
+  y barra de progreso.
+- **Controles**:
+  - **Play / Pause**: reproducir o detener la wave actual (botón toggle).
+  - **Step atrás / Step**: avanzar o retroceder un paso.
+  - **Reset**: reiniciar la wave actual.
+  - **Wave ant. / Wave sig.**: navegar entre waves.
+  - **Cerrar**: terminar la aplicación.
+
 
 Opciones útiles
 
@@ -312,6 +319,31 @@ El cache hace que las consultas sean O(1) tras el primer Dijkstra por origen,
 por lo que el costo de ambas estrategias es dominado por la cantidad de
 orígenes distintos consultados.
 
+### Búsqueda por prefijo (Trie)
+
+El `Warehouse` mantiene un **Trie** con los nombres de todos los productos. Cada
+vez que se agrega un producto, su nombre se inserta en el Trie y se registra
+en un índice `nombre_normalizado → producto_id`.
+
+La operación `buscar_por_prefijo(prefix)` devuelve todos los productos cuyos
+nombres empiezan con el prefijo dado, en tiempo **O(k + N)**, donde:
+
+- `k` = longitud del prefijo.
+- `N` = cantidad de productos que coinciden.
+
+Comparado con un filtro lineal sobre todos los productos (**O(n · k)**), el
+Trie escala mucho mejor cuando el catálogo crece: para 10.000 productos y un
+prefijo de 5 caracteres, el filtro lineal hace 50.000 comparaciones; el Trie
+navega 5 nodos y luego solo recorre las coincidencias.
+
+**Implementación:** el Trie está en `src/warehouse/estructuras/trie.py` y usa
+`LinkedList` (implementada en el mismo directorio) como contenedor de hijos,
+manteniéndolos ordenados alfabéticamente por inserción. Eso permite también
+recorrer el Trie en orden lexicográfico sin comparaciones adicionales.
+
+La búsqueda es **case-insensitive**: tanto el Trie como el índice normalizan
+los nombres a minúsculas al insertar y al consultar.
+
 ---
 
 ## Experimentos y resultados
@@ -423,9 +455,19 @@ Para cada algoritmo, complejidad temporal y espacial:
 | Generación de waves (cercanía) | O(n log n + n² · p) | O(n) |
 | Recorrido (orden pedidos) | O(k) consultas | O(k) |
 | Recorrido (vecino más cercano) | O(k²) consultas | O(k) |
+| Búsqueda por prefijo (Trie) | $O(s + N)$ | $O(N · \vert Σ\vert )$ |
 
-Donde V = nodos del grafo, E = aristas, n = pedidos, m = waves, k = paradas
-de una wave, p = productos por pedido.
+Donde
+
+- V = nodos del grafo, 
+- E = aristas, 
+- n = pedidos, 
+- m = waves, 
+- k = paradas de una wave, 
+- p = productos por pedido, 
+- s = longitud del prefijo, 
+- N = cantidad de coincidencias, 
+- $\Sigma$ = tamaño del alfabeto (para el espacio del Trie).
 
 ### Comportamiento empírico
 
@@ -621,13 +663,14 @@ Trabajo futuro: medir con k > 1000 paradas.
 - **Greedy** para vecino más cercano
 - **Greedy con prioridad** para generación de waves
 - **State machine** para la simulación
+- **Trie** con LinkedList para búsqueda de productos por prefijo y autocompletado en la UI de simulación.
+- **Lista enlazada** como contenedor de hijos en el Trie
 
 Estructuras vistas pero no utilizadas actualmente (potencial uso futuro):
 
 - **AVL Tree / BST**: para ordenar pedidos por prioridad si se necesita
   búsqueda por rango.
 - **B-Tree**: para persistencia en disco de grandes volúmenes.
-- **Trie**: para autocompletado de nombres de productos en la UI.
 - **Prim / Kruskal**: para análisis de conectividad o clustering de
   ubicaciones.
 
