@@ -258,6 +258,35 @@ class SimulacionSecuencial:
         self.progress = ttk.Progressbar(header, length=400, mode="determinate")
         self.progress.pack(side="left", padx=20)
 
+        # Barra de búsqueda
+        frame_busqueda = tk.Frame(self.root, bg=COLOR_CANVAS_FONDO)
+        frame_busqueda.pack(side="top", fill="x", padx=10, pady=(6, 0))
+
+        tk.Label(
+            frame_busqueda,
+            text="🔍 Buscar producto:",
+            bg=COLOR_CANVAS_FONDO,
+            font=("sans-serif", 10),
+        ).pack(side="left")
+
+        self.entry_busqueda = ttk.Entry(frame_busqueda, width=25, font=("monospace", 10))
+        self.entry_busqueda.pack(side="left", padx=(6, 12))
+        self.entry_busqueda.bind("<KeyRelease>", self._on_buscar)
+        self.entry_busqueda.bind("<Escape>", self._limpiar_busqueda)
+
+        self.lbl_resultados_busqueda = tk.Label(
+            frame_busqueda,
+            text="",
+            anchor="w",
+            bg=COLOR_CANVAS_FONDO,
+            fg="#555555",
+            font=("monospace", 9),
+        )
+        self.lbl_resultados_busqueda.pack(side="left", fill="x", expand=True)
+
+        # Estado para el resaltado
+        self.rack_resaltado: tuple[int, int] | None = None
+
         # Frame horizontal: canvas + leyenda
         frame_principal = tk.Frame(self.root, bg=COLOR_CANVAS_FONDO)
         frame_principal.pack(side="top", padx=10, pady=10)
@@ -364,6 +393,14 @@ class SimulacionSecuencial:
     def _cargar_wave(self, indice: int, paso_inicial: int = 0) -> None:
         if not (0 <= indice < len(self.resultados)):
             return
+
+        # Limpiar búsqueda
+        if hasattr(self, "entry_busqueda"):
+            self.entry_busqueda.delete(0, tk.END)
+        if hasattr(self, "lbl_resultados_busqueda"):
+            self.lbl_resultados_busqueda.config(text="")
+        self.rack_resaltado = None
+
         self.pause()
         self.indice_actual = indice
         wave, resultado = self.resultados[indice]
@@ -416,6 +453,8 @@ class SimulacionSecuencial:
                 grosor=3,
             )
 
+
+        # Productos (niveles, círculos).
         # Productos: un punto por nivel del rack.
         # Los niveles vacíos se dibujan como círculos huecos.
         # Los ocupados: gris (inventario), rojo (pendiente), verde (recogido).
@@ -461,8 +500,6 @@ class SimulacionSecuencial:
 
                 dibujar_punto(self.canvas, cx_rack, y, radio=radio, color=color)
 
-
-
         # Picker
         cx, cy = centro(self.estado.nodo_actual)
         dibujar_punto(
@@ -505,6 +542,17 @@ class SimulacionSecuencial:
                     anchor=anchor,
                 )
 
+
+        # Resaltado del rack buscado
+        if self.rack_resaltado is not None:
+            rx, ry = self.rack_resaltado
+            if (rx, ry) in self.coords:
+                x0, y0, x1, y1 = self.coords[(rx, ry)]
+                self.canvas.create_rectangle(
+                    x0 - 3, y0 - 3, x1 + 3, y1 + 3,
+                    outline="#e91e63",
+                    width=3,
+                )
 
 
 
@@ -780,6 +828,45 @@ class SimulacionSecuencial:
 
         # Cerrar esta ventana (termina el mainloop)
         self.root.destroy()
+
+    def _on_buscar(self, event) -> None:
+        """Handler que se dispara al tipear en el campo de búsqueda."""
+        prefix = self.entry_busqueda.get().strip()
+
+        if not prefix:
+            self.lbl_resultados_busqueda.config(text="")
+            self.rack_resaltado = None
+            self._redibujar_todo()
+            return
+
+        resultados = self.escenario.warehouse.buscar_por_prefijo(prefix)
+
+        if not resultados:
+            self.lbl_resultados_busqueda.config(text="Sin resultados")
+            self.rack_resaltado = None
+            self._redibujar_todo()
+            return
+
+        # Mostrar hasta 3 resultados en el label
+        primeros = resultados[:3]
+        texto = "  ·  ".join(f"{p.id} ({p.nombre})" for p in primeros)
+        if len(resultados) > 3:
+            texto += f"  ... (+{len(resultados) - 3})"
+        self.lbl_resultados_busqueda.config(text=texto)
+
+        # Resaltar el rack del primer resultado
+        primer_producto = resultados[0]
+        rack = self.escenario.warehouse.racks[primer_producto.rack_id]
+        self.rack_resaltado = (rack.x, rack.y)
+
+        self._redibujar_todo()
+
+    def _limpiar_busqueda(self, event) -> None:
+        """Limpia el campo de búsqueda y el resaltado (Esc)."""
+        self.entry_busqueda.delete(0, tk.END)
+        self.lbl_resultados_busqueda.config(text="")
+        self.rack_resaltado = None
+        self._redibujar_todo()
 
 if __name__ == "__main__":
     main()
