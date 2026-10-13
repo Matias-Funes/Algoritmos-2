@@ -364,3 +364,25 @@ def copyLinkedList(L: LinkedList[T]) -> LinkedList[T] | None:
 
     reverseList(copy_list)
     return copy_list
+
+
+def to_python_list(L: LinkedList[T]) -> list[T]:
+    """
+    Convierte una LinkedList a una lista de Python.
+
+    Útil para interoperar con código que no usa el TAD.
+
+    Complejidad: O(n).
+
+    Args:
+        L (LinkedList): Lista a convertir.
+
+    Returns:
+        list: Lista de Python con los mismos elementos, en el mismo orden.
+    """
+    result: list[T] = []
+    c = L.head
+    while c is not None:
+        result.append(c.value)
+        c = c.nextNode
+    return result
