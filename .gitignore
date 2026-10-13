@@ -24,3 +24,14 @@ Thumbs.db
 core
 core.*
 
+# Jupyter
+.ipynb_checkpoints/
+
+# pytest
+.pytest_cache/
+
+# setuptools / pip
+*.egg-info/
+
+# sesiones guardadas
+data/sesiones/
