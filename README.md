@@ -102,6 +102,10 @@ La ventana de simulación incluye:
   sistema resalta el rack del primer producto que coincide, además de listar
   los IDs y nombres de los primeros resultados. La búsqueda usa un Trie y
   es case-insensitive.
+  - **Ejemplo:** con el escenario por defecto (96 productos llamados `Producto 1`
+  a `Producto 96`), la búsqueda `"Producto 1"` devuelve 11 resultados
+  (`Producto 1`, `Producto 10`, ..., `Producto 19`). La búsqueda `"Producto 42"`
+devuelve 1 resultado.
 - **Leyenda de colores, panel de estado y barra de progreso** con la información de la
   wave actual (paso, productos recogidos, prioridad máxima, lista de productos con stock)
   y barra de progreso.
