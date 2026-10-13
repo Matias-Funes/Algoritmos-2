@@ -7,6 +7,9 @@ from warehouse.dominio.rack import Rack
 from warehouse.dominio.tipo_nodo import TipoNodo
 from warehouse.dominio.zona import ZonaDespacho
 from warehouse.estructuras.grafo import Grafo
+from warehouse.estructuras.linkedlist import to_python_list
+from warehouse.estructuras.trie import Trie, autocomplete
+from warehouse.estructuras.trie import insert as trie_insert
 
 
 class Warehouse:
@@ -19,6 +22,10 @@ class Warehouse:
         self.racks: dict[str, Rack] = {}
         self.zonas: dict[str, ZonaDespacho] = {}
         self.puertas: dict[str, Puerta] = {}
+
+        # Índice de nombres para búsqueda por prefijo
+        self.trie_nombres = Trie()
+        self.nombre_a_id: dict[str, str] = {}
 
         self._nodo_por_xy: dict[tuple[int, int], int] = {}
         self._racks_ocupados: set[tuple[int, int]] = set()
@@ -84,14 +91,48 @@ class Warehouse:
             raise ValueError(
                 f"El producto {producto.id} referencia rack inexistente: {producto.rack_id}"
             )
+
+        # Normalizar el nombre para el índice (el Trie también normaliza)
+        nombre_normalizado = producto.nombre.lower()
+
+        # Validar nombre único ANTES de mutar nada
+        if nombre_normalizado in self.nombre_a_id:
+            raise ValueError(
+                f"Ya existe un producto con el nombre '{producto.nombre}' "
+                f"(id: {self.nombre_a_id[nombre_normalizado]})"
+            )
+
         rack = self.racks[producto.rack_id]
         nodo = self._nodo_picking_de_rack(rack)
         if nodo is None:
             raise ValueError(
                 f"El rack {rack.id} en ({rack.x}, {rack.y}) no tiene pasillo adyacente"
             )
+
         producto.nodo_picking = nodo
         self.productos[producto.id] = producto
+
+        trie_insert(self.trie_nombres, producto.nombre)
+        self.nombre_a_id[nombre_normalizado] = producto.id
+
+    def buscar_por_prefijo(self, prefix: str) -> list[Producto]:
+        """
+        Devuelve los productos cuyos nombres empiezan con `prefix`.
+
+        Usa el Trie para resolver la búsqueda en O(k + N), donde k es la
+        longitud del prefijo y N la cantidad de resultados.
+
+        Args:
+            prefix (str): Prefijo a buscar. Es case-insensitive.
+
+        Returns:
+            list[Producto]: Productos que coinciden. Lista vacía si no hay.
+        """
+        if not prefix:
+            return []
+
+        nombres = to_python_list(autocomplete(self.trie_nombres, prefix))
+        return [self.productos[self.nombre_a_id[n]] for n in nombres]
 
     # --- zonas y puertas ---
     def agregar_zona_despacho(
