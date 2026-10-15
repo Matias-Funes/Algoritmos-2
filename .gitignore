@@ -21,8 +21,8 @@ Thumbs.db
 
 # Linux
 .directory
-core
-core.*
+/core
+/core.*
 
 # Jupyter
 .ipynb_checkpoints/
