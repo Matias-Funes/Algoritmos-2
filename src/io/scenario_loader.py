@@ -14,7 +14,6 @@ Uso:
 """
 
 import json
-from pathlib import Path
 
 from src.io._deps import Pasillo, Puerta, Rack, Warehouse, ZonaDespacho
 
@@ -39,12 +38,11 @@ def cargar_escenario(ruta_json):
         FileNotFoundError si la ruta no existe.
         ValueError si el JSON es inválido o le faltan campos obligatorios.
     """
-    path = Path(ruta_json)
-    if not path.exists():
-        raise FileNotFoundError("No existe el archivo: %s" % ruta_json)
-
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        with open(ruta_json, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        raise FileNotFoundError("No existe el archivo: %s" % ruta_json)
     except json.JSONDecodeError as e:
         raise ValueError("JSON mal formado: %s" % e) from e
 
@@ -68,9 +66,10 @@ def cargar_escenario(ruta_json):
 
 
 def _validar_secciones(data):
+    """Verifica que el JSON tenga todas las secciones y campos obligatorios."""
     for seccion in ("warehouse", "pickers", "productos", "pedidos", "configuracion"):
         if seccion not in data:
-            raise ValueError("Falta sección obligatoria en el JSON: '%s'" % seccion)
+            raise ValueError("Falta sección obligatoria: '%s'" % seccion)
 
     w = data["warehouse"]
     for campo in ("dimensiones", "puertas", "zonas_despacho", "racks", "pasillos"):
@@ -84,6 +83,7 @@ def _validar_secciones(data):
 
 
 def _requerir(d, campos, contexto):
+    """Verifica que el diccionario d tenga todos los campos indicados."""
     for campo in campos:
         if campo not in d:
             raise ValueError("Falta campo '%s' en %s: %s" % (campo, contexto, d))
@@ -95,6 +95,8 @@ def _requerir(d, campos, contexto):
 
 
 def _construir_warehouse(w_data):
+    """Construye un Warehouse a partir de la sección 'warehouse' del JSON."""
+    # Leer dimensiones
     ancho_x = int(w_data["dimensiones"]["ancho_x"])
     largo_y = int(w_data["dimensiones"]["largo_y"])
 
@@ -117,7 +119,8 @@ def _construir_warehouse(w_data):
             )
             warehouse.add_puerta(puerta)
         except ValueError as e:
-            raise ValueError("Puerta inválida '%s': %s" % (p.get("id", "?"), e))
+            id_puerta = p.get("id", "?")
+            raise ValueError("Puerta inválida '%s': %s" % (id_puerta, e))
 
     # Zonas de despacho
     for z in w_data["zonas_despacho"]:
@@ -138,7 +141,8 @@ def _construir_warehouse(w_data):
             )
             warehouse.add_zona_despacho(zona)
         except ValueError as e:
-            raise ValueError("Zona inválida '%s': %s" % (z.get("id", "?"), e))
+            id_zona = z.get("id", "?")
+            raise ValueError("Zona inválida '%s': %s" % (id_zona, e))
 
     # Racks
     for r in w_data["racks"]:
@@ -153,7 +157,8 @@ def _construir_warehouse(w_data):
             )
             warehouse.add_rack(rack)
         except ValueError as e:
-            raise ValueError("Rack inválido '%s': %s" % (r.get("id", "?"), e))
+            id_rack = r.get("id", "?")
+            raise ValueError("Rack inválido '%s': %s" % (id_rack, e))
 
     # Pasillos
     for p in w_data["pasillos"]:
@@ -169,7 +174,8 @@ def _construir_warehouse(w_data):
             )
             warehouse.add_pasillo(pasillo)
         except ValueError as e:
-            raise ValueError("Pasillo inválido '%s': %s" % (p.get("id", "?"), e))
+            id_pasillo = p.get("id", "?")
+            raise ValueError("Pasillo inválido '%s': %s" % (id_pasillo, e))
 
     return warehouse
 
@@ -181,7 +187,10 @@ def _construir_warehouse(w_data):
 if __name__ == "__main__":
     import sys
 
-    ruta = sys.argv[1] if len(sys.argv) > 1 else "data/scenarios/escenario_basico.json"
+    if len(sys.argv) > 1:
+        ruta = sys.argv[1]
+    else:
+        ruta = "data/scenarios/escenario_basico.json"
 
     try:
         wh, productos, pedidos, pickers, config = cargar_escenario(ruta)
