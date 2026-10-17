@@ -8,7 +8,7 @@ class Producto:
         self.cantidad_disponible: int = cantidad_disponible
         self.peso_kg: float = peso_kg
 
-    def para_diccionario(self):
+    def to_dict(self):
         """Crea un diccionario a partir de la instancia del objeto para guardarla en un .JSON"""
         return {
             "nombre": self.nombre,
@@ -20,7 +20,7 @@ class Producto:
         }
 
     @staticmethod
-    def del_diccionario(d: dict):
+    def del_dict(d: dict):
         """retorma un producto a partir de sus valores en el diccionario"""
         return Producto(
             producto_id=d["id"],
@@ -188,7 +188,7 @@ class HashTable:
 
 # --------------------------------GESTOR DE INVENTARIO---------------------------------------
 
-class gestorInventario:
+class GestorInventario:
     """Guarda los productos en una HashTable cuya clave es el producto_id,
     asi buscar, agregar y eliminar cuesta O(1) en promedio"""
 

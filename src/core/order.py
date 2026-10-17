@@ -16,7 +16,7 @@ class Orden:
         self.estado : str = estado
         self.items : list[tuple[str, int]] = items
 
-    def peso_total(self, inventario : gestorInventario):
+    def peso_total(self, inventario : GestorInventario):
         """suma el peso de todos los items de la orden (peso_kg * cantidad pedida).
         Si algun producto no existe en el inventario, obtener_producto lanza KeyError, O(n) caso promedio"""
  
