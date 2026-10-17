@@ -39,8 +39,12 @@ if FORZAR_STUB:
 
     USANDO_STUB = True
 else:
-    from src.core.cell import Pasillo, Puerta, Rack, ZonaDespacho
-    from src.core.warehouse import Warehouse
+
+    # Importamos las celdas y constantes desde cell.py
+    from src.core.cell import DESPACHO, PASILLO, PUERTA, RACK, VACIA, Cell
+
+    # Importamos los elementos físicos desde warehouse.py
+    from src.core.warehouse import Pasillo, Puerta, Rack, Warehouse, ZonaDespacho
 
     USANDO_STUB = False
 

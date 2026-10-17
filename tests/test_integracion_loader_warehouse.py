@@ -17,8 +17,8 @@ from pathlib import Path
 # ------------------------------------------------------------------
 
 try:
-    from src.core.cell import Pasillo, Puerta, Rack, ZonaDespacho
-    from src.core.warehouse import Warehouse
+    from src.core.cell import DESPACHO, PASILLO, PUERTA, RACK, VACIA, Cell
+    from src.core.warehouse import Pasillo, Puerta, Rack, Warehouse, ZonaDespacho
 
     WAREHOUSE_REAL_DISPONIBLE = True
     MOTIVO_SKIP = None
