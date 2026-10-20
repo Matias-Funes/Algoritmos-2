@@ -21,7 +21,7 @@ import os
 # ----------------------------------------------------------------
 # Cambiar a False cuando Juli entregue cell.py y warehouse.py.
 # ----------------------------------------------------------------
-DEFAULT_STUB = True
+DEFAULT_STUB = False
 
 
 def _resolver_forzar_stub():
