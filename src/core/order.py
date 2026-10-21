@@ -1,4 +1,4 @@
-from core.inventory import *
+from src.core.inventory import*
 
 # constantes de estado
 
@@ -70,7 +70,7 @@ class Orden:
 
 
 if __name__ == "__main__":
-    from core.inventory import GestorInventario, Producto
+    from src.core.inventory import GestorInventario, Producto
     inv = GestorInventario()
     inv.agregar_producto(Producto("P001", "Monitor", "R1", (3,5,1), 10, 6.5))
     
