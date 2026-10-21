@@ -271,3 +271,22 @@ class GestorInventario:
     def __len__(self):
         """cantidad de productos, O(1) peor caso"""
         return len(self.productos)
+
+
+
+if __name__ == "__main__":
+    print("=== Prueba de Inventory ===")
+    inv = GestorInventario()
+    
+    # 1. Agregar un producto
+    p1 = Producto("P001", "Monitor", "R1", (3, 5, 1), cantidad_disponible=10, peso_kg=6.5)
+    inv.agregar_producto(p1)
+    print(f"Producto agregado: {p1.nombre} (Stock: {p1.cantidad_disponible})")
+    
+    # 2. Probar reserva de stock
+    inv.reservar_stock("P001", 2)
+    print(f"Stock después de reservar 2: {inv.obtener_producto('P001').cantidad_disponible}")
+    
+    # 3. Probar búsqueda y ubicación
+    print(f"Ubicación de P001: {inv.obtener_ubicacion('P001')}")
+    print(f"¿Existe P001?: {inv.tiene_producto('P001')}")

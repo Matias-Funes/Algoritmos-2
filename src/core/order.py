@@ -1,4 +1,4 @@
-from core.inventory import*
+from src.core.inventory import*
 
 # constantes de estado
 
@@ -67,4 +67,17 @@ class Orden:
             estado    = d["estado"],
             items     = [tuple(item) for item in d["items"]]
         )
+
+
+if __name__ == "__main__":
+    from src.core.inventory import GestorInventario, Producto
+    inv = GestorInventario()
+    inv.agregar_producto(Producto("P001", "Monitor", "R1", (3,5,1), 10, 6.5))
+    
+    pedido = Orden("PED_01", 5, [("P001", 2)])
+    print("Pedido:", pedido.orden_id, "Peso total:", pedido.peso_total(inv), "kg")
+    pedido.cambiar_estado(EN_WAVE)
+    print("Nuevo estado:", pedido.estado)
+
+
 
