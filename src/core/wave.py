@@ -110,3 +110,83 @@ class Wave:
 
     def __len__(self) -> int:
         return len(self.pedidos)
+
+
+
+
+
+
+
+
+
+
+
+
+
+#demo de wave, para probar que todo funciona bien
+def _demo_wave() -> None:
+    if not __package__:
+        import sys
+        from pathlib import Path
+
+        raiz_proyecto = Path(__file__).resolve().parents[2]
+        sys.path.insert(0, str(raiz_proyecto))
+
+    from src.core.inventory import GestorInventario, Producto
+    from src.core.order import Orden
+
+    print("DEMO DE WAVE")
+    print("============")
+    inventario = GestorInventario()
+    inventario.agregar_producto(
+        Producto("P001", "Monitor", "R1", (3, 5, 1), 10, 6.5)
+    )
+    inventario.agregar_producto(
+        Producto("P002", "Teclado", "R1", (3, 6, 1), 10, 1.2)
+    )
+    inventario.agregar_producto(
+        Producto("P003", "Mouse", "R2", (8, 5, 1), 10, 0.3)
+    )
+
+    print("\n1. Constructor")
+    wave = Wave("WAVE_001", capacidad_max_pedidos=3,
+                capacidad_max_productos=5, peso_max_kg=20.0)
+    print(f"Wave creada: {wave.id}")
+    print(f"Capacidad: {wave.capacidad_max_pedidos} pedidos, "
+          f"{wave.capacidad_max_productos} unidades, {wave.peso_max_kg:.2f} kg")
+    print(f"Recorrido A inicial: {wave.recorrido_A}")
+    print(f"Recorrido B inicial: {wave.recorrido_B}")
+
+    orden_1 = Orden("PED_001", 5, [("P001", 2), ("P002", 1)])
+    orden_2 = Orden("PED_002", 3, [("P003", 2)])
+    orden_3 = Orden("PED_003", 2, [("P003", 4)])
+    orden_vacia = Orden("PED_VACIO", 1, [])
+
+    print("\n2. puede_aceptar")
+    print(f"¿Puede aceptar PED_001? {wave.puede_aceptar(orden_1, inventario)}")
+
+    print("\n3. agregar_pedido")
+    print(f"¿Se agregó PED_001? {wave.agregar_pedido(orden_1, inventario)}")
+    print(f"¿Puede aceptar PED_002? {wave.puede_aceptar(orden_2, inventario)}")
+    print(f"¿Se agregó PED_002? {wave.agregar_pedido(orden_2, inventario)}")
+    print(
+        f"¿Puede aceptar PED_003 (excede unidades)? "
+        f"{wave.puede_aceptar(orden_3, inventario)}"
+    )
+    print(f"¿Se agregó PED_003? {wave.agregar_pedido(orden_3, inventario)}")
+
+    print("\n4. Rechazo de orden sin productos")
+    try:
+        wave.agregar_pedido(orden_vacia, inventario)
+    except ValueError as error:
+        print(f"Orden vacía rechazada: {error}")
+
+    print("\n5. Consultas de la wave")
+    print(f"Órdenes: {[orden.orden_id for orden in wave.pedidos]}")
+    print(f"Cantidad de pedidos (__len__): {len(wave)}")
+    print(f"Cantidad de productos/unidades: {wave.cantidad_productos()}")
+    print(f"Peso total: {wave.peso_total(inventario):.2f} kg")
+
+
+if __name__ == "__main__":
+    _demo_wave()

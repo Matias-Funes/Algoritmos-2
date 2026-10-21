@@ -158,3 +158,73 @@ class Picker:
             raise ValueError(
                 f"Falta el campo requerido del picker: {error.args[0]}."
             ) from error
+
+
+
+
+
+
+
+
+
+
+#demo de picker para probar que funciona correctamente, se puede ejecutar este archivo directamente
+def _demo_picker() -> None:
+    if not __package__:
+        import sys
+        from pathlib import Path
+
+        raiz_proyecto = Path(__file__).resolve().parents[2]
+        sys.path.insert(0, str(raiz_proyecto))
+
+    from src.core.inventory import Producto
+
+    print("DEMO DE PICKER")
+    print("==============")
+    monitor = Producto("P001", "Monitor", "R1", (3, 5, 1), 10, 6.5)
+    teclado = Producto("P002", "Teclado", "R1", (3, 6, 1), 10, 1.2)
+    picker = Picker("PK_01", (0, 0), 15.0)
+
+    print("\n1. Constructor")
+    print(f"Picker creado: {picker.id}")
+    print(f"Posición inicial y actual: {picker.posicion_inicial}")
+    print(f"Capacidad: {picker.capacidad_carga_kg:.2f} kg")
+    print(f"Carga inicial: {picker.carga_actual_kg:.2f} kg")
+    print(f"Items iniciales: {picker.items_transportados}")
+
+    print("\n2. puede_recoger")
+    puede_cargar_monitor = picker.puede_recoger(monitor, 2)
+    print(f"¿Puede recoger 2 monitores? {puede_cargar_monitor}")
+
+    print("\n3. recoger")
+    picker.recoger(monitor, 2)
+    picker.recoger(teclado, 1)
+    print(f"Items transportados: {picker.items_transportados}")
+    print(f"Carga actual: {picker.carga_actual_kg:.2f} kg")
+
+    puede_exceder = picker.puede_recoger(monitor, 1)
+    print(f"¿Puede recoger 1 monitor más? {puede_exceder}")
+    try:
+        picker.recoger(monitor, 1)
+    except ValueError as error:
+        print(f"recoger rechaza el exceso: {error}")
+
+    print("\n4. mover_a")
+    picker.mover_a((4, 7))
+    print(f"Nueva posición: {picker.posicion_actual}")
+
+    print("\n5. to_dict y from_dict")
+    datos = picker.to_dict()
+    print(f"Picker serializado: {datos}")
+    picker_restaurado = Picker.from_dict(datos)
+    print(f"Picker restaurado: {picker_restaurado.to_dict()}")
+
+    print("\n6. descargar")
+    items_descargados = picker.descargar()
+    print(f"Items descargados: {items_descargados}")
+    print(f"Carga después de descargar: {picker.carga_actual_kg:.2f} kg")
+    print(f"Items restantes: {picker.items_transportados}")
+
+
+if __name__ == "__main__":
+    _demo_picker()
