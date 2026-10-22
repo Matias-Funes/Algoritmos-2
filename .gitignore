@@ -35,3 +35,5 @@ Thumbs.db
 
 # sesiones guardadas
 data/sesiones/
+comandos.txt
+*.pdf
