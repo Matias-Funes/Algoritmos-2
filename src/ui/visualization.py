@@ -12,7 +12,7 @@ class Ventana:
         self.root.title("Wave Picking - Simulador")
 
         # --- Panel Lateral (Controles) ---
-        self.panel = tk.Frame(self.root, width=250, bg="#e2e8f0")
+        self.panel = tk.Frame(self.root, width=250, bg="#b92f0c")
         self.panel.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
 
         tk.Label(self.panel, text="Controles", font=("Arial", 14, "bold"), bg="#e2e8f0").pack(pady=10)
@@ -120,10 +120,10 @@ class Ventana:
 if __name__ == "__main__":
     from src.io.scenario_loader import cargar_escenario
     print("1. Cargando escenario...") # Agregamos prints para debuggear
-    wh, _, _, _, _ = cargar_escenario("data/scenarios/escenario_basico.json")
+    wh, _, _, _, _ = cargar_escenario("data/scenarios/generado.json")
     print("2. Escenario cargado. Creando ventana...")
     
-    ventana = Ventana(wh, tamano_celda=40)
+    ventana = Ventana(wh, tamano_celda=16)
     
     class SimulacionFalsa:
         def __init__(self): self.paso = 0
