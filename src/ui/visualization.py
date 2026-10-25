@@ -216,7 +216,7 @@ if __name__ == "__main__":
     from src.io.scenario_loader import cargar_escenario
 
     print("Cargando escenario...")
-    wh, _, _, _, _ = cargar_escenario("data/scenarios/escenario_grande.json")
+    wh, _, _, _, _ = cargar_escenario("data/scenarios/escenario_basico.json")
 
     print("Creando ventana...")
     ventana = Ventana(wh)
