@@ -1,6 +1,11 @@
 import unittest
 
-from src.algorithms.pathfinding import CacheDistancias, dijkstra
+from src.algorithms.pathfinding import (
+    CacheDistancias,
+    RutaInalcanzableError,
+    dijkstra,
+    expandir_ruta,
+)
 
 
 class FakeGraph:
@@ -42,6 +47,16 @@ class TestPathfinding(unittest.TestCase):
         cache._asegurar_origen((0, 0))
         # Si no explotó, podemos buscar la distancia
         self.assertEqual(cache.distancia((0, 0), (2, 0)), 3)
+
+    def test_expandir_ruta_exitosa(self):
+        # Usando el grafo de prueba, el camino de (0,0) a (2,0) debe pasar por (1,0)
+        ruta = expandir_ruta(self.g, [(0, 0), (2, 0)])
+        self.assertEqual(ruta, [(0, 0), (1, 0), (2, 0)])
+
+    def test_expandir_ruta_error(self):
+        # En nuestro FakeGraph no hay camino de vuelta de (2,0) a (0,0)
+        with self.assertRaises(RutaInalcanzableError):
+            expandir_ruta(self.g, [(2, 0), (0, 0)])
 
 
 if __name__ == "__main__":
