@@ -319,17 +319,21 @@ def matriz_distancias(graph, nodos, cache=None):
     Calcula una matriz de distancias all-pairs entre un conjunto de nodos.
     Utiliza el caché para evitar ejecutar Dijkstra de más.
 
-    Retorna: dict {nodo_origen: {nodo_destino: distancia}}
+    Retorna: una hash table propia {nodo_origen: {nodo_destino: distancia}}
     Complejidad: O(U * (V+E)logV), donde U es la cantidad de nodos únicos consultados como origen.
     """
     if cache is None:
         cache = CacheDistancias(graph)
 
-    matriz = {}
+    matriz = HashTablePathfinding()
     for origen in nodos:
-        matriz[origen] = {}
+        fila_distancias = (
+            HashTablePathfinding()
+        )  # HashTable para las distancias desde este origen
         for destino in nodos:
-            matriz[origen][destino] = cache.distancia(origen, destino)
+            fila_distancias.insertarHT(destino, cache.distancia(origen, destino))
+
+        matriz.insertarHT(origen, fila_distancias)
 
     return matriz
 
