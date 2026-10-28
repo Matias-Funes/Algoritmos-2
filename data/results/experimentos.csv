@@ -1,0 +1,7 @@
+Escenario,Estrategia,Tiempo_ms,Distancia,Nodos_Visitados
+basico,A,9.182,74,1150
+basico,B,9.066,60,1150
+generado,A,28.82,144,3570
+generado,B,32.043,55,3927
+grande,A,2082.575,4641,222066
+grande,B,2057.451,2670,220168
