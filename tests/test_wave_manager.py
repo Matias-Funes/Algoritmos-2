@@ -1,3 +1,5 @@
+# python -m unittest tests.test_wave_manager -v
+
 import unittest
  
 from src.core.inventory import GestorInventario, Producto
