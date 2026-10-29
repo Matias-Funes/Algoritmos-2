@@ -2,7 +2,6 @@
 import csv 
 import json 
 from pathlib import Path 
-from time import perf_counter 
 
 from src.algorithms.pathfinding import CacheDistancias, estrategia_A, estrategia_B 
 from src.algorithms.wave_manager import generar_waves 
@@ -105,25 +104,6 @@ def listar_escenarios(directorio=DIR_ESCENARIOS):
 # ================================================================= 
 # 2. Medicion 
 # ================================================================= 
-class CacheConConteo(CacheDistancias): 
-    """CacheDistancias que ademas cuenta los nodos alcanzados por cada 
-    Dijkstra que corre (no cambia el resultado).""" 
-
-    def __init__(self, grafo): 
-        super().__init__(grafo) 
-        self.nodos_visitados = 0 
-
-    def _asegurar_origen(self, origen): 
-        if not self._cache.contieneHT(origen): 
-            super()._asegurar_origen(origen) 
-            self.nodos_visitados += len(self._cache.buscarHT(origen)) 
-
-
-def longitud_camino(grafo, camino): 
-    """Suma de los pesos de las aristas del camino (lista de celdas).""" 
-    return sum(grafo.get_neighbors(u)[v] for u, v in zip(camino, camino[1:])) 
-
-
 def correr_escenario(nombre, escenario, repeticiones=REPETICIONES): 
     """Arma las waves del escenario y corre cada estrategia sobre todas 
     las waves. Devuelve (filas, waves): una fila (dict) por estrategia.""" 
@@ -136,14 +116,14 @@ def correr_escenario(nombre, escenario, repeticiones=REPETICIONES):
     for etiqueta, estrategia in ESTRATEGIAS.items(): 
         mejor_ms = float("inf") 
         for _ in range(repeticiones): 
-            distancia = nodos = 0 
-            inicio = perf_counter() 
+            distancia = nodos = ms = 0 
             for wave in waves: 
-                cache = CacheConConteo(grafo) 
-                camino = estrategia(grafo, wave, wh, inv, cache) 
-                distancia += longitud_camino(grafo, camino) 
-                nodos += cache.nodos_visitados 
-            mejor_ms = min(mejor_ms, (perf_counter() - inicio) * 1000) 
+                # cache nuevo por wave: el tiempo incluye sus Dijkstra 
+                r = estrategia(grafo, wave, wh, inv, CacheDistancias(grafo)) 
+                distancia += r["distancia_total"] 
+                nodos += r["nodos_visitados"] 
+                ms += r["tiempo_ejecucion_ms"] 
+            mejor_ms = min(mejor_ms, ms) 
 
         distancia = round(distancia, 3) 
         if distancia == int(distancia): 
