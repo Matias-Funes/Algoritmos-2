@@ -14,10 +14,17 @@ Decisiones de diseño destacadas:
 """
 
 import math
+import time
 
 from src.core.inventory import HashTable
 
 from .queues import minPriorityQueue
+
+
+class RutaInalcanzableError(Exception):
+    """Se lanza cuando no existe un camino válido entre dos puntos."""
+
+    pass
 
 
 class HashTablePathfinding(HashTable):
@@ -53,13 +60,13 @@ class HashTablePathfinding(HashTable):
 # -------------------------------------------------------------------------
 
 
-def dijkstra(graph, source):
+def dijkstra(graph_builder, source):
     """
     Calcula distancias y predecesores desde el nodo 'source' hacia todos los demás.
 
-    Complejidad Temporal: O((V + E) * log V) usando una cola de prioridad (min-heap),
+    Complejidad Temporal: O((|V| + |E|) * log |V|) usando una cola de prioridad (min-heap),
     donde V es la cantidad de vértices (celdas de pasillo) y E las aristas (conexiones).
-    Complejidad Espacial: O(V) para guardar las tablas de distancias y predecesores.
+    Complejidad Espacial: O(|V|) para guardar las tablas de distancias y predecesores.
 
     Retorna: (distances, previous) - Ambas son instancias de HashTablePathfinding.
     """
@@ -75,17 +82,19 @@ def dijkstra(graph, source):
     # Cola de prioridad implementada por el equipo con un Min-Heap.
     queue = minPriorityQueue()
     queue.enqueue(source, 0)
+    visitados = 0  # inicializo contador de nodos visitados
 
     while not queue.isEmpty():
-        # Extraemos el nodo con la menor distancia acumulada conocida. O(log V)
+        # Extraemos el nodo con la menor distancia acumulada conocida. O(log |V|)
         dist, u = queue.dequeue()
+        visitados += 1
 
         # Si la distancia en cola es mayor a la que ya registramos, es un nodo obsoleto (lazy deletion)
         if dist > distances.obtenerHT(u, float("inf")):
             continue
 
         # Exploramos los vecinos. 'graph.get_neighbors(u)' debe devolver {vecino: peso}.
-        for v, weight in graph.get_neighbors(u).items():
+        for v, weight in graph_builder.get_neighbors(u).items():
             newDist = dist + weight
 
             # Buscamos la distancia actual del vecino (si no está, es infinito)
@@ -97,7 +106,7 @@ def dijkstra(graph, source):
                 previous.insertarHT(v, u)
                 queue.enqueue(v, newDist)
 
-    return distances, previous
+    return distances, previous, visitados
 
 
 class CacheDistancias:
@@ -117,19 +126,28 @@ class CacheDistancias:
         self._predecesores = (
             HashTablePathfinding()
         )  # Guarda {origen: HashTable_de_predecesores}
+        self._visitados = (
+            HashTablePathfinding()
+        )  # Guarda {origen: HashTable_de_nodos_visitados}
 
     def _asegurar_origen(self, origen) -> None:
         """Corre Dijkstra solo si este origen no fue consultado antes."""
         if not self._cache.contieneHT(origen):
-            dist, pred = dijkstra(self._grafo, origen)
+            dist, pred, visitados = dijkstra(self._grafo, origen)  # desempaquetamos
             self._cache.insertarHT(origen, dist)
             self._predecesores.insertarHT(origen, pred)
+            self._visitados.insertarHT(origen, visitados)  # guardamos
 
     def distancia(self, u, v) -> float:
         """Devuelve la distancia de u a v. O(1) si ya se calculó desde 'u'."""
         self._asegurar_origen(u)
         dist_desde_u = self._cache.buscarHT(u)
         return dist_desde_u.obtenerHT(v, float("inf"))
+
+    def nodos_visitados(self, origen) -> int:
+        """Devuelve la cantidad de nodos visitados"""
+        self._asegurar_origen(origen)
+        return self._visitados.buscarHT(origen)
 
     def camino(self, u, v) -> list:
         """Reconstruye el camino más corto de u a v usando los predecesores."""
@@ -196,27 +214,44 @@ def estrategia_A(graph, wave, warehouse, inventory, cache=None):
     Complejidad: O(K * C), donde K es la cantidad de productos a recoger y
     C es el costo de consultar el caché (O(1) si el origen ya fue cacheado).
     """
+    tiempo_inicio = time.perf_counter()
     if cache is None:
         cache = CacheDistancias(graph)
 
     puntos = obtener_puntos_de_interes(wave, warehouse, inventory)
     if not puntos:
-        return []
+        return {
+            "ruta": [],
+            "distancia_total": 0,
+            "tiempo_ejecucion_ms": 0,
+            "nodos_visitados": 0,
+        }
 
     camino_total = []
     actual = puntos[0]
+    nodos_visitados_total = 0
 
     for siguiente in puntos[1:]:
         tramo = cache.camino(actual, siguiente)
-        if tramo:
-            # Evitamos duplicar el nodo de conexión entre un tramo y el siguiente
-            if camino_total and camino_total[-1] == tramo[0]:
-                camino_total.extend(tramo[1:])
-            else:
-                camino_total.extend(tramo)
+
+        if not tramo:
+            raise RutaInalcanzableError(f"No hay ruta entre {actual} y {siguiente}.")
+
+        # Evitamos duplicar el nodo de conexión entre un tramo y el siguiente
+        if camino_total and camino_total[-1] == tramo[0]:
+            camino_total.extend(tramo[1:])
+        else:
+            camino_total.extend(tramo)
         actual = siguiente
 
-    return camino_total
+    tiempo_fin = time.perf_counter()
+
+    return {
+        "ruta": camino_total,
+        "distancia_total": max(len(camino_total) - 1, 0),  # Peso 1 por arista
+        "tiempo_ejecucion_ms": (tiempo_fin - tiempo_inicio) * 1000,
+        "nodos_visitados": nodos_visitados_total,
+    }
 
 
 def estrategia_B(graph, wave, warehouse, inventory, cache=None):
@@ -228,16 +263,23 @@ def estrategia_B(graph, wave, warehouse, inventory, cache=None):
     Complejidad: O(K^2) consultas de distancia. Gracias al caché,
     las consultas repetidas desde el mismo nodo son O(1).
     """
+    tiempo_inicio = time.perf_counter()
     if cache is None:
         cache = CacheDistancias(graph)
 
     pendientes = obtener_puntos_de_interes(wave, warehouse, inventory)
     if not pendientes:
-        return []
+        return {
+            "ruta": [],
+            "distancia_total": 0,
+            "tiempo_ejecucion_ms": 0,
+            "nodos_visitados": 0,
+        }
 
     actual = pendientes[0]
     camino_total = []
     pendientes.remove(actual)
+    nodos_visitados_total = 0
 
     while pendientes:
         mejor_vecino = None
@@ -259,9 +301,17 @@ def estrategia_B(graph, wave, warehouse, inventory, cache=None):
             actual = mejor_vecino
             pendientes.remove(mejor_vecino)
         else:
-            break  # No hay más caminos accesibles
+            raise RutaInalcanzableError(
+                f"El picker quedó bloqueado en {actual}. No hay camino a los puntos restantes."
+            )
 
-    return camino_total
+    tiempo_fin = time.perf_counter()
+    return {
+        "ruta": camino_total,
+        "distancia_total": max(len(camino_total) - 1, 0),
+        "tiempo_ejecucion_ms": (tiempo_fin - tiempo_inicio) * 1000,
+        "nodos_visitados": nodos_visitados_total,
+    }
 
 
 def matriz_distancias(graph, nodos, cache=None):
@@ -269,16 +319,54 @@ def matriz_distancias(graph, nodos, cache=None):
     Calcula una matriz de distancias all-pairs entre un conjunto de nodos.
     Utiliza el caché para evitar ejecutar Dijkstra de más.
 
-    Retorna: dict {nodo_origen: {nodo_destino: distancia}}
+    Retorna: una hash table propia {nodo_origen: {nodo_destino: distancia}}
     Complejidad: O(U * (V+E)logV), donde U es la cantidad de nodos únicos consultados como origen.
     """
     if cache is None:
         cache = CacheDistancias(graph)
 
-    matriz = {}
+    matriz = HashTablePathfinding()
     for origen in nodos:
-        matriz[origen] = {}
+        fila_distancias = (
+            HashTablePathfinding()
+        )  # HashTable para las distancias desde este origen
         for destino in nodos:
-            matriz[origen][destino] = cache.distancia(origen, destino)
+            fila_distancias.insertarHT(destino, cache.distancia(origen, destino))
+
+        matriz.insertarHT(origen, fila_distancias)
 
     return matriz
+
+
+def expandir_ruta(graph, lista_waypoints, cache=None):
+    """
+    Recibe una lista de puntos [(x1,y1), (x2,y2)] y devuelve la ruta completa
+    celda por celda, usando Dijkstra para unir los tramos.
+    """
+    if not lista_waypoints:
+        return []
+
+    if len(lista_waypoints) == 1:
+        return list(lista_waypoints)
+
+    if cache is None:
+        cache = CacheDistancias(graph)
+
+    ruta_expandida = []
+
+    for i in range(len(lista_waypoints) - 1):
+        origen = lista_waypoints[i]
+        destino = lista_waypoints[i + 1]
+
+        tramo = cache.camino(origen, destino)
+        if not tramo:
+            raise RutaInalcanzableError(
+                f"Imposible expandir ruta: bloqueo entre {origen} y {destino}."
+            )
+
+        if ruta_expandida and ruta_expandida[-1] == tramo[0]:
+            ruta_expandida.extend(tramo[1:])
+        else:
+            ruta_expandida.extend(tramo)
+
+    return ruta_expandida
