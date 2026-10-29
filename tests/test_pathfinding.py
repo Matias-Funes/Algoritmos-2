@@ -58,6 +58,76 @@ class TestPathfinding(unittest.TestCase):
         with self.assertRaises(RutaInalcanzableError):
             expandir_ruta(self.g, [(2, 0), (0, 0)])
 
+    def test_estrategia_A_metricas(self):
+        from src.algorithms.pathfinding import estrategia_A
+
+        # Creamos objetos falsos para simular el inventario y la wave
+        class FakeProducto:
+            def __init__(self, pid, x, y):
+                self.ubicacion = (x, y)
+
+        class FakeInventario:
+            def obtener_producto(self, pid):
+                # P1 en (0,0) buscará pasillo en (1,0)
+                # P2 en (1,0) buscará pasillo en (2,0)
+                if pid == "P1":
+                    return FakeProducto("P1", 0, 0)
+                if pid == "P2":
+                    return FakeProducto("P2", 1, 0)
+                return None
+
+        class FakePedido:
+            def __init__(self):
+                self.items = [("P1", 1), ("P2", 1)]
+
+        class FakeWave:
+            def __init__(self):
+                self.pedidos = [FakePedido()]
+
+        class FakeWarehouse:
+            ancho_x = 10
+            largo_y = 10
+
+            def __init__(self):
+                self.grid = [
+                    [type("Cell", (), {"tipo": "PASILLO"})() for _ in range(10)]
+                    for _ in range(10)
+                ]
+
+        wave = FakeWave()
+        inv = FakeInventario()
+        wh = FakeWarehouse()
+
+        resultado = estrategia_A(self.g, wave, wh, inv, self.cache)
+
+        # 1. Verifica que la ruta se haya armado
+        self.assertGreater(len(resultado["ruta"]), 0)
+
+        # 2. Verifica que la distancia se sume bien
+        # (En FakeGraph, de (1,0) a (2,0) el peso es 2)
+        self.assertEqual(resultado["distancia_total"], 2)
+
+        # 3. ¡EL TEST CLAVE! Verifica que nodos_visitados NO sea 0
+        self.assertGreater(resultado["nodos_visitados"], 0)
+
+    def test_obtener_celda_piso_bloqueado(self):
+        from src.algorithms.pathfinding import RutaInalcanzableError, obtener_celda_piso
+
+        class FakeProducto:
+            ubicacion = (0, 0)
+
+        class FakeWarehouse:
+            ancho_x = 2
+            largo_y = 2
+            # Simulamos que TODO es RACK (no hay PASILLO)
+            grid = [
+                [type("Cell", (), {"tipo": "RACK"})() for _ in range(2)]
+                for _ in range(2)
+            ]
+
+        with self.assertRaises(RutaInalcanzableError):
+            obtener_celda_piso(FakeProducto(), FakeWarehouse())
+
 
 if __name__ == "__main__":
     unittest.main()
