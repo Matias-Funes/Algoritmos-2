@@ -193,7 +193,7 @@ def _calcular_ruta_picker(
     warehouse: Any,
     inventario: GestorInventario,
     cache: CacheDistancias,
-    estrategia: Callable[..., list[tuple[int, int]]],
+    estrategia: Callable[..., dict[str, Any]],
     volver_a_inicio: bool = False,
 ) -> list[tuple[int, int]]:
     """Construye la ruta de un picker, incluyendo el trayecto inicial.
@@ -221,9 +221,10 @@ def _calcular_ruta_picker(
                 f"punto de recolección {puntos[0]} del picker {picker.id}."
             )
 
-        tramo_estrategia = estrategia(
+        resultado_estrategia = estrategia(
             grafo, wave, warehouse, inventario, cache
         )
+        tramo_estrategia = resultado_estrategia["ruta"]
         if not tramo_estrategia and len(set(puntos)) == 1:
             # Las estrategias no necesitan buscar un tramo entre productos si
             # una wave solo visita una ubicación distinta.
@@ -266,17 +267,25 @@ def _crear_fases_simulacion(
     inventario: GestorInventario,
     cache: CacheDistancias,
 ) -> list[dict[str, Any]]:
-    """Prepara un viaje de ida y vuelta por cada wave asignada.
+    """Agrupa por turno las waves y rutas que ejecutarán todos los pickers.
 
-    Cada viaje se ejecuta de forma secuencial para que un picker estacionado no
-    bloquee a otro en un pasillo angosto. Cada ruta comienza y termina en la
-    posición inicial del picker, que actúa como punto de entrega y permite
-    descargar antes de su siguiente wave sin exceder su capacidad.
+    Cada ruta comienza y termina en la posición inicial del picker, que actúa
+    como punto de entrega antes de que comience su siguiente wave.
     """
     fases = []
 
-    for picker in pickers:
-        for wave in waves_por_picker[picker.id]:
+    cantidad_turnos = max(
+        (len(waves_por_picker[picker.id]) for picker in pickers),
+        default=0,
+    )
+    for indice_turno in range(cantidad_turnos):
+        rutas = {}
+        asignaciones = {}
+        for picker in pickers:
+            waves_picker = waves_por_picker[picker.id]
+            if indice_turno >= len(waves_picker):
+                continue
+            wave = waves_picker[indice_turno]
             ruta_a = _calcular_ruta_picker(
                 picker,
                 [wave],
@@ -305,13 +314,9 @@ def _crear_fases_simulacion(
                 f"B={max(len(ruta_b) - 1, 0)} pasos; "
                 f"se usa {estrategia_elegida}"
             )
-            fases.append(
-                {
-                    "rutas": {picker.id: ruta},
-                    "asignaciones": {picker.id: wave.pedidos},
-                    "picker_id": picker.id,
-                }
-            )
+            rutas[picker.id] = ruta
+            asignaciones[picker.id] = wave.pedidos
+        fases.append({"rutas": rutas, "asignaciones": asignaciones})
 
     # También permite abrir escenarios sin pedidos: la ventana mostrará el
     # almacén y la simulación finalizará sin movimientos.
@@ -319,7 +324,7 @@ def _crear_fases_simulacion(
 
 
 class _SimulationTk:
-    """Ejecuta viajes por waves dentro del bucle de eventos de Tk."""
+    """Ejecuta en paralelo los viajes de cada turno dentro de Tk."""
 
     def __init__(
         self,
@@ -363,16 +368,11 @@ class _SimulationTk:
         self._simulacion_actual = self._crear_simulacion_fase(0)
 
     def _crear_simulacion_fase(self, indice: int) -> Simulation:
-        """Crea el motor de la wave activa con su ruta y demanda asignadas."""
+        """Crea un motor común con las rutas del turno para toda la flota."""
         fase = self.fases[indice]
-        picker_activo = next(
-            picker
-            for picker in self.pickers
-            if picker.id == fase["picker_id"]
-        ) if fase.get("picker_id") is not None else None
         return Simulation(
             warehouse=self.warehouse,
-            pickers=[picker_activo] if picker_activo is not None else self.pickers,
+            pickers=self.pickers,
             rutas=fase["rutas"],
             productos=self.productos,
             asignaciones=fase["asignaciones"],
@@ -386,7 +386,7 @@ class _SimulationTk:
         self._actualizar_interfaz = actualizar_interfaz
 
     def get_estado(self) -> dict[str, Any]:
-        """Devuelve el estado de la wave activa y el índice del viaje."""
+        """Devuelve el estado del turno activo y de toda la flota."""
         estado = self._simulacion_actual.get_estado()
         recogidos_en_fase = (
             0
@@ -399,8 +399,8 @@ class _SimulationTk:
         estado["total_productos"] = self._total_productos
         estado["wave_actual"] = self.fase_actual + 1
         estado["waves_totales"] = len(self.fases)
-        # Simulation maneja solo el picker que está viajando en esta fase, pero
-        # la ventana debe seguir mostrando a toda la flota en el mapa.
+        # La interfaz muestra a toda la flota, incluso a quienes ya terminaron
+        # su ruta del turno actual.
         estado["pickers"] = [
             {
                 "id": picker.id,
