@@ -8,9 +8,6 @@ from typing import Any, Callable
 
 from src.algorithms.pathfinding import (
     CacheDistancias,
-    estrategia_A,
-    estrategia_B,
-    obtener_puntos_de_interes,
 )
 from src.core.graph_builder import construir_grafo
 from src.core.inventory import GestorInventario, Producto
@@ -85,7 +82,7 @@ def _validar_stock_pedidos(
     pedidos: list[Orden],
     inventario: GestorInventario,
 ) -> None:
-    """Rechaza escenarios cuya demanda total supera el stock disponible."""
+    """Valida referencias y avisa cuando la demanda supera el stock inicial."""
     demanda_por_producto: dict[str, int] = {}
     for pedido in pedidos:
         for producto_id, cantidad in pedido.items:
@@ -93,20 +90,14 @@ def _validar_stock_pedidos(
                 demanda_por_producto.get(producto_id, 0) + cantidad
             )
 
-    faltantes = []
     for producto_id, demanda in demanda_por_producto.items():
         producto = inventario.obtener_producto(producto_id)
         if demanda > producto.cantidad_disponible:
-            faltantes.append(
-                f"{producto_id}: se piden {demanda}, "
-                f"hay {producto.cantidad_disponible}"
+            print(
+                f"   Aviso: {producto_id}: se piden {demanda}, "
+                f"hay {producto.cantidad_disponible}; se preparará lo "
+                "disponible y se registrará el faltante."
             )
-    if faltantes:
-        detalle = "; ".join(faltantes)
-        raise ValueError(
-            "El escenario tiene pedidos que superan el stock disponible: "
-            f"{detalle}."
-        )
 
 
 def _crear_waves(
@@ -115,11 +106,11 @@ def _crear_waves(
     inventario: GestorInventario,
     configuracion: dict[str, Any],
 ) -> tuple[list[Wave], dict[str, list[Orden]], dict[str, list[Wave]]]:
-    """Distribuye pedidos en waves que respetan capacidades y picker asignado.
+    """Distribuye pedidos en waves sin limitar su peso a la carga del picker.
 
-    Cada orden se asigna al picker con menor carga en su wave actual que pueda
-    transportarla. Al llenarse una wave, ese picker puede recibir otra para un
-    viaje posterior; la carga se reinicia entre viajes.
+    El picker puede completar el trabajo de una wave en varios viajes. Cada
+    unidad individual debe caber en al menos un picker; los límites de cantidad
+    de pedidos/productos de la wave siguen vigentes.
     """
     max_pedidos = configuracion.get("wave_max_pedidos", len(pedidos) or 1)
     max_productos = configuracion.get("wave_max_productos", 1)
@@ -144,6 +135,7 @@ def _crear_waves(
     carga_wave_actual = {picker.id: 0.0 for picker in pickers}
     wave_actual: dict[str, Wave] = {}
     siguiente_wave_id = 1
+    peso_max_wave = sum(pedido.peso_total(inventario) for pedido in pedidos)
 
     for pedido in pedidos:
         peso_pedido = pedido.peso_total(inventario)
@@ -151,6 +143,20 @@ def _crear_waves(
             pickers,
             key=lambda picker: (carga_wave_actual[picker.id], picker.id),
         )
+        candidatos = [
+            picker
+            for picker in candidatos
+            if all(
+                inventario.obtener_producto(producto_id).peso_kg
+                <= picker.capacidad_carga_kg
+                for producto_id, _ in pedido.items
+            )
+        ]
+        if not candidatos:
+            raise ValueError(
+                f"Ningún picker puede transportar una unidad de cada "
+                f"producto del pedido {pedido.orden_id}."
+            )
         asignado = False
 
         for picker in candidatos:
@@ -160,7 +166,7 @@ def _crear_waves(
                     wave_id=f"WAVE_{siguiente_wave_id:03d}",
                     capacidad_max_pedidos=max_pedidos,
                     capacidad_max_productos=max_productos,
-                    peso_max_kg=picker.capacidad_carga_kg,
+                    peso_max_kg=peso_max_wave,
                 )
                 if not nueva_wave.puede_aceptar(pedido, inventario):
                     continue
@@ -179,99 +185,18 @@ def _crear_waves(
 
         if not asignado:
             raise ValueError(
-                f"El pedido {pedido.orden_id} excede la capacidad de carga "
-                "de todos los pickers o los límites de una wave."
+                f"El pedido {pedido.orden_id} excede los límites de "
+                "pedidos/productos configurados para una wave."
             )
 
     return waves, pedidos_por_picker, waves_por_picker
 
 
-def _calcular_ruta_picker(
-    picker: Picker,
-    waves: list[Wave],
-    grafo: Any,
-    warehouse: Any,
-    inventario: GestorInventario,
-    cache: CacheDistancias,
-    estrategia: Callable[..., dict[str, Any]],
-    volver_a_inicio: bool = False,
-) -> list[tuple[int, int]]:
-    """Construye la ruta de un picker, incluyendo el trayecto inicial.
-
-    Las estrategias del proyecto calculan el orden/camino entre ubicaciones de
-    productos, empezando en el primer producto de la wave. Esta función agrega
-    el tramo desde la posición inicial (o la última wave) hasta ese primer
-    producto y concatena las rutas de todas las waves asignadas.
-    """
-    ruta_completa: list[tuple[int, int]] = []
-    posicion_inicial = tuple(picker.posicion_actual)
-    posicion_actual = posicion_inicial
-
-    for wave in waves:
-        if volver_a_inicio:
-            posicion_actual = posicion_inicial
-        puntos = obtener_puntos_de_interes(wave, warehouse, inventario)
-        if not puntos:
-            continue
-
-        tramo_inicial = cache.camino(posicion_actual, puntos[0])
-        if not tramo_inicial:
-            raise ValueError(
-                f"No hay camino desde {posicion_actual} hasta el primer "
-                f"punto de recolección {puntos[0]} del picker {picker.id}."
-            )
-
-        resultado_estrategia = estrategia(
-            grafo, wave, warehouse, inventario, cache
-        )
-        tramo_estrategia = resultado_estrategia["ruta"]
-        if not tramo_estrategia and len(set(puntos)) == 1:
-            # Las estrategias no necesitan buscar un tramo entre productos si
-            # una wave solo visita una ubicación distinta.
-            tramo_estrategia = [puntos[0]]
-        if any(punto not in tramo_estrategia for punto in puntos):
-            raise ValueError(
-                f"La estrategia no pudo incluir todos los puntos de "
-                f"recolección de la wave {wave.id}."
-            )
-
-        if tramo_estrategia and tramo_inicial[-1] == tramo_estrategia[0]:
-            tramo_inicial.extend(tramo_estrategia[1:])
-        else:
-            tramo_inicial.extend(tramo_estrategia)
-
-        if ruta_completa and ruta_completa[-1] == tramo_inicial[0]:
-            ruta_completa.extend(tramo_inicial[1:])
-        else:
-            ruta_completa.extend(tramo_inicial)
-        posicion_actual = ruta_completa[-1]
-
-        if volver_a_inicio:
-            regreso = cache.camino(posicion_actual, posicion_inicial)
-            if not regreso:
-                raise ValueError(
-                    f"No hay camino de regreso a la posición inicial "
-                    f"{posicion_inicial} del picker {picker.id}."
-                )
-            ruta_completa.extend(regreso[1:])
-            posicion_actual = posicion_inicial
-
-    return ruta_completa
-
-
 def _crear_fases_simulacion(
     pickers: list[Picker],
     waves_por_picker: dict[str, list[Wave]],
-    grafo: Any,
-    warehouse: Any,
-    inventario: GestorInventario,
-    cache: CacheDistancias,
 ) -> list[dict[str, Any]]:
-    """Agrupa por turno las waves y rutas que ejecutarán todos los pickers.
-
-    Cada ruta comienza y termina en la posición inicial del picker, que actúa
-    como punto de entrega antes de que comience su siguiente wave.
-    """
+    """Agrupa el trabajo de cada wave por turno para ejecutar pickers juntos."""
     fases = []
 
     cantidad_turnos = max(
@@ -279,52 +204,45 @@ def _crear_fases_simulacion(
         default=0,
     )
     for indice_turno in range(cantidad_turnos):
-        rutas = {}
         asignaciones = {}
         for picker in pickers:
             waves_picker = waves_por_picker[picker.id]
             if indice_turno >= len(waves_picker):
                 continue
             wave = waves_picker[indice_turno]
-            ruta_a = _calcular_ruta_picker(
-                picker,
-                [wave],
-                grafo,
-                warehouse,
-                inventario,
-                cache,
-                estrategia_A,
-                volver_a_inicio=True,
-            )
-            ruta_b = _calcular_ruta_picker(
-                picker,
-                [wave],
-                grafo,
-                warehouse,
-                inventario,
-                cache,
-                estrategia_B,
-                volver_a_inicio=True,
-            )
-            estrategia_elegida = "A" if len(ruta_a) <= len(ruta_b) else "B"
-            ruta = ruta_a if estrategia_elegida == "A" else ruta_b
-            print(
-                f"   {picker.id}, {wave.id}: "
-                f"A={max(len(ruta_a) - 1, 0)} pasos, "
-                f"B={max(len(ruta_b) - 1, 0)} pasos; "
-                f"se usa {estrategia_elegida}"
-            )
-            rutas[picker.id] = ruta
             asignaciones[picker.id] = wave.pedidos
-        fases.append({"rutas": rutas, "asignaciones": asignaciones})
+        fases.append({"asignaciones": asignaciones})
 
     # También permite abrir escenarios sin pedidos: la ventana mostrará el
     # almacén y la simulación finalizará sin movimientos.
-    return fases or [{"rutas": {}, "asignaciones": {}}]
+    return fases or [{"asignaciones": {}}]
+
+
+def _obtener_puntos_despacho(
+    warehouse: Any,
+    grafo: Any,
+) -> dict[str, list[tuple[int, int]]]:
+    """Busca celdas transitables adyacentes a zonas vinculadas a salida."""
+    puntos_por_zona = {}
+    for zona in warehouse.zonas.values():
+        puerta = warehouse.puertas.get(zona.puerta_id)
+        if puerta is None or puerta.tipo not in ("OUTBOUND", "AMBOS"):
+            continue
+
+        puntos = set()
+        for x, y in zona.celdas():
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                vecino = (x + dx, y + dy)
+                if vecino in grafo.adj:
+                    puntos.add(vecino)
+        if puntos:
+            puntos_por_zona[zona.id] = sorted(puntos)
+
+    return puntos_por_zona
 
 
 class _SimulationTk:
-    """Ejecuta en paralelo los viajes de cada turno dentro de Tk."""
+    """Coordina fases y presenta viajes dinámicos al bucle de Tk."""
 
     def __init__(
         self,
@@ -332,12 +250,16 @@ class _SimulationTk:
         pickers: list[Picker],
         productos: list[Producto],
         fases: list[dict[str, Any]],
+        cache_distancias: CacheDistancias,
+        puntos_despacho: dict[str, list[tuple[int, int]]],
         intervalo_ms: int = 250,
     ) -> None:
         self.warehouse = warehouse
         self.pickers = pickers
         self.productos = productos
         self.fases = fases
+        self.cache_distancias = cache_distancias
+        self.puntos_despacho = puntos_despacho
         self.intervalo_ms = intervalo_ms
         self.fase_actual = 0
         self._root = None
@@ -346,6 +268,9 @@ class _SimulationTk:
         self._en_ejecucion = False
         self._fase_completada = False
         self._productos_recogidos_acumulados = 0
+        self._distancia_acumulada = 0
+        self._faltantes_acumulados: list[dict[str, Any]] = []
+        self._descargas_acumuladas: list[dict[str, Any]] = []
         self._total_productos = sum(
             cantidad
             for fase in fases
@@ -353,6 +278,19 @@ class _SimulationTk:
             for pedido in pedidos_fase
             for _, cantidad in pedido.items
         )
+        self._productos_objetivo_por_picker = {
+            picker.id: 0 for picker in pickers
+        }
+        for fase in fases:
+            for picker_id, pedidos_picker in fase["asignaciones"].items():
+                self._productos_objetivo_por_picker[picker_id] = (
+                    self._productos_objetivo_por_picker.get(picker_id, 0)
+                    + sum(
+                        cantidad
+                        for pedido in pedidos_picker
+                        for _, cantidad in pedido.items
+                    )
+                )
         self._estado_inicial_pickers = {
             picker.id: {
                 "posicion": tuple(picker.posicion_actual),
@@ -368,14 +306,15 @@ class _SimulationTk:
         self._simulacion_actual = self._crear_simulacion_fase(0)
 
     def _crear_simulacion_fase(self, indice: int) -> Simulation:
-        """Crea un motor común con las rutas del turno para toda la flota."""
+        """Crea un motor común que planifica el trabajo de toda la flota."""
         fase = self.fases[indice]
         return Simulation(
             warehouse=self.warehouse,
             pickers=self.pickers,
-            rutas=fase["rutas"],
             productos=self.productos,
             asignaciones=fase["asignaciones"],
+            cache_distancias=self.cache_distancias,
+            puntos_despacho=self.puntos_despacho,
         )
 
     def vincular_interfaz(
@@ -388,6 +327,8 @@ class _SimulationTk:
     def get_estado(self) -> dict[str, Any]:
         """Devuelve el estado del turno activo y de toda la flota."""
         estado = self._simulacion_actual.get_estado()
+        faltantes_actuales = estado["faltantes"]
+        descargas_actuales = estado["descargas"]
         recogidos_en_fase = (
             0
             if self._fase_completada
@@ -396,17 +337,47 @@ class _SimulationTk:
         estado["productos_recogidos"] = (
             self._productos_recogidos_acumulados + recogidos_en_fase
         )
+        distancia_en_fase = (
+            0 if self._fase_completada else estado["distancia"]
+        )
+        estado["distancia"] = self._distancia_acumulada + distancia_en_fase
         estado["total_productos"] = self._total_productos
         estado["wave_actual"] = self.fase_actual + 1
         estado["waves_totales"] = len(self.fases)
-        # La interfaz muestra a toda la flota, incluso a quienes ya terminaron
-        # su ruta del turno actual.
+        estado["faltantes"] = list(self._faltantes_acumulados)
+        estado["descargas"] = list(self._descargas_acumuladas)
+        if not self._fase_completada:
+            estado["faltantes"].extend(faltantes_actuales)
+            estado["descargas"].extend(descargas_actuales)
+        estado["productos_despachados"] = sum(
+            item["cantidad"]
+            for descarga in estado["descargas"]
+            for item in descarga["items"]
+        )
+        estado_pickers = {
+            picker["id"]: picker for picker in estado["pickers"]
+        }
         estado["pickers"] = [
             {
                 "id": picker.id,
                 "x": picker.posicion_actual[0],
                 "y": picker.posicion_actual[1],
                 "carga_actual_kg": picker.carga_actual_kg,
+                "items_transportados": [
+                    dict(item)
+                    for item in estado_pickers.get(picker.id, {}).get(
+                        "items_transportados", []
+                    )
+                ],
+                "productos_transportados": estado_pickers.get(
+                    picker.id, {}
+                ).get("productos_transportados", 0),
+                "productos_objetivo": self._productos_objetivo_por_picker.get(
+                    picker.id, 0
+                ),
+                "activo": estado_pickers.get(picker.id, {}).get(
+                    "activo", False
+                ),
             }
             for picker in self.pickers
         ]
@@ -419,11 +390,18 @@ class _SimulationTk:
         if self._simulacion_actual.avanzar_paso():
             return True
 
-        self._productos_recogidos_acumulados += self._simulacion_actual.get_estado()[
-            "productos_recogidos"
-        ]
+        estado_fase = self._simulacion_actual.get_estado()
+        self._productos_recogidos_acumulados += estado_fase["productos_recogidos"]
+        self._distancia_acumulada += estado_fase["distancia"]
+        self._faltantes_acumulados.extend(estado_fase["faltantes"])
+        self._descargas_acumuladas.extend(estado_fase["descargas"])
+        for faltante in estado_fase["faltantes"]:
+            print(
+                f"   Faltante {faltante['producto_id']}: "
+                f"{faltante['cantidad']} unidades "
+                f"({faltante['motivo']}, picker {faltante['picker_id']})"
+            )
         self._fase_completada = True
-        self._descargar_pickers_de_fase()
         siguiente_fase = self.fase_actual + 1
         if siguiente_fase >= len(self.fases):
             self._en_ejecucion = False
@@ -433,14 +411,6 @@ class _SimulationTk:
         self._simulacion_actual = self._crear_simulacion_fase(self.fase_actual)
         self._fase_completada = False
         return True
-
-    def _descargar_pickers_de_fase(self) -> None:
-        """Descarga los pickers que terminaron la wave recién completada."""
-        for picker_id in self.fases[self.fase_actual]["asignaciones"]:
-            picker = next(
-                picker for picker in self.pickers if picker.id == picker_id
-            )
-            picker.descargar()
 
     def iniciar(self) -> None:
         """Inicia la animación programando ticks sin bloquear Tkinter."""
@@ -473,6 +443,9 @@ class _SimulationTk:
         self.fase_actual = 0
         self._fase_completada = False
         self._productos_recogidos_acumulados = 0
+        self._distancia_acumulada = 0
+        self._faltantes_acumulados.clear()
+        self._descargas_acumuladas.clear()
         self._simulacion_actual = self._crear_simulacion_fase(0)
         if self._actualizar_interfaz is not None:
             self._actualizar_interfaz()
@@ -596,11 +569,15 @@ def main() -> None:
     )
     print(f"   Waves generadas: {len(waves)}")
 
-    print("5. Calculando estrategias de recorrido A y B por wave")
+    print("5. Preparando rutas dinámicas y zonas de despacho")
     cache = CacheDistancias(grafo)
-    fases = _crear_fases_simulacion(
-        pickers, waves_por_picker, grafo, warehouse, inventario, cache
-    )
+    puntos_despacho = _obtener_puntos_despacho(warehouse, grafo)
+    if waves and not puntos_despacho:
+        raise ValueError(
+            "No hay zonas de despacho accesibles asociadas a una puerta "
+            "de salida."
+        )
+    fases = _crear_fases_simulacion(pickers, waves_por_picker)
 
     print(
         f"6. Iniciando motor de simulación: {len(waves)} waves "
@@ -611,6 +588,8 @@ def main() -> None:
         pickers=pickers,
         productos=productos,
         fases=fases,
+        cache_distancias=cache,
+        puntos_despacho=puntos_despacho,
     )
 
     print("7. Abriendo visualización Tkinter")

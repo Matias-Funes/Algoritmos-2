@@ -1,14 +1,15 @@
 """Motor paso a paso para el movimiento y la recolección de pickers.
 
-La clase mantiene el estado temporal de la simulación: posición de cada picker,
-cuánto avanzó su ruta, demanda todavía pendiente, productos recolectados y
-distancia recorrida. No calcula rutas; recibe las rutas ya preparadas y aplica
-cada movimiento en sincronía para poder resolver colisiones entre pickers.
+La clase mantiene el estado temporal de la simulación y coordina los
+movimientos en sincronía. Puede ejecutar rutas ya preparadas o planificar
+tramos dinámicos entre racks y zonas de despacho.
 """
 
 from __future__ import annotations
 
 import sys
+import heapq
+from math import floor
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,8 @@ class Simulation:
         inventario: Inventario alternativo para obtener los productos.
         asignaciones: Demanda asignada por id de picker. Cuando se proporciona,
             la recolección se limita a la asignación individual.
+        cache_distancias: Caché de caminos para planificar viajes dinámicos.
+        puntos_despacho: Celdas transitables agrupadas por zona de salida.
     """
 
     def __init__(
@@ -51,6 +54,8 @@ class Simulation:
         pedidos: Any = None,
         inventario: Any = None,
         asignaciones: dict[str, Any] | None = None,
+        cache_distancias: Any = None,
+        puntos_despacho: dict[str, list[tuple[int, int]]] | None = None,
     ) -> None:
         # Normalizar los pickers antes de usar sus identificadores y posiciones.
         self.warehouse = warehouse
@@ -95,8 +100,28 @@ class Simulation:
             sum(demanda.values())
             for demanda in self._demanda_por_picker.values()
         )
+        self._modo_dinamico = (
+            cache_distancias is not None or puntos_despacho is not None
+        )
+        if self._modo_dinamico and (
+            cache_distancias is None or puntos_despacho is None
+        ):
+            raise ValueError(
+                "La navegación dinámica requiere caché de distancias y "
+                "puntos de despacho."
+            )
+        self._cache_distancias = cache_distancias
+        self._puntos_despacho = {
+            zona_id: list(dict.fromkeys(tuple(punto) for punto in puntos))
+            for zona_id, puntos in (puntos_despacho or {}).items()
+        }
+        self._ticks_bloqueado = {
+            picker.id: 0 for picker in self.pickers
+        }
         # Registro de eventos de recolección y métricas que consulta la interfaz.
         self.productos_recogidos: list[dict[str, Any]] = []
+        self.productos_faltantes: list[dict[str, Any]] = []
+        self.descargas: list[dict[str, Any]] = []
         self.distancia = 0
         self._en_ejecucion = False
         # Guardar el stock y estado iniciales para devolver el modelo a su
@@ -115,9 +140,17 @@ class Simulation:
             }
             for picker in self.pickers
         }
-        # Si un picker ya empieza sobre un punto de recolección, recoger también
-        # en el estado inicial, sin exigir un movimiento previo.
-        self._recoger_en_posiciones_actuales()
+        if self._modo_dinamico:
+            if self._total_productos and not self._puntos_despacho:
+                raise ValueError(
+                    "La simulación necesita al menos un punto de despacho "
+                    "accesible para recoger productos."
+                )
+            self._inicializar_navegacion_dinamica()
+        else:
+            # Si un picker ya empieza sobre un punto de recolección, recoger
+            # también en el estado inicial.
+            self._recoger_en_posiciones_actuales()
 
     @staticmethod
     def _crear_picker(picker: Any) -> Any:
@@ -405,6 +438,464 @@ class Simulation:
         for picker in self.pickers:
             self._recoger_en_posicion(picker)
 
+    def _inicializar_navegacion_dinamica(self) -> None:
+        """Prepara el estado de objetivos y rutas independientes por picker."""
+        self._tramos_dinamicos: dict[str, list[tuple[int, int]]] = {
+            picker.id: [] for picker in self.pickers
+        }
+        self._objetivos_dinamicos: dict[str, dict[str, Any] | None] = {
+            picker.id: None for picker in self.pickers
+        }
+        self._estado_picker: dict[str, str] = {
+            picker.id: "activo" for picker in self.pickers
+        }
+        self._ticks_bloqueado = {
+            picker.id: 0 for picker in self.pickers
+        }
+        self._ticks_sin_movimiento = 0
+        self._rutas = {
+            picker.id: [tuple(picker.posicion_actual)]
+            for picker in self.pickers
+        }
+        self._indices_ruta = {picker.id: 0 for picker in self.pickers}
+        for picker in self.pickers:
+            self._planificar_picker_dinamico(picker)
+
+    def _celdas_recoleccion(self, producto: Any) -> list[tuple[int, int]]:
+        """Devuelve las celdas transitables desde las que se accede al rack."""
+        ubicacion = self._valor(producto, "ubicacion")
+        if isinstance(ubicacion, dict):
+            x, y = int(ubicacion["x"]), int(ubicacion["y"])
+        else:
+            x, y = int(ubicacion[0]), int(ubicacion[1])
+
+        if self.warehouse is None or not hasattr(self.warehouse, "grid"):
+            return [(x, y)]
+
+        puntos = []
+        if self.warehouse.grid[y][x].es_transitable():
+            puntos.append((x, y))
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if (
+                0 <= nx < self.warehouse.ancho_x
+                and 0 <= ny < self.warehouse.largo_y
+                and self.warehouse.grid[ny][nx].es_transitable()
+            ):
+                puntos.append((nx, ny))
+        return list(dict.fromkeys(puntos))
+
+    def _registrar_faltante(
+        self,
+        picker: Any,
+        producto_id: str,
+        cantidad: int,
+        motivo: str,
+    ) -> None:
+        if cantidad <= 0:
+            return
+        self.productos_faltantes.append(
+            {
+                "picker_id": picker.id,
+                "producto_id": producto_id,
+                "cantidad": cantidad,
+                "motivo": motivo,
+            }
+        )
+        self._reducir_demanda(picker, producto_id, cantidad)
+
+    def _ruta_mas_cercana(
+        self,
+        picker: Any,
+        origen: tuple[int, int],
+        destinos: list[tuple[int, int]],
+    ) -> tuple[tuple[int, int], list[tuple[int, int]]] | None:
+        """Elige el destino más cercano con una ruta que evite pickers quietos."""
+        mejor: tuple[float, tuple[int, int], list[tuple[int, int]]] | None = None
+        for destino in destinos:
+            ruta = self._camino_con_picker(picker, destino)
+            if ruta is None:
+                continue
+            distancia, camino = ruta
+            candidato = (distancia, destino, camino)
+            if mejor is None or candidato[:2] < mejor[:2]:
+                mejor = candidato
+        if mejor is None:
+            return None
+        return mejor[1], mejor[2]
+
+    def _camino_con_picker(
+        self,
+        picker: Any,
+        destino: tuple[int, int],
+    ) -> tuple[float, list[tuple[int, int]]] | None:
+        """Calcula una ruta evitando las posiciones que otros pickers ocupan."""
+        origen = tuple(picker.posicion_actual)
+        grafo = getattr(self._cache_distancias, "_grafo", None)
+        if grafo is None:
+            distancia = self._cache_distancias.distancia(origen, destino)
+            camino = self._cache_distancias.camino(origen, destino)
+            return (distancia, camino) if camino else None
+
+        bloqueadas = {
+            tuple(otro.posicion_actual)
+            for otro in self.pickers
+            if otro.id != picker.id
+            and self._estado_picker.get(otro.id) != "terminado"
+        }
+        if destino in bloqueadas:
+            return None
+
+        distancias = {origen: 0.0}
+        predecesores = {}
+        cola = [(0.0, origen)]
+        while cola:
+            distancia_actual, actual = heapq.heappop(cola)
+            if distancia_actual != distancias.get(actual):
+                continue
+            if actual == destino:
+                break
+            for vecino, peso in grafo.get_neighbors(actual).items():
+                if vecino in bloqueadas:
+                    continue
+                nueva_distancia = distancia_actual + peso
+                if nueva_distancia < distancias.get(vecino, float("inf")):
+                    distancias[vecino] = nueva_distancia
+                    predecesores[vecino] = actual
+                    heapq.heappush(cola, (nueva_distancia, vecino))
+
+        if destino not in distancias:
+            return None
+        camino = [destino]
+        while camino[-1] != origen:
+            camino.append(predecesores[camino[-1]])
+        camino.reverse()
+        return distancias[destino], camino
+
+    def _establecer_tramo(
+        self,
+        picker: Any,
+        camino: list[tuple[int, int]],
+        objetivo: dict[str, Any],
+    ) -> None:
+        if any(
+            abs(origen[0] - destino[0]) + abs(origen[1] - destino[1]) != 1
+            for origen, destino in zip(camino, camino[1:])
+        ):
+            raise ValueError("Las rutas de los pickers no pueden tener diagonales.")
+        self._objetivos_dinamicos[picker.id] = objetivo
+        self._tramos_dinamicos[picker.id] = camino
+        self._indices_ruta[picker.id] = 1
+        self._rutas[picker.id].extend(camino[1:])
+
+    @staticmethod
+    def _orden_id_picker(picker_id: str) -> tuple[str, int, str]:
+        prefijo, separador, sufijo = picker_id.rpartition("_")
+        if separador and sufijo.isdigit():
+            return prefijo, int(sufijo), picker_id
+        return picker_id, -1, picker_id
+
+    def _replanificar_picker_bloqueado(self, picker: Any) -> bool:
+        """Busca un camino alternativo para un picker que mantiene un objetivo."""
+        objetivo = self._objetivos_dinamicos.get(picker.id)
+        if objetivo is None:
+            return False
+
+        opciones: list[tuple[float, tuple[int, int], list[tuple[int, int]]]] = []
+        if objetivo["tipo"] == "producto":
+            producto = self._productos[objetivo["producto_id"]]
+            for destino in self._celdas_recoleccion(producto):
+                ruta = self._camino_con_picker(picker, destino)
+                if ruta is not None:
+                    distancia, camino = ruta
+                    opciones.append((distancia, destino, camino))
+        elif objetivo["tipo"] == "despacho":
+            for zona_id, puntos in self._puntos_despacho.items():
+                for destino in puntos:
+                    ruta = self._camino_con_picker(picker, destino)
+                    if ruta is None:
+                        continue
+                    distancia, camino = ruta
+                    prioridad_zona = 0 if zona_id == objetivo["zona_id"] else 1
+                    opciones.append(
+                        (distancia + prioridad_zona * 1e-6, destino, camino)
+                    )
+
+        if not opciones:
+            return False
+
+        _, _, camino = min(opciones, key=lambda opcion: (opcion[0], opcion[1]))
+        tramo_actual = self._tramos_dinamicos[picker.id]
+        indice_actual = self._indices_ruta[picker.id]
+        camino_pendiente = tramo_actual[max(indice_actual - 1, 0) :]
+        if camino == camino_pendiente:
+            return False
+
+        self._rutas[picker.id] = [tuple(picker.posicion_actual)]
+        self._establecer_tramo(picker, camino, objetivo)
+        return True
+
+    def _planificar_descarga_dinamica(self, picker: Any) -> bool:
+        """Busca el punto libre y alcanzable más cercano de una zona de salida."""
+        if not self._puntos_despacho:
+            raise ValueError(
+                f"El picker {picker.id} necesita descargar, pero no hay "
+                "puntos de despacho configurados."
+            )
+
+        ocupadas = {
+            tuple(otro.posicion_actual)
+            for otro in self.pickers
+            if otro.id != picker.id
+            and self._estado_picker.get(otro.id) != "terminado"
+        }
+        opciones = []
+        hay_punto_alcanzable = False
+        puntos_ocupados = 0
+        origen = tuple(picker.posicion_actual)
+        for zona_id, puntos in self._puntos_despacho.items():
+            for punto in puntos:
+                if punto in ocupadas:
+                    puntos_ocupados += 1
+                    continue
+                ruta = self._camino_con_picker(picker, punto)
+                if ruta is None:
+                    camino = self._cache_distancias.camino(origen, punto)
+                    if not camino:
+                        continue
+                    ruta = (
+                        self._cache_distancias.distancia(origen, punto),
+                        camino,
+                    )
+                hay_punto_alcanzable = True
+                distancia, camino = ruta
+                opciones.append((distancia, zona_id, punto, camino))
+
+        if not opciones:
+            cantidad_puntos = sum(
+                len(puntos) for puntos in self._puntos_despacho.values()
+            )
+            if cantidad_puntos and puntos_ocupados == cantidad_puntos:
+                return False
+            if not hay_punto_alcanzable:
+                raise ValueError(
+                    f"No hay una ruta desde {origen} hasta una zona de "
+                    f"despacho para el picker {picker.id}."
+                )
+            return False
+
+        _, zona_id, punto, camino = min(
+            opciones, key=lambda opcion: (opcion[0], opcion[1], opcion[2])
+        )
+        self._establecer_tramo(
+            picker,
+            camino,
+            {"tipo": "despacho", "zona_id": zona_id, "punto": punto},
+        )
+        return True
+
+    def _planificar_picker_dinamico(self, picker: Any) -> None:
+        """Planifica el siguiente rack o descarga sin fijar toda la ruta."""
+        if self._estado_picker[picker.id] == "terminado":
+            return
+        if self._indices_ruta[picker.id] < len(
+            self._tramos_dinamicos[picker.id]
+        ):
+            return
+
+        objetivo_anterior = self._objetivos_dinamicos[picker.id]
+        if objetivo_anterior is not None:
+            self._atender_objetivo_dinamico(picker, objetivo_anterior)
+            self._objetivos_dinamicos[picker.id] = None
+        self._tramos_dinamicos[picker.id] = []
+        self._indices_ruta[picker.id] = 0
+
+        while self._estado_picker[picker.id] != "terminado":
+            demanda = (
+                self._demanda_por_picker.get(picker.id, {})
+                if self._asignaciones_explicitas
+                else self._demanda_global
+            )
+            for producto_id, cantidad in list(demanda.items()):
+                producto = self._productos.get(producto_id)
+                if producto is None:
+                    raise ValueError(
+                        f"El pedido del picker {picker.id} referencia el "
+                        f"producto inexistente '{producto_id}'."
+                    )
+                stock = self._valor(
+                    producto, "cantidad_disponible", default=None
+                )
+                if stock is not None and stock <= 0:
+                    self._registrar_faltante(
+                        picker, producto_id, cantidad, "stock_agotado"
+                    )
+
+            demanda = (
+                self._demanda_por_picker.get(picker.id, {})
+                if self._asignaciones_explicitas
+                else self._demanda_global
+            )
+            if not demanda:
+                if picker.carga_actual_kg > 1e-9:
+                    if self._planificar_descarga_dinamica(picker):
+                        if len(self._tramos_dinamicos[picker.id]) == 1:
+                            objetivo = self._objetivos_dinamicos[picker.id]
+                            self._objetivos_dinamicos[picker.id] = None
+                            self._atender_objetivo_dinamico(picker, objetivo)
+                            continue
+                    return
+                self._estado_picker[picker.id] = "terminado"
+                return
+
+            capacidad_libre = (
+                picker.capacidad_carga_kg - picker.carga_actual_kg
+            )
+            origen = tuple(picker.posicion_actual)
+            opciones = []
+            inalcanzables = []
+            for producto_id, cantidad in demanda.items():
+                producto = self._productos[producto_id]
+                peso = float(self._valor(producto, "peso_kg", default=0.0))
+                if peso > 0:
+                    unidades_posibles = floor(
+                        (capacidad_libre + 1e-9) / peso
+                    )
+                    if unidades_posibles <= 0:
+                        continue
+                else:
+                    unidades_posibles = cantidad
+
+                puntos = self._celdas_recoleccion(producto)
+                ruta = self._ruta_mas_cercana(picker, origen, puntos)
+                if ruta is None:
+                    puntos_alcanzables = [
+                        (self._cache_distancias.distancia(origen, punto), punto)
+                        for punto in puntos
+                    ]
+                    puntos_alcanzables = [
+                        (distancia, punto)
+                        for distancia, punto in puntos_alcanzables
+                        if distancia != float("inf")
+                    ]
+                    if not puntos_alcanzables:
+                        inalcanzables.append(producto_id)
+                        continue
+                    _, punto = min(puntos_alcanzables)
+                    camino = self._cache_distancias.camino(origen, punto)
+                    if not camino:
+                        inalcanzables.append(producto_id)
+                        continue
+                    ruta = punto, camino
+                punto, camino = ruta
+                distancia = len(camino) - 1
+                opciones.append((distancia, producto_id, camino))
+
+            if opciones:
+                _, producto_id, camino = min(
+                    opciones, key=lambda opcion: (opcion[0], opcion[1])
+                )
+                objetivo = {"tipo": "producto", "producto_id": producto_id}
+                if len(camino) == 1:
+                    self._atender_objetivo_dinamico(picker, objetivo)
+                    continue
+                self._establecer_tramo(picker, camino, objetivo)
+                return
+
+            if picker.carga_actual_kg > 1e-9:
+                if self._planificar_descarga_dinamica(picker):
+                    camino = self._tramos_dinamicos[picker.id]
+                    if len(camino) == 1:
+                        objetivo = self._objetivos_dinamicos[picker.id]
+                        self._objetivos_dinamicos[picker.id] = None
+                        self._atender_objetivo_dinamico(picker, objetivo)
+                        continue
+                return
+
+            for producto_id, cantidad in list(demanda.items()):
+                producto = self._productos[producto_id]
+                peso = float(self._valor(producto, "peso_kg", default=0.0))
+                motivo = (
+                    "capacidad_picker"
+                    if peso > picker.capacidad_carga_kg
+                    else "sin_ruta"
+                    if producto_id in inalcanzables
+                    else "capacidad_picker"
+                )
+                self._registrar_faltante(
+                    picker, producto_id, cantidad, motivo
+                )
+
+    def _atender_objetivo_dinamico(
+        self,
+        picker: Any,
+        objetivo: dict[str, Any] | None,
+    ) -> None:
+        if objetivo is None:
+            return
+        if objetivo["tipo"] == "ceder":
+            return
+        if objetivo["tipo"] == "producto":
+            self._recoger_objetivo_dinamico(
+                picker, objetivo["producto_id"]
+            )
+            return
+
+        items = picker.descargar()
+        puerta_id = None
+        if self.warehouse is not None:
+            zona = self.warehouse.zonas.get(objetivo["zona_id"])
+            puerta_id = zona.puerta_id if zona is not None else None
+        self.descargas.append(
+            {
+                "picker_id": picker.id,
+                "zona_id": objetivo["zona_id"],
+                "puerta_id": puerta_id,
+                "paso": self.paso_actual,
+                "items": [
+                    {"producto_id": producto_id, "cantidad": cantidad}
+                    for producto_id, cantidad in items
+                ],
+            }
+        )
+
+    def _recoger_objetivo_dinamico(
+        self,
+        picker: Any,
+        producto_id: str,
+    ) -> None:
+        producto = self._productos[producto_id]
+        pendiente = self._cantidad_pendiente(picker, producto_id)
+        if pendiente <= 0:
+            return
+
+        stock = self._valor(producto, "cantidad_disponible", default=None)
+        disponible = pendiente if stock is None else min(pendiente, stock)
+        peso = float(self._valor(producto, "peso_kg", default=0.0))
+        capacidad_libre = max(
+            picker.capacidad_carga_kg - picker.carga_actual_kg, 0.0
+        )
+        unidades_capacidad = (
+            disponible
+            if peso <= 0
+            else floor((capacidad_libre + 1e-9) / peso)
+        )
+        cantidad = min(disponible, unidades_capacidad)
+        if cantidad <= 0:
+            return
+
+        picker.recoger(producto, cantidad)
+        if stock is not None:
+            producto.cantidad_disponible -= cantidad
+        self._reducir_demanda(picker, producto_id, cantidad)
+        self.productos_recogidos.append(
+            {
+                "picker_id": picker.id,
+                "producto_id": producto_id,
+                "cantidad": cantidad,
+            }
+        )
+
     def avanzar_paso(self) -> bool:
         """Avanza un tick y devuelve si quedan movimientos pendientes.
 
@@ -421,15 +912,37 @@ class Simulation:
         # Mapa picker_id -> destino solicitado en el tick actual. No contiene
         # pickers que ya completaron sus rutas.
         propuestas: dict[str, tuple[int, int]] = {}
+        if self._modo_dinamico:
+            for picker in self.pickers:
+                self._planificar_picker_dinamico(picker)
         for picker in self.pickers:
-            ruta = self._rutas[picker.id]
-            indice = self._indices_ruta[picker.id]
-            if indice < len(ruta):
-                propuestas[picker.id] = ruta[indice]
+            if self._modo_dinamico:
+                tramo = self._tramos_dinamicos[picker.id]
+                indice = self._indices_ruta[picker.id]
+                if indice < len(tramo):
+                    propuestas[picker.id] = tramo[indice]
+            else:
+                ruta = self._rutas[picker.id]
+                indice = self._indices_ruta[picker.id]
+                if indice < len(ruta):
+                    propuestas[picker.id] = ruta[indice]
 
         if not propuestas:
-            self._en_ejecucion = False
-            return False
+            if not self._modo_dinamico or all(
+                estado == "terminado"
+                for estado in self._estado_picker.values()
+            ):
+                self._en_ejecucion = False
+                return False
+            self.paso_actual += 1
+            self._ticks_sin_movimiento += 1
+            if self._ticks_sin_movimiento > max(10, len(self.pickers) * 10):
+                raise RuntimeError(
+                    "Los pickers no pueden avanzar: todos los puntos de "
+                    "despacho alcanzables están ocupados."
+                )
+            self._en_ejecucion = True
+            return True
 
         # Un tick transcurre si había al menos un movimiento por intentar,
         # incluso si una colisión termina haciendo esperar a todos.
@@ -442,6 +955,7 @@ class Simulation:
                 destinos.setdefault(propuestas[picker.id], []).append(picker)
 
         aceptados: set[str] = set()
+        bloqueos_por_picker: dict[str, set[str]] = {}
         for pickers_destino in destinos.values():
             # La lista recibida define la prioridad principal. El id sirve
             # como criterio estable en caso de igualdad de posición en lista.
@@ -453,6 +967,31 @@ class Simulation:
                 ),
             )
             aceptados.add(ganador.id)
+            for picker in pickers_destino:
+                if picker.id != ganador.id:
+                    bloqueos_por_picker.setdefault(picker.id, set()).add(
+                        ganador.id
+                    )
+
+        if self._modo_dinamico:
+            picker_por_zona: dict[str, str] = {}
+            for picker in self.pickers:
+                objetivo = self._objetivos_dinamicos[picker.id]
+                if (
+                    picker.id not in aceptados
+                    or objetivo is None
+                    or objetivo["tipo"] != "despacho"
+                    or propuestas[picker.id] != objetivo["punto"]
+                ):
+                    continue
+                zona_id = objetivo["zona_id"]
+                if zona_id in picker_por_zona:
+                    aceptados.remove(picker.id)
+                    bloqueos_por_picker.setdefault(picker.id, set()).add(
+                        picker_por_zona[zona_id]
+                    )
+                else:
+                    picker_por_zona[zona_id] = picker.id
 
         # Si un picker no ganó, se queda en su posición. Ningún otro picker
         # puede entrar en esa celda; la iteración se repite porque cancelar un
@@ -464,12 +1003,19 @@ class Simulation:
                 tuple(picker.posicion_actual): picker.id
                 for picker in self.pickers
                 if picker.id not in aceptados
+                and (
+                    not self._modo_dinamico
+                    or self._estado_picker[picker.id] != "terminado"
+                )
             }
             for picker in self.pickers:
                 if picker.id not in aceptados:
                     continue
                 ocupante = posiciones_ocupadas.get(propuestas[picker.id])
                 if ocupante is not None:
+                    bloqueos_por_picker.setdefault(picker.id, set()).add(
+                        ocupante
+                    )
                     aceptados.remove(picker.id)
                     cambio = True
 
@@ -484,6 +1030,8 @@ class Simulation:
                     and propuestas[picker.id] == tuple(otro.posicion_actual)
                     and propuestas[otro.id] == tuple(picker.posicion_actual)
                 ):
+                    bloqueos_por_picker.setdefault(picker.id, set()).add(otro.id)
+                    bloqueos_por_picker.setdefault(otro.id, set()).add(picker.id)
                     aceptados.remove(picker.id)
                     aceptados.remove(otro.id)
 
@@ -499,13 +1047,65 @@ class Simulation:
             self.distancia += abs(destino[0] - anterior[0]) + abs(
                 destino[1] - anterior[1]
             )
-            self._recoger_en_posicion(picker)
+            if not self._modo_dinamico:
+                self._recoger_en_posicion(picker)
 
-        # Aún puede haber trabajo aunque un picker haya terminado; por ejemplo,
-        # si otro tuvo que esperar y conserva un nodo pendiente en su ruta.
-        quedan_pasos = any(
-            self._indices_ruta[picker.id] < len(self._rutas[picker.id])
-            for picker in self.pickers
+        if self._modo_dinamico:
+            for picker in self.pickers:
+                bloqueadores = bloqueos_por_picker.get(picker.id, set())
+                if not bloqueadores:
+                    self._ticks_bloqueado[picker.id] = 0
+                    continue
+                self._ticks_bloqueado[picker.id] += 1
+                espera = self._ticks_bloqueado[picker.id]
+                es_picker_mayor = all(
+                    self._orden_id_picker(picker.id)
+                    > self._orden_id_picker(bloqueador_id)
+                    for bloqueador_id in bloqueadores
+                )
+                if (
+                    espera >= 2
+                    and (espera - 2) % 5 == 0
+                    and es_picker_mayor
+                ):
+                    self._replanificar_picker_bloqueado(picker)
+
+            if aceptados:
+                self._ticks_sin_movimiento = 0
+            else:
+                self._ticks_sin_movimiento += 1
+                if self._ticks_sin_movimiento > max(10, len(self.pickers) * 10):
+                    raise RuntimeError(
+                        "Los pickers llevan más de un tick bloqueados. "
+                        "No se encontró una ruta alternativa. Revisá la "
+                        "circulación y los puntos de despacho."
+                    )
+
+            for picker in self.pickers:
+                if (
+                    picker.id not in aceptados
+                    or self._indices_ruta[picker.id]
+                    < len(self._tramos_dinamicos[picker.id])
+                ):
+                    continue
+                objetivo = self._objetivos_dinamicos[picker.id]
+                self._objetivos_dinamicos[picker.id] = None
+                self._tramos_dinamicos[picker.id] = []
+                self._indices_ruta[picker.id] = 0
+                self._atender_objetivo_dinamico(picker, objetivo)
+
+            for picker in self.pickers:
+                self._planificar_picker_dinamico(picker)
+
+        # Aún puede quedar trabajo dinámico aunque en este tick no haya una ruta
+        # que avanzar, por ejemplo, mientras se libera un punto de despacho.
+        quedan_pasos = (
+            any(estado != "terminado" for estado in self._estado_picker.values())
+            if self._modo_dinamico
+            else any(
+                self._indices_ruta[picker.id] < len(self._rutas[picker.id])
+                for picker in self.pickers
+            )
         )
         self._en_ejecucion = quedan_pasos
         return quedan_pasos
@@ -526,6 +1126,25 @@ class Simulation:
                     "x": picker.posicion_actual[0],
                     "y": picker.posicion_actual[1],
                     "carga_actual_kg": picker.carga_actual_kg,
+                    "items_transportados": [
+                        {"producto_id": producto_id, "cantidad": cantidad}
+                        for producto_id, cantidad in picker.items_transportados
+                    ],
+                    "productos_transportados": sum(
+                        cantidad
+                        for _, cantidad in picker.items_transportados
+                    ),
+                    "productos_objetivo": sum(
+                        self._demanda_por_picker_inicial.get(
+                            picker.id, {}
+                        ).values()
+                    )
+                    if self._asignaciones_explicitas
+                    else sum(self._demanda_global_inicial.values()),
+                    "activo": (
+                        not self._modo_dinamico
+                        or self._estado_picker[picker.id] != "terminado"
+                    ),
                 }
                 for picker in self.pickers
             ],
@@ -536,6 +1155,16 @@ class Simulation:
             "total_productos": self._total_productos,
             "distancia": self.distancia,
             "recolecciones": [dict(item) for item in self.productos_recogidos],
+            "faltantes": [dict(item) for item in self.productos_faltantes],
+            "productos_despachados": sum(
+                item["cantidad"]
+                for descarga in self.descargas
+                for item in descarga["items"]
+            ),
+            "descargas": [
+                {**descarga, "items": [dict(item) for item in descarga["items"]]}
+                for descarga in self.descargas
+            ],
         }
 
     def iniciar(self) -> None:
@@ -575,6 +1204,8 @@ class Simulation:
         self.paso_actual = 0
         self.distancia = 0
         self.productos_recogidos.clear()
+        self.productos_faltantes.clear()
+        self.descargas.clear()
         self._en_ejecucion = False
         # Las cantidades iniciales se guardaron como copias en el constructor,
         # porque las estructuras activas se modifican durante la recolección.
@@ -586,7 +1217,10 @@ class Simulation:
         for producto_id, stock in self._stock_inicial.items():
             if stock is not None:
                 self._productos[producto_id].cantidad_disponible = stock
-        self._recoger_en_posiciones_actuales()
+        if self._modo_dinamico:
+            self._inicializar_navegacion_dinamica()
+        else:
+            self._recoger_en_posiciones_actuales()
 
 
 if __name__ == "__main__":

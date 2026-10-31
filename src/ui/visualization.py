@@ -31,8 +31,15 @@ class Ventana:
 
         # --- Panel de Métricas ---
         tk.Label(self.panel, text="Métricas", font=("Arial", 14, "bold"), bg="#e2e8f0").pack(pady=(20, 10))
-        self.lbl_productos = tk.Label(self.panel, text="Productos: 0/0", bg="#e2e8f0", font=("Arial", 11))
-        self.lbl_productos.pack(anchor="w", padx=10)
+        tk.Label(
+            self.panel,
+            text="Carga por picker",
+            bg="#e2e8f0",
+            font=("Arial", 11, "bold"),
+        ).pack(anchor="w", padx=10)
+        self.frame_carga_pickers = tk.Frame(self.panel, bg="#e2e8f0")
+        self.frame_carga_pickers.pack(fill=tk.X, padx=8)
+        self.lbl_carga_pickers = {}
         self.lbl_distancia = tk.Label(self.panel, text="Distancia: 0 m", bg="#e2e8f0", font=("Arial", 11))
         self.lbl_distancia.pack(anchor="w", padx=10)
 
@@ -112,10 +119,60 @@ class Ventana:
             
         # Dibujar pickers
         for p in estado.get('pickers', []):
-            self.dibujar_picker(p['x'], p['y'], p['id'])
+            if p.get("activo", True):
+                self.dibujar_picker(p['x'], p['y'], p['id'])
 
         # Actualizar métricas
-        self.lbl_productos.config(text=f"Productos: {estado.get('productos_recogidos', 0)}/{estado.get('total_productos', 0)}")
+        pickers_estado = estado.get("pickers", [])
+        ids_pickers = {picker["id"] for picker in pickers_estado}
+        for picker_id in list(self.lbl_carga_pickers):
+            if picker_id not in ids_pickers:
+                fila = self.lbl_carga_pickers.pop(picker_id)
+                fila[0].destroy()
+                fila[1].destroy()
+
+        for picker in pickers_estado:
+            picker_id = picker["id"]
+            if picker_id not in self.lbl_carga_pickers:
+                lbl_carga = tk.Label(
+                    self.frame_carga_pickers,
+                    bg="#e2e8f0",
+                    font=("Arial", 10, "bold"),
+                    anchor="w",
+                    justify=tk.LEFT,
+                    wraplength=220,
+                )
+                lbl_carga.pack(anchor="w", fill=tk.X, pady=(5, 0))
+                lbl_items = tk.Label(
+                    self.frame_carga_pickers,
+                    bg="#e2e8f0",
+                    font=("Arial", 9),
+                    anchor="w",
+                    justify=tk.LEFT,
+                    wraplength=220,
+                )
+                lbl_items.pack(anchor="w", fill=tk.X)
+                self.lbl_carga_pickers[picker_id] = (
+                    lbl_carga,
+                    lbl_items,
+                )
+
+            cantidad_actual = picker.get("productos_transportados", 0)
+            cantidad_objetivo = picker.get("productos_objetivo", 0)
+            items = picker.get("items_transportados", [])
+            detalle_items = ", ".join(
+                f"{item['producto_id']} x{item['cantidad']}"
+                for item in items
+            ) or "ninguno"
+            self.lbl_carga_pickers[picker_id][0].config(
+                text=(
+                    f"{picker_id}: {cantidad_actual}/{cantidad_objetivo} "
+                    "productos"
+                )
+            )
+            self.lbl_carga_pickers[picker_id][1].config(
+                text=f"Lleva: {detalle_items}"
+            )
         self.lbl_distancia.config(text=f"Distancia: {estado.get('distancia', 0)} m")
 
     def iniciar(self):
