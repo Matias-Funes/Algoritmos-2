@@ -188,6 +188,7 @@ def cargar_escenario(path: str | Path) -> Escenario:
             wave_actual=s.get("wave_actual", 0),
             indice_actual=s.get("indice_actual", 0),
             estrategia_recorrido=s.get("estrategia_recorrido", "vecino_mas_cercano"),
+            posiciones_aleatorias=s.get("posiciones_aleatorias", False),
         )
 
     return Escenario(

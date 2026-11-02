@@ -1,5 +1,7 @@
 """Aplicación Tk de simulación Dinámica con Layout de 3 Columnas."""
 import copy
+import os
+import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox
@@ -17,6 +19,7 @@ from warehouse.visualizacion.render import (COLOR_CANVAS_FONDO, COLOR_PICKER,
                                             dibujar_polilinea, dibujar_punto,
                                             dibujar_warehouse)
 from warehouse.visualizacion.sprites import SpriteLoader
+from warehouse.warehouse import escenario
 
 COLORES_PICKERS = {
     "PK_01": "#ff5252", "PK_02": "#42a5f5", "PK_03": "#66bb6a", "PK_04": "#ffca28",
@@ -42,6 +45,7 @@ class SimulacionApp:
         escenario,
         simulacion: SimulacionDinamica,
         estrategia: str,
+        posiciones_aleatorias: bool = False,
         delay_caminar: int = 100,
         delay_esperar: int = 1000,
         picker_scale: float = 2.2,
@@ -54,13 +58,15 @@ class SimulacionApp:
         self.delay_caminar = delay_caminar
         self.delay_esperar = delay_esperar
 
-        self.sprites = SpriteLoader(picker_scale, rack_scale)
 
         self.root: ctk.CTk | None = None
         self.celda_px = 30
         self.ancho_canvas = ANCHO_CANVAS
         self.alto_canvas = ALTO_CANVAS
         self.margen = 10
+
+        self.picker_scale = picker_scale
+        self.rack_scale = rack_scale
 
         self.after_id = None
         self.coords: dict = {}
@@ -69,9 +75,18 @@ class SimulacionApp:
 
         # Variable para el filtro de productos
         self.mostrar_solo_activos = None
+        self.productos_resaltados = []
+        self.rack_resaltado = None
+
+        self.posiciones_aleatorias = posiciones_aleatorias
 
     def run(self) -> None:
         self.root = ctk.CTk()
+        self.sprites = SpriteLoader(
+            master=self.root,
+            picker_scale=self.picker_scale,
+            rack_scale=self.rack_scale,
+        )
         self.root.withdraw()
 
         alto_pantalla = self.root.winfo_screenheight()
@@ -114,6 +129,61 @@ class SimulacionApp:
         self.root.geometry(f"{w}x{h}+{x}+{y}")
         self.root.mainloop()
 
+    def _toggle_leyenda(self):
+        if self.var_ocultar_leyenda.get():
+            self.frame_leyenda.grid_remove()
+        else:
+            self.frame_leyenda.grid(row=0, column=0, sticky="ew")
+
+    def _limpiar_busqueda(self) -> None:
+        self.entry_busqueda.delete(0, "end")
+        self._on_buscar(None)
+
+    def _volver_al_menu(self) -> None:
+        self.pause()
+        if self.root is not None:
+            self.root.destroy()
+
+        # Reinicia todo el script de Python para volver al menú de forma segura
+        os.execl(sys.executable, sys.executable, "main.py", "menu")
+
+    def _cerrar_todo(self) -> None:
+        self.pause()
+        if self.root is not None:
+            self.root.destroy()
+
+        # Fuerza la muerte del proceso (soluciona el error de la terminal colgada)
+        os._exit(0)
+
+    def _guardar_escenario(self) -> None:
+        from tkinter import filedialog
+
+        from warehouse.io.exportador import exportar_escenario
+        from warehouse.warehouse.escenario import Sesion
+
+        self.escenario.sesion = Sesion(
+            wave_actual=0,
+            indice_actual=self.simulacion.paso_actual,
+            estrategia_recorrido=self.estrategia,
+            posiciones_aleatorias=self.posiciones_aleatorias
+        )
+
+        path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json")],
+            title="Guardar Escenario",
+            initialdir="data/sesiones"
+        )
+
+        if not path:
+            return
+
+        try:
+            exportar_escenario(self.escenario, path)
+            messagebox.showinfo("Guardado", f"Escenario guardado en:\n{path}")
+        except Exception as e:
+            messagebox.showerror("Error al guardar", str(e))
+
     def _cerrar(self) -> None:
         self.pause()
         if self.root is not None:
@@ -129,49 +199,69 @@ class SimulacionApp:
         main_frame.grid_columnconfigure(2, weight=0) # Panel Derecho
         main_frame.grid_rowconfigure(0, weight=1)
 
-        # ==================== PANEL IZQUIERDO (Controles y Métricas) ====================
-        panel_izq = ctk.CTkFrame(main_frame, fg_color="transparent", width=190)
+        # ==================== PANEL IZQUIERDO ====================
+        panel_izq = ctk.CTkFrame(main_frame, fg_color="transparent", width=200)
         panel_izq.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
         panel_izq.grid_propagate(False)
 
-        ctk.CTkLabel(panel_izq, text="Controles", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(0, 10))
+        # Botones fijos abajo
+        frame_botones_izq = ctk.CTkFrame(panel_izq, fg_color="transparent")
+        frame_botones_izq.pack(side="bottom", fill="x", pady=5)
 
-        self.btn_play_pause = ctk.CTkButton(panel_izq, text="▶ Play", command=self.toggle_play_pause, width=180)
-        self.btn_play_pause.pack(pady=5)
-        ctk.CTkButton(panel_izq, text="⏮ Step atrás", command=self.step_atras, width=180).pack(pady=5)
-        ctk.CTkButton(panel_izq, text="⏭ Step", command=self.step, width=180).pack(pady=5)
-        ctk.CTkButton(panel_izq, text="⟲ Reset", command=self.reset, width=180).pack(pady=5)
+        ctk.CTkButton(frame_botones_izq, text="🏠 Menú Principal", command=self._volver_al_menu, fg_color="#444444").pack(fill="x", pady=2)
+        ctk.CTkButton(frame_botones_izq, text="✕ Cerrar Todo", command=self._cerrar_todo, fg_color="#a83232").pack(fill="x", pady=2)
+        ctk.CTkButton(frame_botones_izq, text="💾 Guardar", command=self._guardar_escenario, fg_color="#1b5e20", hover_color="#2e7d32").pack(fill="x", pady=2)
 
-        self.progress = ctk.CTkProgressBar(panel_izq, width=180)
+        # Contenedor central SIN scroll general
+        panel_izq_content = ctk.CTkFrame(panel_izq, fg_color="transparent")
+        panel_izq_content.pack(side="top", fill="both", expand=True)
+
+        ctk.CTkLabel(panel_izq_content, text="Controles", font=ctk.CTkFont(size=13, weight="bold")).pack(pady=(0, 2))
+
+        # Botones más bajos (height=24) para ahorrar espacio
+        self.btn_play_pause = ctk.CTkButton(panel_izq_content, text="▶ Play", command=self.toggle_play_pause, width=160, height=24)
+        self.btn_play_pause.pack(pady=1)
+        ctk.CTkButton(panel_izq_content, text="⏮ Step atrás", command=self.step_atras, width=160, height=24).pack(pady=1)
+        ctk.CTkButton(panel_izq_content, text="⏭ Step", command=self.step, width=160, height=24).pack(pady=1)
+        ctk.CTkButton(panel_izq_content, text="⟲ Reset", command=self.reset, width=160, height=24).pack(pady=1)
+
+        self.progress = ctk.CTkProgressBar(panel_izq_content, width=160)
         self.progress.set(0)
-        self.progress.pack(pady=20)
+        self.progress.pack(pady=10)
 
-        ctk.CTkLabel(panel_izq, text="Estado", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(10, 5))
+        # ESTADO (pady=0 para interlineado cerrado)
+        ctk.CTkLabel(panel_izq_content, text="Estado", font=ctk.CTkFont(size=13, weight="bold")).pack(pady=(2, 0))
         mono = ctk.CTkFont(family="monospace", size=11)
+        self.lbl_info_waves = ctk.CTkLabel(panel_izq_content, text="", anchor="w", font=mono)
+        self.lbl_info_waves.pack(fill="x", pady=0)
+        ctk.CTkLabel(panel_izq_content, text=f"Estrategia: {self.estrategia}", anchor="w", font=mono, text_color="#888888").pack(fill="x", pady=0)
+        self.lbl_info_paso = ctk.CTkLabel(panel_izq_content, text="", anchor="w", font=mono)
+        self.lbl_info_paso.pack(fill="x", pady=0)
+        self.lbl_info_prod = ctk.CTkLabel(panel_izq_content, text="", anchor="w", font=mono)
+        self.lbl_info_prod.pack(fill="x", pady=0)
+        self.lbl_info_prio = ctk.CTkLabel(panel_izq_content, text="", anchor="w", font=mono)
+        self.lbl_info_prio.pack(fill="x", pady=0)
 
-        self.lbl_info_waves = ctk.CTkLabel(panel_izq, text="", anchor="w", font=mono)
-        self.lbl_info_waves.pack(fill="x")
-        self.lbl_info_paso = ctk.CTkLabel(panel_izq, text="", anchor="w", font=mono)
-        self.lbl_info_paso.pack(fill="x")
-        self.lbl_info_prod = ctk.CTkLabel(panel_izq, text="", anchor="w", font=mono)
-        self.lbl_info_prod.pack(fill="x")
-        self.lbl_info_prio = ctk.CTkLabel(panel_izq, text="", anchor="w", font=mono)
-        self.lbl_info_prio.pack(fill="x")
-
-        ctk.CTkLabel(panel_izq, text="Métricas", font=ctk.CTkFont(size=14, weight="bold"), text_color="#64b5f6").pack(pady=(20, 5))
+        # MÉTRICAS
+        ctk.CTkLabel(panel_izq_content, text="Métricas", font=ctk.CTkFont(size=13, weight="bold"), text_color="#64b5f6").pack(pady=(8, 0))
         mono_s = ctk.CTkFont(family="monospace", size=10)
-        self.lbl_met_distancia = ctk.CTkLabel(panel_izq, text="", anchor="w", font=mono_s, text_color="#aaaaaa")
-        self.lbl_met_distancia.pack(fill="x")
-        self.lbl_met_aristas = ctk.CTkLabel(panel_izq, text="", anchor="w", font=mono_s, text_color="#aaaaaa")
-        self.lbl_met_aristas.pack(fill="x")
-        self.lbl_met_nodos = ctk.CTkLabel(panel_izq, text="", anchor="w", font=mono_s, text_color="#aaaaaa")
-        self.lbl_met_nodos.pack(fill="x")
-        self.lbl_met_tiempo = ctk.CTkLabel(panel_izq, text="", anchor="w", font=mono_s, text_color="#aaaaaa")
-        self.lbl_met_tiempo.pack(fill="x")
+        self.lbl_met_distancia = ctk.CTkLabel(panel_izq_content, text="", anchor="w", font=mono_s, text_color="#aaaaaa")
+        self.lbl_met_distancia.pack(fill="x", pady=0)
+        self.lbl_met_aristas = ctk.CTkLabel(panel_izq_content, text="", anchor="w", font=mono_s, text_color="#aaaaaa")
+        self.lbl_met_aristas.pack(fill="x", pady=0)
+        self.lbl_met_nodos = ctk.CTkLabel(panel_izq_content, text="", anchor="w", font=mono_s, text_color="#aaaaaa")
+        self.lbl_met_nodos.pack(fill="x", pady=0)
+        self.lbl_met_tiempo = ctk.CTkLabel(panel_izq_content, text="", anchor="w", font=mono_s, text_color="#aaaaaa")
+        self.lbl_met_tiempo.pack(fill="x", pady=0)
 
-        ctk.CTkButton(panel_izq, text="✕ Cerrar", command=self._cerrar, fg_color="#a83232", hover_color="#7a2020").pack(side="bottom", pady=10)
+        # DISTANCIA POR WAVE (Único con Scroll)
+        ctk.CTkLabel(panel_izq_content, text="Distancia por Wave", font=ctk.CTkFont(size=13, weight="bold"), text_color="#64b5f6").pack(pady=(8, 0))
+        self.frame_dist_waves = ctk.CTkScrollableFrame(panel_izq_content, height=150, fg_color="#1e1e1e", corner_radius=5)
+        self.frame_dist_waves.pack(fill="both", expand=True, padx=5, pady=5)
+        self.lbl_dist_waves = ctk.CTkLabel(self.frame_dist_waves, text="Esperando inicio...", anchor="w", font=mono_s, justify="left")
+        self.lbl_dist_waves.pack(fill="x")
 
-        # ==================== PANEL CENTRAL (Canvas) ====================
+        # ==================== PANEL CENTRAL ====================
         self.canvas = tk.Canvas(
             main_frame, bg=COLOR_CANVAS_FONDO,
             width=self.ancho_canvas, height=self.alto_canvas,
@@ -179,28 +269,45 @@ class SimulacionApp:
         )
         self.canvas.grid(row=0, column=1, sticky="nsew")
 
-        # ==================== PANEL DERECHO (Leyenda y Productos) ====================
-        panel_der = ctk.CTkFrame(main_frame, fg_color="transparent", width=250)
+        # ==================== PANEL DERECHO ====================
+        panel_der = ctk.CTkFrame(main_frame, fg_color="transparent", width=280)
         panel_der.grid(row=0, column=2, sticky="nsew", padx=(5, 0))
         panel_der.grid_propagate(False)
+        panel_der.grid_rowconfigure(4, weight=1) # La lista de productos se expande
 
-        crear_panel_leyenda(panel_der).pack(side="top", fill="x")
+        # 0. Leyenda
+        self.frame_leyenda = crear_panel_leyenda(panel_der)
+        self.frame_leyenda.grid(row=0, column=0, sticky="ew")
 
-        # Búsqueda Trie
+        # 1. Switch de Leyenda
+        self.var_ocultar_leyenda = ctk.BooleanVar(value=False)
+        self.switch_leyenda = ctk.CTkSwitch(
+            panel_der, text="Ocultar Leyenda",
+            variable=self.var_ocultar_leyenda,
+            command=self._toggle_leyenda
+        )
+        self.switch_leyenda.grid(row=1, column=0, pady=5, sticky="w")
+
+        # 2. Buscador
         frame_busqueda = ctk.CTkFrame(panel_der, fg_color="transparent")
-        frame_busqueda.pack(fill="x", pady=(10, 0))
-        ctk.CTkLabel(frame_busqueda, text="🔍 Buscar producto:", font=ctk.CTkFont(size=11)).pack(anchor="w")
-        self.entry_busqueda = ctk.CTkEntry(frame_busqueda, width=200, font=ctk.CTkFont(family="monospace", size=12))
-        self.entry_busqueda.pack(fill="x", pady=2)
+        frame_busqueda.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+
+        frame_input_busq = ctk.CTkFrame(frame_busqueda, fg_color="transparent")
+        frame_input_busq.pack(fill="x")
+
+        self.entry_busqueda = ctk.CTkEntry(frame_input_busq, width=200, font=ctk.CTkFont(family="monospace", size=12))
+        self.entry_busqueda.pack(side="left", fill="x", expand=True, pady=2)
         self.entry_busqueda.bind("<KeyRelease>", self._on_buscar)
 
-        # Lista de productos
+        btn_limpiar = ctk.CTkButton(frame_input_busq, text="✕", width=28, fg_color="#444444", command=self._limpiar_busqueda)
+        btn_limpiar.pack(side="right", padx=(2, 0))
+
+        # 3. Header Productos
         frame_prod_header = ctk.CTkFrame(panel_der, fg_color="transparent")
-        frame_prod_header.pack(fill="x", pady=(15, 5))
+        frame_prod_header.grid(row=3, column=0, sticky="ew", pady=(15, 5))
+
         ctk.CTkLabel(frame_prod_header, text="Productos", font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
-
         self.mostrar_solo_activos = ctk.BooleanVar(master=self.root, value=False)
-
         self.switch_filtro = ctk.CTkSwitch(
             frame_prod_header, text="Ocultar Entregados",
             variable=self.mostrar_solo_activos,
@@ -209,8 +316,9 @@ class SimulacionApp:
         )
         self.switch_filtro.pack(side="right")
 
+        # 4. Lista
         self.frame_productos = ctk.CTkScrollableFrame(panel_der, fg_color="#252525")
-        self.frame_productos.pack(fill="both", expand=True)
+        self.frame_productos.grid(row=4, column=0, sticky="nsew")
 
     def _redibujar_todo(self) -> None:
         self.canvas.delete("all")
@@ -227,6 +335,14 @@ class SimulacionApp:
                         if (rx, ry) in self.coords:
                             cx, cy = centro_celda_px(self.coords, rx, ry)
                             self.canvas.create_image(cx, cy, image=rack_img, anchor="center")
+
+        # Recuadro de búsqueda Trie
+        if hasattr(self, 'rack_resaltado') and self.rack_resaltado:
+            rx, ry = self.rack_resaltado
+            # Dibujamos un recuadro amarillo brillante sobre el rack buscado
+            x0, y0, x1, y1 = self.coords.get((rx, ry), (0,0,0,0))
+            if x0:
+                self.canvas.create_rectangle(x0-2, y0-2, x1+2, y1+2, outline="#ffeb3b", width=3)
 
         # 2. Dibujar Puertas
         door_img = self.sprites.obtener_door()
@@ -247,14 +363,64 @@ class SimulacionApp:
             font_size = max(6, int(self.celda_px * 0.4))
             fuente_flecha = ("sans-serif", font_size, "bold")
 
+            # Si es un pasillo horizontal (ancho > alto)
             if pasillo.ancho > pasillo.alto:
-                for x_off in range(0, pasillo.ancho, 4):
+                # Dibujamos una flecha cada 5 celdas para no saturar
+                for x_off in range(2, pasillo.ancho, 5):
                     cx_p, cy_p = centro_celda_px(self.coords, pasillo.x + x_off, pasillo.y + pasillo.alto // 2)
                     self.canvas.create_text(cx_p, cy_p, text=flecha, fill="#555555", font=fuente_flecha)
             else:
-                for y_off in range(0, pasillo.alto, 4):
+                # Verticales: cada 3 celdas
+                for y_off in range(2, pasillo.alto, 3):
                     cx_p, cy_p = centro_celda_px(self.coords, pasillo.x + pasillo.ancho // 2, pasillo.y + y_off)
                     self.canvas.create_text(cx_p, cy_p, text=flecha, fill="#555555", font=fuente_flecha)
+
+
+        # flechas_dibujadas = set()
+        # for pasillo in self.escenario.warehouse.pasillos.values():
+        #     if pasillo.sentido == "N": flecha = "↑"
+        #     elif pasillo.sentido == "S": flecha = "↓"
+        #     elif pasillo.sentido == "E": flecha = "→"
+        #     elif pasillo.sentido == "O": flecha = "←"
+        #     else: flecha = "↔" if pasillo.ancho > pasillo.alto else "↕"
+        #
+        #     font_size = max(6, int(self.celda_px * 0.4))
+        #     fuente_flecha = ("sans-serif", font_size, "bold")
+        #
+        #     if pasillo.ancho > pasillo.alto:
+        #         for x_off in range(1, pasillo.ancho, 4):
+        #             pos = (pasillo.x + x_off, pasillo.y + pasillo.alto // 2)
+        #             if pos not in flechas_dibujadas:
+        #                 cx_p, cy_p = centro_celda_px(self.coords, *pos)
+        #                 self.canvas.create_text(cx_p, cy_p, text=flecha, fill="#555555", font=fuente_flecha)
+        #                 flechas_dibujadas.add(pos)
+        #     else:
+        #         for y_off in range(1, pasillo.alto, 4):
+        #             pos = (pasillo.x + pasillo.ancho // 2, pasillo.y + y_off)
+        #             if pos not in flechas_dibujadas:
+        #                 cx_p, cy_p = centro_celda_px(self.coords, *pos)
+        #                 self.canvas.create_text(cx_p, cy_p, text=flecha, fill="#555555", font=fuente_flecha)
+        #                 flechas_dibujadas.add(pos)
+
+        # # 3. Flechas de Pasillos
+        # for pasillo in self.escenario.warehouse.pasillos.values():
+        #     if pasillo.sentido == "N": flecha = "↑"
+        #     elif pasillo.sentido == "S": flecha = "↓"
+        #     elif pasillo.sentido == "E": flecha = "→"
+        #     elif pasillo.sentido == "O": flecha = "←"
+        #     else: flecha = "↔" if pasillo.ancho > pasillo.alto else "↕"
+        #
+        #     font_size = max(6, int(self.celda_px * 0.4))
+        #     fuente_flecha = ("sans-serif", font_size, "bold")
+        #
+        #     if pasillo.ancho > pasillo.alto:
+        #         for x_off in range(0, pasillo.ancho, 4):
+        #             cx_p, cy_p = centro_celda_px(self.coords, pasillo.x + x_off, pasillo.y + pasillo.alto // 2)
+        #             self.canvas.create_text(cx_p, cy_p, text=flecha, fill="#555555", font=fuente_flecha)
+        #     else:
+        #         for y_off in range(0, pasillo.alto, 4):
+        #             cx_p, cy_p = centro_celda_px(self.coords, pasillo.x + pasillo.ancho // 2, pasillo.y + y_off)
+        #             self.canvas.create_text(cx_p, cy_p, text=flecha, fill="#555555", font=fuente_flecha)
 
         def centro(nid: int) -> tuple[float, float]:
             nodo = self.escenario.warehouse.grafo.nodo(nid)
@@ -299,8 +465,6 @@ class SimulacionApp:
             icono = self.sprites.obtener_producto(pid)
             if icono is not None:
                 self.canvas.create_image(cx_cell, y_pos - (self.celda_px*0.05), image=icono, anchor="center")
-                radio = self.celda_px * 0.06
-                self.canvas.create_oval(cx_cell - radio, y_pos + self.celda_px*0.1 - radio, cx_cell + radio, y_pos + self.celda_px*0.1 + radio, fill=color, outline="white", width=1)
             else:
                 dibujar_punto(self.canvas, cx_cell, y_pos, radio=self.celda_px * 0.09, color=color)
 
@@ -345,7 +509,29 @@ class SimulacionApp:
             else:
                 self._dibujar_picker_stick(cx_vis, cy_vis)
 
-            self.canvas.create_text(cx_vis, cy_vis + self.celda_px * 0.8, text=picker_id, fill=color_p, font=("sans-serif", 9, "bold"))
+
+            # Mostrar la wave actual
+            wave_txt = ep.wave_actual if ep.wave_actual else "Libre"
+
+            self.canvas.create_text(
+                cx_vis, cy_vis + self.celda_px * 0.9,
+                text=f"{picker_id}\nW: {wave_txt}",
+                fill=color_p,
+                font=("sans-serif", max(7, int(self.celda_px * 0.35)), "bold"),
+                justify="center"
+            )
+
+        # 7.5 Resaltado del buscador
+        if hasattr(self, 'productos_resaltados') and self.productos_resaltados:
+            for prod in self.productos_resaltados:
+                if (prod.x, prod.y) in self.coords:
+                    cx, cy = centro_celda_px(self.coords, prod.x, prod.y)
+                    # Círculo amarillo brillante alrededor del producto
+                    radio = self.celda_px * 0.6
+                    self.canvas.create_oval(
+                        cx - radio, cy - radio, cx + radio, cy + radio,
+                        outline="#ffeb3b", width=3
+                    )
 
         self._actualizar_label()
         self._actualizar_panel_info()
@@ -397,18 +583,21 @@ class SimulacionApp:
         pendientes_p = len(self.simulacion.productos_pendientes)
         self.progress.set((total_p - pendientes_p) / total_p if total_p > 0 else 1.0)
 
-    def _construir_lista_productos(self) -> None:
+    def _construir_lista_productos(self, solo_ids=None) -> None:
         for lbl in self.labels_productos.values():
             try: lbl.destroy()
             except Exception: pass
         self.labels_productos.clear()
-
         if not self.simulacion: return
 
         recogidos = self.simulacion.productos_totales - self.simulacion.productos_pendientes
         solo_activos = self.mostrar_solo_activos.get()
 
-        for pid in sorted(self.simulacion.productos_totales):
+        # Si se pasa una lista de IDs, filtramos por ella
+        lista_a_mostrar = solo_ids if solo_ids is not None else sorted(self.simulacion.productos_totales)
+
+        for pid in lista_a_mostrar:
+            if solo_activos and pid in self.simulacion.productos_entregados: continue
             # FILTRO
             if solo_activos and pid in self.simulacion.productos_entregados:
                 continue
@@ -426,13 +615,19 @@ class SimulacionApp:
             elif pid in recogidos: estado = "En carrito" + quien_lo_tiene
             else: estado = "Pendiente"
 
+            texto = f"● {pid} - {prod.nombre}\n"
+            texto += f"   Pos:{prod.x},{prod.y},{prod.z}\n"
+            texto += f"   Req:{cant} | Stk:{prod.cantidad_disponible}\n"
+            texto += f"   {estado}{quien_lo_tiene}"
+
             lbl = ctk.CTkLabel(
                 self.frame_productos,
-                text=f"● {pid} ({prod.x},{prod.y},{prod.z})\n   {estado} | Req:{cant}",
+                text=texto,
                 anchor="w", text_color=COLOR_PRODUCTO_PENDIENTE,
                 font=ctk.CTkFont(family="monospace", size=11),
                 justify="left"
             )
+
             lbl.pack(fill="x", pady=2)
             self.labels_productos[pid] = lbl
 
@@ -455,17 +650,53 @@ class SimulacionApp:
         t = self.simulacion.tiempo_ejecucion
         self.lbl_met_tiempo.configure(text=f"CPU: {t:.2f} s")
 
+        # Actualizar tabla de distancias por wave
+        if hasattr(self.simulacion, 'distancia_por_wave') and self.simulacion.distancia_por_wave:
+            lineas = []
+            for w_id, dist in sorted(self.simulacion.distancia_por_wave.items()):
+                if dist > 0:
+                    lineas.append(f"{w_id}: {dist:.0f}")
+
+            if not lineas:
+                lineas = ["Esperando inicio..."]
+
+            self.lbl_dist_waves.configure(text="\n".join(lineas))
+
+        # ACTUALIZAR TEXTOS Y COLORES DEL PANEL DE PRODUCTOS
         for pid, lbl in self.labels_productos.items():
-            if pid in self.simulacion.productos_entregados: nuevo_color = COLOR_PRODUCTO_ENTREGADO
-            elif pid in recogidos: nuevo_color = COLOR_PRODUCTO_RECOGIDO
-            else: nuevo_color = COLOR_PRODUCTO_PENDIENTE
+            prod = self.escenario.warehouse.productos[pid]
+            cant = self.simulacion.cantidad_pedida.get(pid, 0)
+
+            quien_lo_tiene = ""
+            for pk_id, pk_estado in self.simulacion.pickers.items():
+                if pid in pk_estado.productos_recogidos and pid not in self.simulacion.productos_entregados:
+                    quien_lo_tiene = f" [{pk_id}]"
+                    break
+
+            if pid in self.simulacion.productos_entregados:
+                estado = "Entregado"
+                nuevo_color = COLOR_PRODUCTO_ENTREGADO
+            elif pid in recogidos:
+                estado = "En carrito" + quien_lo_tiene
+                nuevo_color = COLOR_PRODUCTO_RECOGIDO
+            else:
+                estado = "Pendiente"
+                nuevo_color = COLOR_PRODUCTO_PENDIENTE
 
             try:
-                current = lbl.cget("text_color")
-                if current != nuevo_color:
+                texto = f"● {pid} - {prod.nombre}\n"
+                texto += f"   Pos:{prod.x},{prod.y},{prod.z}\n"
+                texto += f"   Req:{cant} | Stk:{prod.cantidad_disponible}\n"
+                texto += f"   {estado}{quien_lo_tiene}"
+
+                if lbl.cget("text") != texto:
+                    lbl.configure(text=texto)
+                if lbl.cget("text_color") != nuevo_color:
                     lbl.configure(text_color=nuevo_color)
             except Exception:
                 pass
+
+
 
     def toggle_play_pause(self) -> None:
         self.pause() if self.after_id is not None else self.play()
@@ -525,20 +756,30 @@ class SimulacionApp:
             self._redibujar_todo()
 
     def _on_buscar(self, event) -> None:
-        prefix = self.entry_busqueda.get().strip()
-        if not prefix:
-            self._construir_lista_productos() # Volver a mostrar todo
-            return
-        resultados = self.escenario.warehouse.buscar_por_prefijo(prefix)
-        if not resultados:
-            return
-        # Opcional: Resaltar el primer resultado en el mapa
-        rack = self.escenario.warehouse.racks[resultados[0].rack_id]
-        self.rack_resaltado = (rack.x, rack.y)
-        self._redibujar_todo()
+        prefix = self.entry_busqueda.get().strip().lower()
+        self.productos_resaltados = []
 
-    def _limpiar_busqueda(self, event) -> None:
-        self.entry_busqueda.delete(0, tk.END)
-        self.rack_resaltado = None
+        if not prefix:
+            self._construir_lista_productos()
+            self._redibujar_todo()
+            return
+
+        # 1. Buscar por ID (coincidencia parcial o total)
+        for p in self.escenario.warehouse.productos.values():
+            if prefix in p.id.lower():
+                self.productos_resaltados.append(p)
+
+        # 2. Buscar por Nombre (usando el Trie)
+        resultados_trie = self.escenario.warehouse.buscar_por_prefijo(prefix)
+        for p in resultados_trie:
+            if p not in self.productos_resaltados:
+                self.productos_resaltados.append(p)
+
+        if self.productos_resaltados:
+            # Actualizamos la lista del panel derecho para mostrar solo lo buscado
+            self._construir_lista_productos(solo_ids=[p.id for p in self.productos_resaltados])
+        else:
+            self._construir_lista_productos() # Mostrar todo si no hay resultados
+
         self._redibujar_todo()
 

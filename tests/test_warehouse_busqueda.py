@@ -35,7 +35,7 @@ def test_agregar_producto_lo_indexa_en_el_trie():
     w = _warehouse_minimo()
     w.agregar_producto(_producto("P001", "Caja chica"))
     # El índice normaliza a minúsculas
-    assert w.nombre_a_id["caja chica"] == "P001"
+    assert w.nombre_a_id["caja chica"] == ["P001"]
     assert w.trie_nombres.size == 1
 
 

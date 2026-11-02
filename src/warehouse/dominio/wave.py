@@ -66,6 +66,19 @@ class Wave:
         self.pedidos.append(pedido)
         pedido.estado = EstadoPedido.EN_WAVE
 
+    def registrar_pedido_referencia(self, pedido: Pedido) -> None:
+        """Split mode: registra el pedido como referencia informativa
+        (sirve para prioridad_maxima y para _wave_sort_key), SIN
+        validar capacidad ni cambiar el estado del pedido.
+
+        A diferencia de `agregar_pedido`, esta variante NO exige que el
+        pedido entre completo en la wave: en split mode un pedido puede
+        repartirse entre varias waves, así que su estado global solo
+        cambiará cuando el conjunto de waves lo cubra entero.
+        """
+        if all(p.id != pedido.id for p in self.pedidos):
+            self.pedidos.append(pedido)
+
     def prioridad_maxima(self) -> int:
         return max((p.prioridad for p in self.pedidos), default=0)
 

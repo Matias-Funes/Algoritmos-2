@@ -27,6 +27,9 @@ def main() -> None:
         run_experimentos(resto)
     elif comando == "simular":
         run_simular(resto)
+    elif comando == "menu":
+        # Forzamos a que vaya al menú
+        run_simular(["--menu"])
     else:
         print(f"Comando desconocido: {comando}")
         print(__doc__)

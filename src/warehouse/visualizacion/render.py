@@ -193,14 +193,16 @@ def crear_panel_leyenda(parent: tk.Widget) -> tk.Frame:
             door_img = ImageTk.PhotoImage(
                 Image.open(assets_dir / "door.png").resize(
                     (20, 20), Image.Resampling.LANCZOS
-                )
+                ),
+                master=parent.winfo_toplevel(),
             )
             frame.door_img = door_img
         if (assets_dir / "picker.png").exists():
             picker_img = ImageTk.PhotoImage(
                 Image.open(assets_dir / "picker.png").resize(
                     (20, 20), Image.Resampling.LANCZOS
-                )
+                ),
+                master=parent.winfo_toplevel(),
             )
             frame.picker_img = picker_img
     except Exception as e:

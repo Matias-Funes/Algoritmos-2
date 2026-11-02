@@ -14,8 +14,16 @@ class ConfigGeneracion:
     n_bloques_racks: int = 3
     ancho_pasillo: int = 3
     ancho_bloque_racks: int = 2
-    alto: int = 8
+    alto: int = 16
     cada_cuantas_filas_pasillo_horizontal: int = 0  # 0 = solo arriba/abajo
+    margen_inferior: int = 5  # filas vacías abajo
+    margen_superior: int = 5  # filas vacías arriba
+    n_zonas: int = 1
+
+    n_pickers: int = 2
+    picker_capacidad_kg: float = 500.0
+    peso_max_zona_kg: float = 800.0
+    n_zonas: int = 1
 
     # productos
     niveles_por_rack: int = 3  # altura física del rack
@@ -56,6 +64,10 @@ class ConfigGeneracion:
             raise ValueError("stock_min no puede ser mayor que stock_max")
         if self.cada_cuantas_filas_pasillo_horizontal < 0:
             raise ValueError("cada_cuantas_filas_pasillo_horizontal debe ser >= 0")
+        if self.margen_inferior < 0 or self.margen_superior < 0:
+            raise ValueError("Los márgenes deben ser >= 0")
+        if self.margen_inferior + self.margen_superior >= self.alto - 2:
+            raise ValueError("Los márgenes dejan muy poco espacio para los racks")
 
 
 # --- helpers de geometría ---
@@ -82,11 +94,20 @@ def _patron_columnas(config: ConfigGeneracion) -> list[str]:
 
 def _es_fila_pasillo_horizontal(y: int, config: ConfigGeneracion) -> bool:
     """Devuelve True si la fila y debe ser un pasillo horizontal completo."""
+    # Los bordes siempre son pasillos
     if y == 0 or y == config.alto - 1:
         return True
-    if config.cada_cuantas_filas_pasillo_horizontal <= 0:
-        return False
-    return y % config.cada_cuantas_filas_pasillo_horizontal == 0
+    # Márgenes superior e inferior
+    if y < config.margen_inferior:
+        return True
+    if y >= config.alto - config.margen_superior:
+        return True
+    # Pasillos intermedios (si están configurados)
+    if config.cada_cuantas_filas_pasillo_horizontal > 0:
+        return (
+            y - config.margen_inferior
+        ) % config.cada_cuantas_filas_pasillo_horizontal == 0
+    return False
 
 
 def _celdas_transitables(
@@ -162,16 +183,76 @@ def _construir_estructura(
     w = Warehouse(ancho, config.alto)
     w.construir_grafo(_celdas_transitables(config, patron))
 
-    # Puerta outbound en la esquina inferior izquierda, con su zona frente a ella
-    w.agregar_puerta("D1", 0, 0, "OUTBOUND")
-    w.agregar_zona_despacho(
-        "A",
-        (1, 0),
-        (config.ancho_pasillo, 0),
-        puerta_id="D1",
-        peso_max_kg=500.0,
-    )
+    # --- 1. Agregar Pasillos Horizontales (AMBOS) ---
+    for y in range(config.alto):
+        if _es_fila_pasillo_horizontal(y, config):
+            w.agregar_pasillo(f"PAS_H_{y}", 0, y, ancho, 1, "AMBOS")
 
+    # --- 2. Agregar Pasillos Verticales (alternando N y S) ---
+    y = 0
+    while y < config.alto:
+        if _es_fila_pasillo_horizontal(y, config):
+            y += 1
+            continue
+        y_inicio = y
+        while y < config.alto and not _es_fila_pasillo_horizontal(y, config):
+            y += 1
+        alto_bloque = y - y_inicio
+
+        x = 0
+        v_count = 0
+        while x < ancho:
+            if patron[x] == "P":
+                x_inicio = x
+                while x < ancho and patron[x] == "P":
+                    x += 1
+                ancho_pasillo = x - x_inicio
+
+                # Alternamos N (arriba) y S (abajo) igual que el Anexo A.3
+                sentido = "N" if v_count % 2 == 0 else "S"
+
+                w.agregar_pasillo(
+                    f"PAS_V_{y_inicio}_{x_inicio}",
+                    x_inicio,
+                    y_inicio,
+                    ancho_pasillo,
+                    alto_bloque,
+                    sentido,
+                )
+                v_count += 1
+            else:
+                x += 1
+
+    # --- 3. Puertas y Zonas de Despacho ---
+    # Validar que quepan las zonas con al menos 3 celdas de separación
+    ancho_estimado_zona = 7
+    espacio_requerido = (config.n_zonas * ancho_estimado_zona) + (
+        (config.n_zonas - 1) * 3
+    )
+    if espacio_requerido > ancho:
+        raise ValueError(
+            f"No hay espacio para {config.n_zonas} zonas. Máximo permitido para este ancho es {ancho // 10}."
+        )
+
+    ancho_zona = min(7, max(3, (ancho // config.n_zonas) - 3))
+
+    for i in range(config.n_zonas):
+        paso = ancho // config.n_zonas
+        x_centro = i * paso + (paso // 2)
+        x1 = max(0, x_centro - ancho_zona // 2)
+        x2 = min(ancho - 1, x1 + ancho_zona - 1)
+        x_puerta = (x1 + x2) // 2
+
+        w.agregar_puerta(f"PUERTA_{i+1}", x_puerta, 0, "OUTBOUND")
+        w.agregar_zona_despacho(
+            f"ZONA_{i+1}",
+            (x1, 1),
+            (x2, 2),
+            puerta_id=f"PUERTA_{i+1}",
+            peso_max_kg=config.peso_max_zona_kg,
+        )
+
+    # --- 4. Racks ---
     rack_ids: list[str] = []
     for i, (rx, ry, rancho, ralto) in enumerate(
         _posiciones_racks(config, patron), start=1
@@ -268,13 +349,20 @@ def generar_escenario(config: ConfigGeneracion) -> Escenario:
     if config.seed is not None:
         nombre += f"_s{config.seed}"
 
-    # Crear 2 pickers por defecto en la zona de despacho
+    # Crear pickers dinámicamente
     from warehouse.dominio.picker import Picker
 
-    pickers = [
-        Picker(id="PK_01", posicion_inicial=(0, 0), capacidad_carga_kg=500.0),
-        Picker(id="PK_02", posicion_inicial=(1, 0), capacidad_carga_kg=500.0),
-    ]
+    pickers = []
+    for i in range(config.n_pickers):
+        # Los distribuimos a lo largo del pasillo inferior (y=1)
+        x_pos = 1 + (i * 2)
+        pickers.append(
+            Picker(
+                id=f"PK_{i+1:02d}",
+                posicion_inicial=(x_pos, 1),
+                capacidad_carga_kg=config.picker_capacidad_kg,
+            )
+        )
 
     return Escenario(
         nombre=nombre,

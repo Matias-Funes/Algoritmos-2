@@ -113,6 +113,9 @@ def escenario_a_dict(escenario: Escenario) -> dict:
             "wave_actual": escenario.sesion.wave_actual,
             "indice_actual": escenario.sesion.indice_actual,
             "estrategia_recorrido": escenario.sesion.estrategia_recorrido,
+            "posiciones_aleatorias": getattr(
+                escenario.sesion, "posiciones_aleatorias", False
+            ),
         }
 
     return {

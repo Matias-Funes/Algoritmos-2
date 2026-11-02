@@ -7,15 +7,42 @@ import sys
 from warehouse.algoritmos.recorridos import ESTRATEGIAS
 from warehouse.generacion.generador import ConfigGeneracion, generar_escenario
 from warehouse.generacion.validador import validar_escenario
+from warehouse.generacion.validador_cobertura import validar_cobertura_waves
 from warehouse.io.cargador_json import cargar_escenario
 from warehouse.simulacion.dinamica import SimulacionDinamica
 from warehouse.visualizacion.app import SimulacionApp
-from warehouse.waves.generador_waves import EstrategiaWaves, generar_waves
+from warehouse.visualizacion.menu import MenuConfig
+from warehouse.waves.generador_waves import (
+    EstrategiaWaves,
+    generar_waves,
+    generar_waves_con_split,
+)
 
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
 
+    if getattr(args, "menu", False):
+        while True:  # <-- Bucle infinito hasta que cierren el menú
+            menu = MenuConfig()
+            menu.mainloop()
+
+            if menu.escenario and menu.simulacion:
+                app = SimulacionApp(
+                    escenario=menu.escenario,
+                    simulacion=menu.simulacion,
+                    estrategia=menu.estrategia_recorrido,
+                    posiciones_aleatorias=menu.posiciones_aleatorias,
+                )
+                app.run()
+                if not getattr(app, "volver_al_menu", False):
+                    break  # Si tocó "Cerrar Todo", salimos del bucle while True
+
+            else:
+                break  # Si el usuario le dio a Cancelar o cerró la ventana del menú, cortamos el bucle.
+        return
+
+    # Flujo por consola normal (cargar o generar)
     if args.cargar:
         escenario, simulacion = _cargar(args)
     else:
@@ -58,6 +85,13 @@ def _cargar(args):
         warehouse=escenario.warehouse,
         posiciones_aleatorias=args.random_start,
     )
+
+    # FAST-FORWARD
+    if escenario.sesion and escenario.sesion.indice_actual > 0:
+        for _ in range(escenario.sesion.indice_actual):
+            if not simulacion.avanzar():
+                break
+
     return escenario, simulacion
 
 
@@ -65,6 +99,8 @@ def _generar(args):
     cfg = ConfigGeneracion(
         n_bloques_racks=args.bloques,
         alto=args.alto,
+        margen_inferior=5 if args.alto >= 12 else 0,
+        margen_superior=5 if args.alto >= 12 else 0,
         n_pedidos=args.pedidos,
         niveles_por_rack=args.niveles_por_rack,
         productos_por_rack=args.productos_por_rack,
@@ -80,14 +116,27 @@ def _generar(args):
         else 500.0
     )
 
-    waves = generar_waves(
-        escenario.pedidos,
-        escenario.warehouse,
-        max_pedidos=args.max_pedidos_wave,
-        max_productos=args.max_productos_wave,
-        max_peso_kg=max_peso_wave,
-        estrategia=EstrategiaWaves(args.estrategia_waves),
-    )
+    if args.split:
+        waves, items_por_wave = generar_waves_con_split(
+            escenario.pedidos,
+            escenario.warehouse,
+            max_pedidos=args.max_pedidos_wave,
+            max_productos=args.max_productos_wave,
+            max_peso_kg=max_peso_wave,
+            estrategia=EstrategiaWaves(args.estrategia_waves),
+        )
+        validar_cobertura_waves(escenario.pedidos, items_por_wave)
+    else:
+        waves = generar_waves(
+            escenario.pedidos,
+            escenario.warehouse,
+            max_pedidos=args.max_pedidos_wave,
+            max_productos=args.max_productos_wave,
+            max_peso_kg=max_peso_wave,
+            estrategia=EstrategiaWaves(args.estrategia_waves),
+        )
+        items_por_wave = None
+
     escenario.waves = waves
 
     simulacion = SimulacionDinamica.desde_waves(
@@ -95,14 +144,18 @@ def _generar(args):
         pickers=escenario.pickers,
         warehouse=escenario.warehouse,
         posiciones_aleatorias=args.random_start,
+        items_por_wave=items_por_wave,
     )
     return escenario, simulacion
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser()
+    p.add_argument(
+        "--menu", action="store_true", help="Abrir pantalla de configuración visual"
+    )
     p.add_argument("--bloques", type=int, default=3)
-    p.add_argument("--alto", type=int, default=6)
+    p.add_argument("--alto", type=int, default=16)
     p.add_argument("--pasillos-h", type=int, default=0)
     p.add_argument("--pedidos", type=int, default=15)
     p.add_argument("--max-pedidos-wave", type=int, default=3)
@@ -127,6 +180,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--random-start",
         action="store_true",
         help="Iniciar pickers en posiciones aleatorias",
+    )
+    p.add_argument(
+        "--split",
+        action="store_true",
+        help="Generar waves con split (un pedido puede repartirse)",
     )
     return p.parse_args(argv)
 

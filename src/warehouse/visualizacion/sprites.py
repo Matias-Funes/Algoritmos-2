@@ -1,6 +1,7 @@
 """Carga y cachea las imágenes (sprites) del picker, racks y productos."""
 
 from pathlib import Path
+from tkinter import Misc
 
 from PIL import Image, ImageTk
 
@@ -10,10 +11,12 @@ ASSETS_DIR = Path(__file__).parent.parent.parent.parent / "assets"
 class SpriteLoader:
     def __init__(
         self,
+        master: Misc,
         picker_scale: float = 2.2,
         rack_scale: float = 0.92,
         assets_dir: Path | None = None,
     ) -> None:
+        self.master = master
         self.picker_scale = picker_scale
         self.rack_scale = rack_scale
         self.assets_dir = assets_dir if assets_dir is not None else ASSETS_DIR
@@ -89,7 +92,7 @@ class SpriteLoader:
             r, g, b, a = img.split()
             a = a.point(lambda p: int(p * (alpha / 255)))
             img = Image.merge("RGBA", (r, g, b, a))
-        photo = ImageTk.PhotoImage(img)
+        photo = ImageTk.PhotoImage(img, master=self.master)
         self.picker_cache[key] = photo
         return photo
 
@@ -126,7 +129,7 @@ class SpriteLoader:
         size = max(1, int(self.celda_px * self.rack_scale))
         img.thumbnail((size, size), Image.Resampling.LANCZOS)
 
-        photo = ImageTk.PhotoImage(img)
+        photo = ImageTk.PhotoImage(img, master=self.master)
         self.rack_cache[key] = photo
         return photo
 
@@ -153,7 +156,7 @@ class SpriteLoader:
         img = self.product_imgs[tipo].copy()
         size = max(4, int(self.celda_px * 0.6))
         img.thumbnail((size, size), Image.Resampling.LANCZOS)
-        photo = ImageTk.PhotoImage(img)
+        photo = ImageTk.PhotoImage(img, master=self.master)
         self.product_cache[key] = photo
         return photo
 
@@ -179,7 +182,7 @@ class SpriteLoader:
         size = max(1, int(self.celda_px * 0.9))  # Ajustar tamaño al 90% de la celda
         img.thumbnail((size, size), Image.Resampling.LANCZOS)
 
-        photo = ImageTk.PhotoImage(img)
+        photo = ImageTk.PhotoImage(img, master=self.master)
         self.door_cache[key] = photo
         return photo
 
@@ -201,6 +204,6 @@ class SpriteLoader:
         img = self.base_caja_img.copy()
         size = max(4, int(self.celda_px * 0.5))
         img.thumbnail((size, size), Image.Resampling.LANCZOS)
-        photo = ImageTk.PhotoImage(img)
+        photo = ImageTk.PhotoImage(img, master=self.master)
         self.caja_cache[key] = photo
         return photo

@@ -24,6 +24,7 @@ class Sesion:
     wave_actual: int = 0
     indice_actual: int = 0
     estrategia_recorrido: str = "vecino_mas_cercano"
+    posiciones_aleatorias: bool = False
 
 
 @dataclass
