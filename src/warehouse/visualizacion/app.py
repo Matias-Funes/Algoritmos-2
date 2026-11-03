@@ -612,7 +612,7 @@ class SimulacionApp:
                     break
 
             if pid in self.simulacion.productos_entregados: estado = "Entregado"
-            elif pid in recogidos: estado = "En carrito" + quien_lo_tiene
+            elif pid in recogidos: estado = "En carrito"
             else: estado = "Pendiente"
 
             texto = f"● {pid} - {prod.nombre}\n"
@@ -636,13 +636,25 @@ class SimulacionApp:
         recogidos = self.simulacion.productos_totales - self.simulacion.productos_pendientes
         total = len(self.simulacion.productos_totales)
 
-        self.lbl_info_waves.configure(text=f"Waves: {len(self.escenario.waves)}")
+        # 1. Waves y Pickers activos
+        waves_act = len(self.simulacion.waves_activas)
+        pickers_act = sum(1 for ep in self.simulacion.pickers.values() if ep.wave_actual is not None)
+        self.lbl_info_waves.configure(text=f"Waves: {len(self.escenario.waves)} ({waves_act} act.)\nPickers en Wave: {pickers_act}")
+
+        # 2. Paso
         self.lbl_info_paso.configure(text=f"Paso: {self.simulacion.paso_actual}")
+
+        # 3. Progreso de Productos
         self.lbl_info_prod.configure(text=f"Prods: {len(recogidos)} / {total}")
 
-        pendientes = len([t for t in self.simulacion.tareas_pendientes if not t.completada])
-        self.lbl_info_prio.configure(text=f"Tareas: {pendientes}")
+        # 4. Unidades y Viajes
+        total_unidades = sum(self.simulacion.cantidad_pedida.values())
+        recogidas = getattr(self.simulacion, 'total_items_recogidos', 0)
+        viajes = getattr(self.simulacion, 'total_viajes', 0)
 
+        self.lbl_info_prio.configure(text=f"Unidades: {recogidas} / {total_unidades}\nViajes: {viajes}")
+
+        # metricas
         self.lbl_met_distancia.configure(text=f"Dist: {self.simulacion.distancia_total:.1f}")
         self.lbl_met_aristas.configure(text=f"Aristas: {self.simulacion.aristas_recorridas}")
         self.lbl_met_nodos.configure(text=f"Nodos: {self.simulacion.nodos_visitados}")
@@ -655,7 +667,15 @@ class SimulacionApp:
             lineas = []
             for w_id, dist in sorted(self.simulacion.distancia_por_wave.items()):
                 if dist > 0:
-                    lineas.append(f"{w_id}: {dist:.0f}")
+                    # Buscamos qué pickers están asignados a esta wave ahora mismo
+                    pickers_en_wave = [
+                        pid for pid, ep in self.simulacion.pickers.items()
+                        if ep.wave_actual == w_id
+                    ]
+                    # Si hay pickers, los mostramos entre corchetes. Ej: W001 [PK_01,PK_02]
+                    sufijo_pickers = f" [{','.join(pickers_en_wave)}]" if pickers_en_wave else ""
+
+                    lineas.append(f"{w_id}{sufijo_pickers}: {dist:.0f}")
 
             if not lineas:
                 lineas = ["Esperando inicio..."]

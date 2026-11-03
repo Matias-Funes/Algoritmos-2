@@ -315,16 +315,34 @@ def _generar_pedidos(
     rng: random.Random,
 ) -> list[Pedido]:
     pedidos: list[Pedido] = []
+
+    # Llevamos un registro del stock disponible para no pasarnos
+    stock_disponible = {p.id: p.cantidad_disponible for p in productos}
+
     for i in range(1, config.n_pedidos + 1):
         prioridad = rng.randint(1, 5)
         pedido = Pedido(id=f"PED{i:03d}", prioridad=prioridad)
 
-        n_items = rng.randint(1, min(config.max_productos_por_pedido, len(productos)))
-        elegidos = rng.sample(productos, n_items)
+        # Solo podemos elegir productos que tengan al menos 1 unidad en stock
+        candidatos = [p for p in productos if stock_disponible[p.id] > 0]
+
+        # Si ya no queda stock de nada, cortamos la generación de pedidos
+        if not candidatos:
+            break
+
+        n_items = rng.randint(1, min(config.max_productos_por_pedido, len(candidatos)))
+        elegidos = rng.sample(candidatos, n_items)
+
         for prod in elegidos:
-            pedido.agregar_item(prod.id, rng.randint(1, 3))
+            # Queremos pedir entre 1 y 3, pero como máximo lo que haya en stock
+            max_a_pedir = min(3, stock_disponible[prod.id])
+            cantidad = rng.randint(1, max_a_pedir)
+
+            pedido.agregar_item(prod.id, cantidad)
+            stock_disponible[prod.id] -= cantidad  # Descontamos el stock virtual
 
         pedidos.append(pedido)
+
     return pedidos
 
 

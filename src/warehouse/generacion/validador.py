@@ -38,3 +38,17 @@ def validar_escenario(escenario: Escenario) -> None:
                     f"El pedido {pedido.id} referencia "
                     f"producto inexistente: {item.producto_id}"
                 )
+
+    # 5. Validar que la demanda total de todos los pedidos no supere el stock
+    demanda = {}
+    for pedido in escenario.pedidos:
+        for item in pedido.items:
+            demanda[item.producto_id] = demanda.get(item.producto_id, 0) + item.cantidad
+
+    for pid, cant in demanda.items():
+        if pid in w.productos:
+            if cant > w.productos[pid].cantidad_disponible:
+                raise ValueError(
+                    f"El pedido requiere {cant} unidades de {pid}, "
+                    f"pero solo hay {w.productos[pid].cantidad_disponible} en stock."
+                )

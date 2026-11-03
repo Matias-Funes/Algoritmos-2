@@ -104,11 +104,15 @@ def _generar_waves_prioridad(
             warehouse.productos[it.producto_id].peso_kg * it.cantidad
             for it in primero.items
         )
-        if (
-            primero.cantidad_total_productos() > max_productos
-            or peso_primero > max_peso_kg
-        ):
-            raise ValueError(f"El pedido {primero.id} no cabe ni en una wave vacía.")
+
+        if primero.cantidad_total_productos() > max_productos:
+            raise ValueError(
+                f"El pedido {primero.id} tiene {primero.cantidad_total_productos()} productos, supera el máximo de {max_productos}."
+            )
+        if peso_primero > max_peso_kg:
+            raise ValueError(
+                f"El pedido {primero.id} pesa {peso_primero:.2f} kg, supera el máximo de {max_peso_kg} kg."
+            )
 
         wave.agregar_pedido(primero)
 
@@ -155,11 +159,14 @@ def _generar_waves_prioridad_cercania(
             warehouse.productos[it.producto_id].peso_kg * it.cantidad
             for it in semilla.items
         )
-        if (
-            semilla.cantidad_total_productos() > max_productos
-            or peso_semilla > max_peso_kg
-        ):
-            raise ValueError(f"El pedido {semilla.id} no cabe ni en una wave vacía.")
+        if semilla.cantidad_total_productos() > max_productos:
+            raise ValueError(
+                f"El pedido {semilla.id} tiene {semilla.cantidad_total_productos()} productos, supera el máximo de {max_productos}."
+            )
+        if peso_semilla > max_peso_kg:
+            raise ValueError(
+                f"El pedido {semilla.id} pesa {peso_semilla:.2f} kg, supera el máximo de {max_peso_kg} kg."
+            )
 
         wave.agregar_pedido(semilla)
 

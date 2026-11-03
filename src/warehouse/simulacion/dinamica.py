@@ -73,6 +73,8 @@ class SimulacionDinamica:
     distancia_por_wave: dict[str, float] = field(default_factory=dict)
     max_pickers_por_wave: int = 3
     items_por_picker: int = 5
+    total_items_recogidos: int = 0
+    total_viajes: int = 0
 
     def copiar_estado(self) -> "SimulacionDinamica":
         """Hace un snapshot rápido del estado actual para poder retroceder."""
@@ -110,6 +112,8 @@ class SimulacionDinamica:
             distancia_por_wave=copia["distancia_por_wave"],
             max_pickers_por_wave=self.max_pickers_por_wave,
             items_por_picker=self.items_por_picker,
+            total_items_recogidos=self.total_items_recogidos,
+            total_viajes=self.total_viajes,
         )
 
     @classmethod
@@ -597,9 +601,12 @@ class SimulacionDinamica:
         return sum(1 for ep in self.pickers.values() if ep.wave_actual == w_id)
 
     def _cap_wave(self, w_id: str) -> int:
-        """Decisión 1=B: cap por workload."""
-        n_tareas = len(self.tareas_por_wave.get(w_id, []))
-        cap_por_carga = max(1, math.ceil(n_tareas / self.items_por_picker))
+        """Decisión 1=B: cap por workload total (suma de cantidades)."""
+        # Sumamos la cantidad total de productos a recoger en esta wave
+        total_items = sum(t.cantidad for t in self.tareas_por_wave.get(w_id, []))
+
+        # Ahora calculamos el cap en base al total de items
+        cap_por_carga = max(1, math.ceil(total_items / self.items_por_picker))
         return min(cap_por_carga, self.max_pickers_por_wave)
 
     def _wave_sort_key(self, w_id: str) -> tuple[int, str]:
@@ -609,15 +616,8 @@ class SimulacionDinamica:
         return (-max_prio, w_id)
 
     def _asignar_picker_a_wave(self, ep: EstadoPicker) -> bool:
-        """Bindea ep a la mejor wave disponible (pendiente o activa con lugar)."""
-        # 1) Waves pendientes (arrancar nuevas)
-        for w_id in sorted(self.waves_pendientes, key=self._wave_sort_key):
-            if self._pickers_en_wave(w_id) < self._cap_wave(w_id):
-                ep.wave_actual = w_id
-                self.waves_pendientes.remove(w_id)
-                self.waves_activas.add(w_id)
-                return True
-        # 2) Waves activas con cap disponible y tareas libres (7.2 = yes)
+        """Bindea ep a la mejor wave disponible."""
+        # 1) PRIORIDAD 1: Intentar unirse a una wave ACTIVA que tenga capacidad
         for w_id in sorted(self.waves_activas, key=self._wave_sort_key):
             if self._pickers_en_wave(w_id) >= self._cap_wave(w_id):
                 continue
@@ -628,6 +628,15 @@ class SimulacionDinamica:
             if hay_libres:
                 ep.wave_actual = w_id
                 return True
+
+        # 2) PRIORIDAD 2: Si no pudo unirse a ninguna, arrancar una wave pendiente
+        for w_id in sorted(self.waves_pendientes, key=self._wave_sort_key):
+            if self._pickers_en_wave(w_id) < self._cap_wave(w_id):
+                ep.wave_actual = w_id
+                self.waves_pendientes.remove(w_id)
+                self.waves_activas.add(w_id)
+                return True
+
         return False
 
     def _reclamar_tarea_de_wave(self, ep: EstadoPicker) -> Tarea | None:
@@ -816,6 +825,8 @@ class SimulacionDinamica:
                             ep.carga_kg += prod.peso_kg * cant_real
                             ep.productos_recogidos.add(ep.tarea_actual.producto_id)
                             ep.tarea_actual.cantidad -= cant_real
+                            # Sumamos las unidades físicas reales recogidas
+                            self.total_items_recogidos += cant_real
                             if ep.tarea_actual.cantidad > 0:
                                 ep.tarea_actual.asignada_a = None
                             else:
@@ -829,6 +840,7 @@ class SimulacionDinamica:
                             self.peso_en_zona[zona.id] += ep.carga_kg
                             self.cajas_en_zona[ep.nodo_actual] = self.cajas_en_zona.get(ep.nodo_actual, 0) + 1
                             self.productos_entregados.update(ep.productos_recogidos)
+                            self.total_viajes += 1
                             puerta_nodo = self._nodo_entrega_zona(zona)
                             ep.camino_actual = self._path_desde_zona_a_puerta(zona, ep.nodo_actual, puerta_nodo)
                             ep.fase = "SALIENDO_DE_ZONA"

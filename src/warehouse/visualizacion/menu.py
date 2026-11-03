@@ -105,7 +105,7 @@ class MenuConfig(ctk.CTk):
 
         ctk.CTkLabel(
             ventana,
-            text="Integrantes\nJulieta Forconesi\nJonathan Cornejo\nMatías Funes\nCésar Flores",
+            text="Integrantes:\nJulieta Forconesi\nJonathan Cornejo\nMatías Funes\nCésar Flores",
             font=ctk.CTkFont(family="Segoe UI", size=15),
             justify="center",
         ).pack(pady=8)
@@ -153,6 +153,8 @@ class MenuConfig(ctk.CTk):
         self.entry_alto = add_dropdown("Altura del Warehouse:", ["16", "20", "24", "28", "32"], "16")
         self.entry_pedidos = add_input("Cantidad de Pedidos:", "30")
         self.entry_seed = add_input("Semilla (Seed):", "42")
+        self.entry_max_ped_wave = add_input("Máximo de Pedidos por Wave:", "3")
+        self.entry_max_prod_wave = add_input("Máximo de Productos por Wave:", "20")
         self.entry_zonas = add_dropdown("Cantidad de Zonas de Despacho:", ["1", "2", "3", "4"], "1")
         self.entry_rack_alto = add_dropdown("Alto del Rack:", ["4", "5", "6", "7", "8"], "6")
         self.entry_pickers = add_input("Cantidad de Pickers:", "2")
@@ -188,6 +190,11 @@ class MenuConfig(ctk.CTk):
         )
         self.chk_random.pack(side="left", padx=10)
 
+        # Checkbox para Split
+        self.var_split_load = ctk.BooleanVar(value=False)
+        self.chk_split = ctk.CTkCheckBox(self.frame_opts, text="Permitir Split", variable=self.var_split_load)
+        self.chk_split.pack(side="left", padx=10)
+
         ctk.CTkLabel(self.frame_opts, text="Estrategia:").pack(
             side="left", padx=(10, 5)
         )
@@ -195,6 +202,17 @@ class MenuConfig(ctk.CTk):
             self.frame_opts, values=["vecino_mas_cercano", "orden_pedidos"], width=150
         )
         self.combo_estrategia_load.pack(side="left")
+
+        # En frame_opts:
+        ctk.CTkLabel(self.frame_opts, text="Max Ped/Wave:").pack(side="left", padx=(10, 2))
+        self.entry_max_ped_load = ctk.CTkEntry(self.frame_opts, width=40)
+        self.entry_max_ped_load.insert(0, "3")
+        self.entry_max_ped_load.pack(side="left")
+
+        ctk.CTkLabel(self.frame_opts, text="Max Prod/Wave:").pack(side="left", padx=(10, 2))
+        self.entry_max_prod_load = ctk.CTkEntry(self.frame_opts, width=40)
+        self.entry_max_prod_load.insert(0, "20")
+        self.entry_max_prod_load.pack(side="left")
 
         # Tabview con comando para detectar cambio de pestaña
         self.tabview = ctk.CTkTabview(
@@ -258,9 +276,13 @@ class MenuConfig(ctk.CTk):
         if tab_actual == "Partidas Guardadas":
             self.chk_random.configure(state="disabled")
             self.combo_estrategia_load.configure(state="disabled")
+            self.chk_split.configure(state="disabled")
+            self.entry_max_ped_load.configure(state="disabled")
+            self.entry_max_prod_load.configure(state="disabled")
         else:
             self.chk_random.configure(state="normal")
             self.combo_estrategia_load.configure(state="normal")
+            self.chk_split.configure(state="normal")
 
     def _seleccionar_archivo(self, ruta: str, boton: ctk.CTkButton):
         # Si había un botón seleccionado antes, lo despintamos
@@ -380,16 +402,22 @@ class MenuConfig(ctk.CTk):
         try:
             rack_alto = int(self.entry_rack_alto.get())
 
+            # Calculamos la altura mínima necesaria
+            alto_minimo = 5 + rack_alto + 5 + 1
+            alto_elegido = int(self.entry_alto.get())
+
+            # Si el usuario eligió una altura muy chica, la forzamos
+            alto_final = max(alto_elegido, alto_minimo)
+
             cfg = ConfigGeneracion(
                 n_bloques_racks=int(self.entry_bloques.get()),
-                alto=int(self.entry_alto.get()),
+                alto=alto_final,
                 margen_inferior=5,
                 margen_superior=5,
                 n_pedidos=int(self.entry_pedidos.get()),
                 seed=int(self.entry_seed.get()),
                 n_zonas=int(self.entry_zonas.get()),
                 n_pickers=int(self.entry_pickers.get()),
-                # Auto-calculamos el pasillo horizontal para que el rack tenga el alto elegido
                 cada_cuantas_filas_pasillo_horizontal=(rack_alto + 1)
             )
 
@@ -399,13 +427,21 @@ class MenuConfig(ctk.CTk):
 
             max_peso = max([p.capacidad_carga_kg for p in self.escenario.pickers]) if self.escenario.pickers else 500.0
 
+            max_ped_wave = int(self.entry_max_ped_wave.get())
+            max_prod_wave = int(self.entry_max_prod_wave.get())
+
             if self.var_split.get():
                 waves, items_por_wave = generar_waves_con_split(
-                    self.escenario.pedidos, self.escenario.warehouse, 3, 20, max_peso, EstrategiaWaves.PRIORIDAD_Y_CERCANIA
+                    self.escenario.pedidos, self.escenario.warehouse,
+                    max_ped_wave, max_prod_wave, max_peso, EstrategiaWaves.PRIORIDAD_Y_CERCANIA
                 )
                 validar_cobertura_waves(self.escenario.pedidos, items_por_wave)
             else:
-                waves = generar_waves(self.escenario.pedidos, self.escenario.warehouse, 3, 20, max_peso, EstrategiaWaves.PRIORIDAD_Y_CERCANIA)
+                # CORREGIDO: Usa max_ped_wave y max_prod_wave
+                waves = generar_waves(
+                    self.escenario.pedidos, self.escenario.warehouse,
+                    max_ped_wave, max_prod_wave, max_peso, EstrategiaWaves.PRIORIDAD_Y_CERCANIA
+                )
                 items_por_wave = None
 
             self.escenario.waves = waves
@@ -419,9 +455,62 @@ class MenuConfig(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo generar el escenario:\n{e}")
 
+    def _ajustar_stock_escenario(self, escenario) -> list[str]:
+        """Recorre los pedidos y ajusta las cantidades si superan el stock."""
+        advertencias = []
+        # Copiamos el stock para ir descontándolo a medida que revisamos pedidos
+        stock_restante = {
+            pid: prod.cantidad_disponible
+            for pid, prod in escenario.warehouse.productos.items()
+        }
+
+        pedidos_validos = []
+        for pedido in escenario.pedidos:
+            items_validos = []
+            for item in pedido.items:
+                pid = item.producto_id
+                cant_pedida = item.cantidad
+                stock_disp = stock_restante.get(pid, 0)
+
+                if cant_pedida > stock_disp:
+                    cant_ajustada = stock_disp
+                    advertencias.append(
+                        f"Pedido {pedido.id}: {pid} requería {cant_pedida}, ajustado a {cant_ajustada}."
+                    )
+                    if cant_ajustada > 0:
+                        item.cantidad = cant_ajustada
+                        stock_restante[pid] = 0
+                        items_validos.append(item)
+                    # Si cant_ajustada es 0, el item no se agrega (se elimina del pedido)
+                else:
+                    stock_restante[pid] -= cant_pedida
+                    items_validos.append(item)
+
+            pedido.items = items_validos
+            if pedido.items:
+                pedidos_validos.append(pedido)
+            else:
+                advertencias.append(f"Pedido {pedido.id} eliminado porque no quedó stock de sus productos.")
+
+        escenario.pedidos = pedidos_validos
+        return advertencias
+
     def _cargar_desde_path(self, path: str):
         try:
             self.escenario = cargar_escenario(path)
+
+            # 1. Ajustamos el stock (y guardamos los mensajes de advertencia)
+            advertencias = self._ajustar_stock_escenario(self.escenario)
+
+            # 2. Validamos el escenario (ahora ya no fallará por stock)
+            validar_escenario(self.escenario)
+
+            # 3. Mostramos el cartel amarillo de advertencia si hubo cambios
+            if advertencias:
+                messagebox.showwarning(
+                    "Stock Insuficiente",
+                    "Se ajustaron los siguientes pedidos por falta de stock:\n\n" + "\n".join(advertencias)
+                )
 
             # Si es una partida guardada (tiene sesion), usamos SUS datos.
             # Si es un escenario base, usamos los de la UI.
@@ -438,26 +527,34 @@ class MenuConfig(ctk.CTk):
                     if self.escenario.pickers
                     else 500.0
                 )
-                self.escenario.waves = generar_waves(
-                    self.escenario.pedidos,
-                    self.escenario.warehouse,
-                    self.escenario.wave_config.max_pedidos,
-                    self.escenario.wave_config.max_productos,
-                    max_peso,
-                    EstrategiaWaves.PRIORIDAD_Y_CERCANIA,
-                )
 
-            # Determinar si usamos inicio aleatorio (prioriza lo guardado en el JSON)
-            self.posiciones_aleatorias = self.var_random_load.get()
-            if self.escenario.sesion:
-                self.posiciones_aleatorias = self.escenario.sesion.posiciones_aleatorias
+                max_ped = int(self.entry_max_ped_load.get())
+                max_prod = int(self.entry_max_prod_load.get())
+
+                if self.var_split_load.get():
+                    waves, items_por_wave = generar_waves_con_split(
+                        self.escenario.pedidos, self.escenario.warehouse,
+                        max_ped, max_prod, max_peso, EstrategiaWaves.PRIORIDAD_Y_CERCANIA
+                    )
+                    validar_cobertura_waves(self.escenario.pedidos, items_por_wave)
+                else:
+                    waves = generar_waves(
+                        self.escenario.pedidos, self.escenario.warehouse,
+                        max_ped, max_prod, max_peso, EstrategiaWaves.PRIORIDAD_Y_CERCANIA
+                    )
+                    items_por_wave = None
+
+                self.escenario.waves = waves
+            else:
+                # Si ya venía con waves (ej: partida guardada), no usamos split manual
+                items_por_wave = None
 
             self.simulacion = SimulacionDinamica.desde_waves(
                 waves=self.escenario.waves,
                 pickers=self.escenario.pickers,
                 warehouse=self.escenario.warehouse,
                 posiciones_aleatorias=self.posiciones_aleatorias,
-                items_por_wave=None,
+                items_por_wave=items_por_wave,
             )
 
             # FAST-FORWARD: Avanzar hasta el paso guardado

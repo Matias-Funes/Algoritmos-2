@@ -294,3 +294,23 @@ class Warehouse:
             if vecino is not None:
                 self.grafo.agregar_arista(nid, vecino, peso=1.0)
         return nid
+
+    def print_ascii(self):
+        # Imprime el mapa en consola para debug
+        for y in range(self.alto - 1, -1, -1):
+            linea = ""
+            for x in range(self.ancho):
+                key = (x, y)
+                if key in self._racks_ocupados:
+                    linea += " # "
+                elif key in self._nodo_por_xy:
+                    nodo = self.grafo.nodo(self._nodo_por_xy[key])
+                    if nodo.tipo == TipoNodo.DESPACHO:
+                        linea += " D "
+                    elif nodo.tipo == TipoNodo.PUERTA:
+                        linea += " P "
+                    else:
+                        linea += " . "
+                else:
+                    linea += "   "
+            print(f"y={y:02d} {linea}")
