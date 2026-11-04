@@ -70,9 +70,10 @@ def _crear_pickers(datos_pickers: list[dict[str, Any]]) -> list[Picker]:
             posicion = (posicion["x"], posicion["y"])
         pickers.append(
             Picker(
-                datos["id"],
-                tuple(posicion),
-                datos["capacidad_carga_kg"],
+                picker_id=datos["id"],
+                posicion_inicial=tuple(posicion),
+                capacidad_carga_kg=datos["capacidad_carga_kg"],
+                prioridad=datos.get("prioridad", 1), # <-- CORRECCIÓN A: Lee la prioridad del JSON
             )
         )
     return pickers
@@ -139,9 +140,11 @@ def _crear_waves(
 
     for pedido in pedidos:
         peso_pedido = pedido.peso_total(inventario)
+        
+        # CORRECCIÓN B: Priorizamos a los pickers con mayor prioridad al asignar waves
         candidatos = sorted(
             pickers,
-            key=lambda picker: (carga_wave_actual[picker.id], picker.id),
+            key=lambda picker: (-picker.prioridad, carga_wave_actual[picker.id], picker.id),
         )
         candidatos = [
             picker
@@ -213,8 +216,6 @@ def _crear_fases_simulacion(
             asignaciones[picker.id] = wave.pedidos
         fases.append({"asignaciones": asignaciones})
 
-    # También permite abrir escenarios sin pedidos: la ventana mostrará el
-    # almacén y la simulación finalizará sin movimientos.
     return fases or [{"asignaciones": {}}]
 
 
