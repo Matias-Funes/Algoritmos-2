@@ -174,7 +174,7 @@ class Warehouse:
             for x in range(ancho_x):
                 fila.append(Cell(x, y))
             self.grid.append(fila)
-
+        
         self.racks = {}
         self.pasillos = {}
         self.puertas = {}

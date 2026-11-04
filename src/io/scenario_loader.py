@@ -14,7 +14,8 @@ Uso:
 """
 
 import json
-
+#A: deberiamos eliminar esto porque ya se creo warehouse y cell o lo dejamos 
+#por buena practica? 
 from src.io._deps import Pasillo, Puerta, Rack, Warehouse, ZonaDespacho
 
 
