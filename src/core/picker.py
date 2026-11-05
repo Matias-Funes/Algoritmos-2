@@ -6,16 +6,18 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from core.inventory import Producto
 
-
 class Picker:
     def __init__(
         self,
         picker_id: str,
         posicion_inicial: tuple[int, int],
         capacidad_carga_kg: float,
+        prioridad: int = 1,
     ) -> None:
         if not isinstance(picker_id, str) or not picker_id:
             raise ValueError("El id del picker debe ser un string no vacío.")
+        
+        # Aquí se llamaba al método que faltaba
         self._validar_posicion(posicion_inicial)
         self._validar_peso(
             capacidad_carga_kg,
@@ -23,11 +25,14 @@ class Picker:
         )
         if capacidad_carga_kg <= 0:
             raise ValueError("La capacidad de carga debe ser un número finito positivo.")
+        if not isinstance(prioridad, int) or prioridad <= 0:
+            raise ValueError("La prioridad debe ser un entero positivo.")
 
         self.id = picker_id
         self.posicion_inicial = posicion_inicial
         self.posicion_actual = posicion_inicial
         self.capacidad_carga_kg = float(capacidad_carga_kg)
+        self.prioridad = prioridad
         self.carga_actual_kg = 0.0
         self.items_transportados: list[tuple[str, int]] = []
 
@@ -108,6 +113,7 @@ class Picker:
             "posicion_inicial": list(self.posicion_inicial),
             "posicion_actual": list(self.posicion_actual),
             "capacidad_carga_kg": self.capacidad_carga_kg,
+            "prioridad": self.prioridad,
             "carga_actual_kg": self.carga_actual_kg,
             "items_transportados": [
                 [producto_id, cantidad]
@@ -122,6 +128,7 @@ class Picker:
                 datos["id"],
                 tuple(datos["posicion_inicial"]),
                 datos["capacidad_carga_kg"],
+                prioridad=datos.get("prioridad", 1),
             )
             picker.mover_a(tuple(datos["posicion_actual"]))
             carga_actual = datos["carga_actual_kg"]
@@ -158,73 +165,3 @@ class Picker:
             raise ValueError(
                 f"Falta el campo requerido del picker: {error.args[0]}."
             ) from error
-
-
-
-
-
-
-
-
-
-
-#demo de picker para probar que funciona correctamente, se puede ejecutar este archivo directamente
-def _demo_picker() -> None:
-    if not __package__:
-        import sys
-        from pathlib import Path
-
-        raiz_proyecto = Path(__file__).resolve().parents[2]
-        sys.path.insert(0, str(raiz_proyecto))
-
-    from src.core.inventory import Producto
-
-    print("DEMO DE PICKER")
-    print("==============")
-    monitor = Producto("P001", "Monitor", "R1", (3, 5, 1), 10, 6.5)
-    teclado = Producto("P002", "Teclado", "R1", (3, 6, 1), 10, 1.2)
-    picker = Picker("PK_01", (0, 0), 15.0)
-
-    print("\n1. Constructor")
-    print(f"Picker creado: {picker.id}")
-    print(f"Posición inicial y actual: {picker.posicion_inicial}")
-    print(f"Capacidad: {picker.capacidad_carga_kg:.2f} kg")
-    print(f"Carga inicial: {picker.carga_actual_kg:.2f} kg")
-    print(f"Items iniciales: {picker.items_transportados}")
-
-    print("\n2. puede_recoger")
-    puede_cargar_monitor = picker.puede_recoger(monitor, 2)
-    print(f"¿Puede recoger 2 monitores? {puede_cargar_monitor}")
-
-    print("\n3. recoger")
-    picker.recoger(monitor, 2)
-    picker.recoger(teclado, 1)
-    print(f"Items transportados: {picker.items_transportados}")
-    print(f"Carga actual: {picker.carga_actual_kg:.2f} kg")
-
-    puede_exceder = picker.puede_recoger(monitor, 1)
-    print(f"¿Puede recoger 1 monitor más? {puede_exceder}")
-    try:
-        picker.recoger(monitor, 1)
-    except ValueError as error:
-        print(f"recoger rechaza el exceso: {error}")
-
-    print("\n4. mover_a")
-    picker.mover_a((4, 7))
-    print(f"Nueva posición: {picker.posicion_actual}")
-
-    print("\n5. to_dict y from_dict")
-    datos = picker.to_dict()
-    print(f"Picker serializado: {datos}")
-    picker_restaurado = Picker.from_dict(datos)
-    print(f"Picker restaurado: {picker_restaurado.to_dict()}")
-
-    print("\n6. descargar")
-    items_descargados = picker.descargar()
-    print(f"Items descargados: {items_descargados}")
-    print(f"Carga después de descargar: {picker.carga_actual_kg:.2f} kg")
-    print(f"Items restantes: {picker.items_transportados}")
-
-
-if __name__ == "__main__":
-    _demo_picker()

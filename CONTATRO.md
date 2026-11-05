@@ -1,28 +1,3 @@
-# Contrato de Interfaces — Sistema de Wave Picking
-
-**Proyecto**: Sistema de Wave Picking (UNCUYO — Algoritmos y Estructuras de Datos 2)
-**Versión**: 1.0
-**Fecha**: [COMPLETAR]
-**Estado**: CONGELADO — no cambiar sin avisar al equipo
-
----
-
-## Reglas del contrato
-
-1. Cada módulo **expone** las clases y funciones listadas acá.
-2. **Solo el dueño del módulo** modifica sus archivos.
-3. Si alguien necesita cambiar una firma, **avisa al grupo primero** y se actualiza este archivo.
-4. Los tipos entre paréntesis son **orientativos** (Python no los valida).
-5. Los imports entre módulos deben respetar las flechas del diagrama:
-
----
-
-## ETAPA 1 — Modelo físico y carga
-
-### `src/core/cell.py` — dueño: [A]
-
-**Constantes de módulo**:
-```python
 # Tipos de celda
 VACIA, PASILLO, RACK, PUERTA, DESPACHO   # strings
 
@@ -350,4 +325,3 @@ if __name__ == "__main__":
   "configuracion": {"wave_max_pedidos": int,
                     "wave_max_productos": int}
 }
-
