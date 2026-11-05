@@ -1,14 +1,13 @@
 # src/ui/visualization.py
-# src/ui/visualization.py
-import tkinter as tk
-from tkinter import messagebox
 import sys
+import tkinter as tk
 from pathlib import Path
+from tkinter import messagebox, ttk
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from src.core.cell import PASILLO, RACK, PUERTA, DESPACHO, N, S, E, O, AMBOS
+from src.core.cell import AMBOS, DESPACHO, PASILLO, PUERTA, RACK, E, N, O, S
 
 COLOR_VOLVER_TERMINADA = "#10b981"
 
@@ -49,6 +48,13 @@ class Ventana(tk.Frame):
         tk.Button(frame_btn, text="⏯ Continuar", command=self.btn_continuar).grid(row=1, column=0, sticky="ew", pady=2, padx=2)
         tk.Button(frame_btn, text="🔄 Reiniciar", command=self.btn_reset).grid(row=1, column=1, sticky="ew", pady=2, padx=2)
         tk.Button(frame_btn, text="⏭ Paso a Paso", command=self.btn_paso).grid(row=2, column=0, columnspan=2, sticky="ew", pady=2, padx=2)
+        tk.Button(
+            frame_btn,
+            text="📊 Comparar Estrategias",
+            command=self.btn_comparar_estrategias,
+            bg="#e0f2fe", # Un color celestito para que resalte
+            font=("Arial", 9, "bold")
+        ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 2), padx=2)
 
         frame_btn.columnconfigure(0, weight=1)
         frame_btn.columnconfigure(1, weight=1)
@@ -122,6 +128,92 @@ class Ventana(tk.Frame):
         if self.simulacion:
             self.simulacion.resetear()
             self.actualizar_desde_simulacion()
+
+    def btn_comparar_estrategias(self):
+        if not self.simulacion:
+            return
+        comparar = getattr(self.simulacion, "comparar_estrategias", None)
+        if comparar is None:
+            messagebox.showinfo("No disponible", "Esta simulación no expone la comparación.")
+            return
+
+        try:
+            resultado = comparar()
+        except Exception as exc:
+            messagebox.showerror("Error al comparar", str(exc), parent=self.root)
+            return
+
+        self._mostrar_comparacion(resultado)
+
+
+    def _mostrar_comparacion(self, comparacion):
+        if not comparacion.get("totales"):
+            messagebox.showinfo("Sin datos", "No hay waves para comparar.", parent=self.root)
+            return
+
+        totales = comparacion["totales"]
+        nombres = list(totales)
+
+        # Crear ventana emergente
+        ventana = tk.Toplevel(self.root)
+        ventana.title("Comparación de Estrategias")
+        ventana.geometry("600x400")
+        ventana.minsize(400, 300) # Tamaño mínimo para que no se rompa
+        ventana.transient(self.root) # Que quede adelante
+
+        # Frame principal
+        frame = tk.Frame(ventana, padx=20, pady=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        # Título
+        tk.Label(frame, text="Resumen de Estrategias", font=("Arial", 14, "bold")).pack(pady=(0, 15))
+
+        # Diccionario para mostrar nombres claros en la UI
+        nombres_ui = {
+            "A": "A (Orden de pedidos)",
+            "B": "B (Vecino más cercano)"
+        }
+
+        # --- TABLA (Treeview) ---
+        # Usamos los nombres claros en los encabezados
+        columnas = ["Métrica"] + [nombres_ui.get(n, f"Estrategia {n}") for n in nombres]
+        tabla = ttk.Treeview(frame, columns=columnas, show="headings", height=6)
+
+        for col in columnas:
+            tabla.heading(col, text=col)
+            tabla.column(col, anchor="center", width=150) # Un poco más ancho para que entre el texto
+
+        # Insertar datos
+        filas = [
+            ("Tiempo total (ms)", "tiempo_ms", "{:.3f}"),
+            ("Distancia total", "distancia", "{}"),
+            ("Nodos visitados", "nodos", "{}"),
+            ("Aristas recorridas", "aristas", "{}"),
+        ]
+
+        for etiqueta, clave, fmt in filas:
+            valores = [etiqueta] + [fmt.format(totales[n].get(clave, 0)) for n in nombres]
+            tabla.insert("", tk.END, values=valores)
+
+        tabla.pack(fill=tk.BOTH, expand=True)
+
+        # --- Ganadores ---
+        ganadores_frame = tk.Frame(frame, pady=10)
+        ganadores_frame.pack(fill=tk.X)
+
+        ganador_dist = comparacion.get('ganador_distancia', '-')
+        ganador_tiempo = comparacion.get('ganador_tiempo', '-')
+
+        texto_dist = f"🏆 Ganador distancia: {nombres_ui.get(ganador_dist, ganador_dist)}"
+        texto_tiempo = f"⏱️ Ganador tiempo: {nombres_ui.get(ganador_tiempo, ganador_tiempo)}"
+
+        tk.Label(ganadores_frame, text=texto_dist,
+                 font=("Arial", 11, "bold"), fg="#0ea5e9").pack(anchor="w")
+        tk.Label(ganadores_frame, text=texto_tiempo,
+                 font=("Arial", 11, "bold"), fg="#0ea5e9").pack(anchor="w")
+
+        # Botón cerrar
+        tk.Button(frame, text="Cerrar", command=ventana.destroy, width=15).pack(pady=(10, 0))
 
     # --- Volver al menú ---
     def _simulacion_terminada(self, estado=None):

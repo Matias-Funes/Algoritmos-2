@@ -6,16 +6,14 @@ import argparse
 from pathlib import Path
 from typing import Any, Callable
 
-from src.algorithms.pathfinding import (
-    CacheDistancias,
-)
+from src.algorithms.pathfinding import CacheDistancias
+from src.controlador import Controlador
 from src.core.graph_builder import construir_grafo
 from src.core.inventory import GestorInventario, Producto
 from src.core.order import Orden
 from src.core.picker import Picker
 from src.core.wave import Wave
 from src.io.scenario_loader import cargar_escenario
-from src.controlador import Controlador
 from src.simulation.simulation import Simulation
 
 
@@ -140,7 +138,7 @@ def _crear_waves(
 
     for pedido in pedidos:
         peso_pedido = pedido.peso_total(inventario)
-        
+
         # CORRECCIÓN B: Priorizamos a los pickers con mayor prioridad al asignar waves
         candidatos = sorted(
             pickers,
@@ -253,6 +251,9 @@ class _SimulationTk:
         fases: list[dict[str, Any]],
         cache_distancias: CacheDistancias,
         puntos_despacho: dict[str, list[tuple[int, int]]],
+        grafo: Any = None,
+        inventario: Any = None,
+        waves: list[Wave] | None = None,
         intervalo_ms: int = 250,
     ) -> None:
         self.warehouse = warehouse
@@ -262,6 +263,9 @@ class _SimulationTk:
         self.cache_distancias = cache_distancias
         self.puntos_despacho = puntos_despacho
         self.intervalo_ms = intervalo_ms
+        self.grafo = grafo
+        self.inventario = inventario
+        self.waves = list(waves or [])
         self.fase_actual = 0
         self._root = None
         self._actualizar_interfaz: Callable[[], None] | None = None
@@ -470,6 +474,16 @@ class _SimulationTk:
         else:
             self._en_ejecucion = False
 
+    def comparar_estrategias(self):
+        if self.grafo is None or self.inventario is None or not self.waves:
+            return {"por_wave": [], "totales": {},
+                    "ganador_distancia": None, "ganador_tiempo": None,
+                    "errores": []}
+        from src.utils.benchmark import comparar_estrategias
+        return comparar_estrategias(
+            self.grafo, self.waves, self.warehouse, self.inventario
+        )
+
 
 def construir_simulacion(ruta_escenario: Path) -> tuple[Any, _SimulationTk]:
     """Carga un escenario JSON y arma el warehouse y la simulación.
@@ -524,6 +538,9 @@ def construir_simulacion(ruta_escenario: Path) -> tuple[Any, _SimulationTk]:
         fases=fases,
         cache_distancias=cache,
         puntos_despacho=puntos_despacho,
+        grafo=grafo,
+        inventario=inventario,
+        waves=waves,
     )
     return warehouse, simulacion
 
