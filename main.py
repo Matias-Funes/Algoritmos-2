@@ -1,4 +1,4 @@
-"""Punto de entrada que integra los módulos del Wave Picking System."""
+"""Punto de entrada: abre la aplicación (menú, configuración y simulación)."""
 
 from __future__ import annotations
 
@@ -6,9 +6,8 @@ import argparse
 from pathlib import Path
 from typing import Any, Callable
 
-from src.algorithms.pathfinding import (
-    CacheDistancias,
-)
+from src.algorithms.pathfinding import CacheDistancias
+from src.controlador import Controlador
 from src.core.graph_builder import construir_grafo
 from src.core.inventory import GestorInventario, Producto
 from src.core.order import Orden
@@ -16,7 +15,6 @@ from src.core.picker import Picker
 from src.core.wave import Wave
 from src.io.scenario_loader import cargar_escenario
 from src.simulation.simulation import Simulation
-from src.ui.visualization import Ventana
 
 
 def _crear_productos(datos_productos: list[dict[str, Any]]) -> list[Producto]:
@@ -73,7 +71,7 @@ def _crear_pickers(datos_pickers: list[dict[str, Any]]) -> list[Picker]:
                 picker_id=datos["id"],
                 posicion_inicial=tuple(posicion),
                 capacidad_carga_kg=datos["capacidad_carga_kg"],
-                prioridad=datos.get("prioridad", 1), # Lee la prioridad del JSON
+                prioridad=datos.get("prioridad", 1), # <-- CORRECCIÓN A: Lee la prioridad del JSON
             )
         )
     return pickers
@@ -107,7 +105,12 @@ def _crear_waves(
     inventario: GestorInventario,
     configuracion: dict[str, Any],
 ) -> tuple[list[Wave], dict[str, list[Orden]], dict[str, list[Wave]]]:
-    """Distribuye pedidos en waves sin limitar su peso a la carga del picker."""
+    """Distribuye pedidos en waves sin limitar su peso a la carga del picker.
+
+    El picker puede completar el trabajo de una wave en varios viajes. Cada
+    unidad individual debe caber en al menos un picker; los límites de cantidad
+    de pedidos/productos de la wave siguen vigentes.
+    """
     max_pedidos = configuracion.get("wave_max_pedidos", len(pedidos) or 1)
     max_productos = configuracion.get("wave_max_productos", 1)
     if (
@@ -135,8 +138,8 @@ def _crear_waves(
 
     for pedido in pedidos:
         peso_pedido = pedido.peso_total(inventario)
-        
-        # Priorizamos a los pickers con mayor prioridad al asignar waves
+
+        # CORRECCIÓN B: Priorizamos a los pickers con mayor prioridad al asignar waves
         candidatos = sorted(
             pickers,
             key=lambda picker: (-picker.prioridad, carga_wave_actual[picker.id], picker.id),
@@ -248,6 +251,9 @@ class _SimulationTk:
         fases: list[dict[str, Any]],
         cache_distancias: CacheDistancias,
         puntos_despacho: dict[str, list[tuple[int, int]]],
+        grafo: Any = None,
+        inventario: Any = None,
+        waves: list[Wave] | None = None,
         intervalo_ms: int = 250,
     ) -> None:
         self.warehouse = warehouse
@@ -257,6 +263,9 @@ class _SimulationTk:
         self.cache_distancias = cache_distancias
         self.puntos_despacho = puntos_despacho
         self.intervalo_ms = intervalo_ms
+        self.grafo = grafo
+        self.inventario = inventario
+        self.waves = list(waves or [])
         self.fase_actual = 0
         self._root = None
         self._actualizar_interfaz: Callable[[], None] | None = None
@@ -338,6 +347,7 @@ class _SimulationTk:
         )
         estado["distancia"] = self._distancia_acumulada + distancia_en_fase
         estado["total_productos"] = self._total_productos
+        estado["terminada"] = self._fase_completada
         estado["wave_actual"] = self.fase_actual + 1
         estado["waves_totales"] = len(self.fases)
         estado["faltantes"] = list(self._faltantes_acumulados)
@@ -353,8 +363,6 @@ class _SimulationTk:
         estado_pickers = {
             picker["id"]: picker for picker in estado["pickers"]
         }
-        
-        # Acá se arma el diccionario que lee la UI. 
         estado["pickers"] = [
             {
                 "id": picker.id,
@@ -376,10 +384,6 @@ class _SimulationTk:
                 "activo": estado_pickers.get(picker.id, {}).get(
                     "activo", False
                 ),
-                # --- ACÁ ESTÁ LA LÍNEA MÁGICA QUE FALTABA ---
-                "recolectando": estado_pickers.get(picker.id, {}).get(
-                    "recolectando", False
-                )
             }
             for picker in self.pickers
         ]
@@ -470,76 +474,23 @@ class _SimulationTk:
         else:
             self._en_ejecucion = False
 
-
-def _seleccionar_escenario(raiz_proyecto: Path) -> Path:
-    """Muestra los escenarios JSON disponibles y devuelve el elegido."""
-    carpeta_escenarios = raiz_proyecto / "data" / "scenarios"
-    escenarios = sorted(
-        carpeta_escenarios.glob("*.json"),
-        key=lambda ruta: ruta.name.casefold(),
-    )
-    if not escenarios:
-        raise FileNotFoundError(
-            f"No hay escenarios .json en {carpeta_escenarios}."
+    def comparar_estrategias(self):
+        if self.grafo is None or self.inventario is None or not self.waves:
+            return {"por_wave": [], "totales": {},
+                    "ganador_distancia": None, "ganador_tiempo": None,
+                    "errores": []}
+        from src.utils.benchmark import comparar_estrategias
+        return comparar_estrategias(
+            self.grafo, self.waves, self.warehouse, self.inventario
         )
 
-    print("\nEscenarios disponibles:")
-    for indice, ruta in enumerate(escenarios, start=1):
-        print(f"  {indice}. {ruta.name}")
-    print("También puedes escribir una ruta a un archivo JSON.")
 
-    while True:
-        seleccion = input(
-            f"Elige un escenario [1-{len(escenarios)}] "
-            "(Enter para el primero): "
-        ).strip()
-        if not seleccion:
-            return escenarios[0]
+def construir_simulacion(ruta_escenario: Path) -> tuple[Any, _SimulationTk]:
+    """Carga un escenario JSON y arma el warehouse y la simulación.
 
-        try:
-            indice = int(seleccion)
-        except ValueError:
-            ruta_escrita = Path(seleccion)
-            if ruta_escrita.name == seleccion:
-                coincidencias = [
-                    ruta
-                    for ruta in escenarios
-                    if ruta.name.casefold() == seleccion.casefold()
-                ]
-                if coincidencias:
-                    return coincidencias[0]
-            if not ruta_escrita.is_absolute():
-                ruta_escrita = raiz_proyecto / ruta_escrita
-            if ruta_escrita.is_file() and ruta_escrita.suffix.casefold() == ".json":
-                return ruta_escrita
-            print("No se encontró un escenario JSON con ese nombre o ruta.")
-            continue
-
-        if 1 <= indice <= len(escenarios):
-            return escenarios[indice - 1]
-        print(f"Selecciona un número entre 1 y {len(escenarios)}.")
-
-
-def main() -> None:
-    """Ejecuta la integración completa y abre la interfaz de Tkinter."""
-    raiz_proyecto = Path(__file__).resolve().parent
-    parser = argparse.ArgumentParser(description="Wave Picking System")
-    parser.add_argument(
-        "escenario",
-        nargs="?",
-        help=(
-            "Ruta a un escenario JSON. Si se omite, se muestra la lista "
-            "de escenarios disponibles."
-        ),
-    )
-    argumentos = parser.parse_args()
-    if argumentos.escenario:
-        ruta_escenario = Path(argumentos.escenario)
-        if not ruta_escenario.is_absolute():
-            ruta_escenario = raiz_proyecto / ruta_escenario
-    else:
-        ruta_escenario = _seleccionar_escenario(raiz_proyecto)
-
+    Devuelve (warehouse, simulacion). La simulación todavía no está vinculada a
+    ninguna ventana: de eso se encarga el controlador al abrir la visualización.
+    """
     print("=== Wave Picking System ===")
     print(f"1. Cargando escenario: {ruta_escenario}")
     warehouse, productos_raw, pedidos_raw, pickers_raw, configuracion = (
@@ -587,16 +538,38 @@ def main() -> None:
         fases=fases,
         cache_distancias=cache,
         puntos_despacho=puntos_despacho,
+        grafo=grafo,
+        inventario=inventario,
+        waves=waves,
     )
+    return warehouse, simulacion
 
-    print("7. Abriendo visualización Tkinter")
-    ventana = Ventana(warehouse, tamano_celda=16)
-    simulacion.vincular_interfaz(
-        ventana.root, ventana.actualizar_desde_simulacion
+
+def main() -> None:
+    """Abre la aplicación empezando por el menú."""
+    raiz_proyecto = Path(__file__).resolve().parent
+    parser = argparse.ArgumentParser(description="Wave Picking System")
+    parser.add_argument(
+        "escenario",
+        nargs="?",
+        help=(
+            "Ruta opcional a un escenario JSON que aparece ya cargado en el "
+            "menú. Si se omite, se elige con el botón 'Cargar JSON'."
+        ),
     )
-    ventana.set_simulacion(simulacion)
-    ventana.actualizar_desde_simulacion()
-    ventana.iniciar()
+    argumentos = parser.parse_args()
+
+    controlador = Controlador(
+        constructor_simulacion=construir_simulacion,
+        tamano_celda=16,
+        carpeta_json=raiz_proyecto / "data" / "scenarios",
+    )
+    if argumentos.escenario:
+        ruta_escenario = Path(argumentos.escenario)
+        if not ruta_escenario.is_absolute():
+            ruta_escenario = raiz_proyecto / ruta_escenario
+        controlador.ruta_json = str(ruta_escenario)
+    controlador.iniciar()
 
 
 if __name__ == "__main__":

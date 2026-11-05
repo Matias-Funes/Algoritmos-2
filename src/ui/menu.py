@@ -1,0 +1,80 @@
+
+# src/ui/menu.py
+# Vista del menú de bienvenida (solo tkinter).
+import tkinter as tk
+from tkinter import messagebox
+
+from src.ui.estilos import (
+    AZUL_MARINO_OSCURO, BEIGE_DORADO, BLANCO, CREMA_PRINCIPAL, GRIS_VERDOSO,
+    NEGRO_AZULADO, VERDE_OSCURO, FUENTE, crear_boton, px,
+)
+
+TEXTO_SIN_JSON = "Ningún archivo JSON cargado"
+TEXTO_SIN_MANUAL = "Sin configuración manual"
+TEXTO_MANUAL_OK = "✔ Configuración manual cargada"
+
+
+class VistaMenu(tk.Frame):
+    """Menú principal: cargar JSON, configuración manual e iniciar simulación.
+
+    La vista no decide nada: avisa al controlador mediante los callbacks recibidos.
+    """
+
+    def __init__(self, master, on_cargar_json, on_config_manual, on_iniciar):
+        super().__init__(master, bg=CREMA_PRINCIPAL)
+
+        contenedor = tk.Frame(self, bg=CREMA_PRINCIPAL)
+        contenedor.place(relx=0.5, rely=0.5, anchor="center")
+
+        # --- Banner de bienvenida ---
+        banner = tk.Frame(contenedor, bg=AZUL_MARINO_OSCURO, padx=70, pady=28)
+        banner.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 40))
+        tk.Label(banner, text="Bienvenido", font=("Arial", 32, "bold"),
+                 fg=BLANCO, bg=AZUL_MARINO_OSCURO).pack()
+        tk.Label(banner, text="Simulador de Wave Picking", font=("Arial", 12),
+                 fg=GRIS_VERDOSO, bg=AZUL_MARINO_OSCURO).pack(pady=(4, 0))
+
+        # --- Fila: cargar JSON (con estado a la izquierda) ---
+        self.lbl_json = tk.Label(contenedor, text=TEXTO_SIN_JSON, font=FUENTE,
+                                 bg=CREMA_PRINCIPAL, fg=NEGRO_AZULADO, anchor="e", width=34)
+        self.lbl_json.grid(row=1, column=0, sticky="e", padx=(0, 15), pady=8)
+        crear_boton(contenedor, "Cargar JSON", on_cargar_json, width=24).grid(
+            row=1, column=1, sticky="ew", pady=8)
+
+        # --- Fila: configuración manual (con estado a la izquierda) ---
+        self.lbl_manual = tk.Label(contenedor, text=TEXTO_SIN_MANUAL, font=FUENTE,
+                                   bg=CREMA_PRINCIPAL, fg=NEGRO_AZULADO, anchor="e", width=34)
+        self.lbl_manual.grid(row=2, column=0, sticky="e", padx=(0, 15), pady=8)
+        crear_boton(contenedor, "Configuración manual", on_config_manual, width=24).grid(
+            row=2, column=1, sticky="ew", pady=8)
+
+        # --- Fila: iniciar simulación ---
+        crear_boton(contenedor, "Iniciar simulación", on_iniciar, width=24,
+                    font=("Arial", 10, "bold")).grid(row=3, column=1, sticky="ew", pady=(24, 8))
+
+        # --- Aviso en línea (se muestra solo cuando hace falta) ---
+        self.lbl_aviso = tk.Label(contenedor, text="", font=FUENTE, bg=CREMA_PRINCIPAL,
+                                  fg=BEIGE_DORADO, wraplength=px(520), justify=tk.CENTER)
+        self.lbl_aviso.grid(row=4, column=0, columnspan=2, pady=(10, 0))
+
+    # --- API para el controlador ---
+    def set_archivo_json(self, nombre=None):
+        """Muestra el nombre del archivo JSON subido (o el texto por defecto si es None)."""
+        if nombre:
+            self.lbl_json.config(text=f"✔ {nombre}", fg=VERDE_OSCURO)
+        else:
+            self.lbl_json.config(text=TEXTO_SIN_JSON, fg=NEGRO_AZULADO)
+
+    def set_config_manual(self, cargada):
+        if cargada:
+            self.lbl_manual.config(text=TEXTO_MANUAL_OK, fg=VERDE_OSCURO)
+        else:
+            self.lbl_manual.config(text=TEXTO_SIN_MANUAL, fg=NEGRO_AZULADO)
+
+    def mostrar_aviso(self, texto):
+        """Aviso cuando no hay JSON ni configuración manual: texto en la vista + ventana emergente."""
+        self.lbl_aviso.config(text=texto)
+        messagebox.showwarning("Faltan datos", texto, parent=self)
+
+    def limpiar_aviso(self):
+        self.lbl_aviso.config(text="")
