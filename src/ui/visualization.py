@@ -138,11 +138,15 @@ class Ventana:
             puntos_px.extend([cx, cy])
         self.canvas.create_line(puntos_px, fill=color, width=2, dash=(4, 2), arrow=tk.LAST)
 
-    def dibujar_picker(self, x, y, id_picker):
+    def dibujar_picker(self, x, y, id_picker, recolectando=False):
         cx, cy = self._obtener_centro(x, y)
         radio = self.tamano_celda * 0.35
-        # Color rojo para pickers
-        self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill="#ef4444", outline="#991b1b", width=2)
+        
+        # Lógica de color: Verde si recolecta, Rojo si se mueve
+        color_relleno = "#10b981" if recolectando else "#ef4444"
+        color_borde = "#047857" if recolectando else "#991b1b"
+        
+        self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill=color_relleno, outline=color_borde, width=2)
         self.canvas.create_text(cx, cy, text=str(id_picker), fill="white", font=("Arial", 8, "bold"))
 
     def actualizar_desde_simulacion(self):
@@ -159,7 +163,8 @@ class Ventana:
         # 2. Pickers
         for p in estado.get('pickers', []):
             if p.get("activo", True):
-                self.dibujar_picker(p['x'], p['y'], p['id'])
+                # Le pasamos si está recolectando para que cambie de color
+                self.dibujar_picker(p['x'], p['y'], p['id'], p.get("recolectando", False))
 
         # 3. Actualizar Panel de Texto (Métricas)
         self.lbl_wave.config(text=f"Wave: {estado.get('wave_actual', 0)} / {estado.get('waves_totales', 0)}")
@@ -191,7 +196,11 @@ class Ventana:
             items = picker.get("items_transportados", [])
             detalle = ", ".join(f"{i['producto_id']}({i['cantidad']})" for i in items) or "Vacío"
             
-            texto = f"• {picker_id}: {cantidad_actual}/{cantidad_objetivo} items\n  {detalle}"
+            # NUEVO: Cartel de recolección
+            esta_recolectando = picker.get("recolectando", False)
+            estado_texto = "📦 ¡RECOLECTANDO!" if esta_recolectando else "🚶 En movimiento"
+            
+            texto = f"• {picker_id}: {cantidad_actual}/{cantidad_objetivo} items\n  {estado_texto}\n  {detalle}"
             self.lbl_carga_pickers[picker_id][0].config(text=texto)
 
         # 5. Actualizar Pedidos (Reales)

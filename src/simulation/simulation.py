@@ -323,6 +323,10 @@ class Simulation:
                 picker.carga_actual_kg = getattr(picker, "carga_actual_kg", 0.0) + (
                     peso * cantidad
                 )
+            
+            # --- NUEVA LÍNEA: Pausa para recolección ---
+            picker.tiempo_recoleccion = 15
+            
             if stock is not None:
                 producto.cantidad_disponible -= cantidad
             self._reducir_demanda(picker, producto_id, cantidad)
@@ -778,6 +782,10 @@ class Simulation:
             return
 
         picker.recoger(producto, cantidad)
+        
+        # --- NUEVA LÍNEA: Pausa para recolección ---
+        picker.tiempo_recoleccion = 15
+        
         if stock is not None:
             producto.cantidad_disponible -= cantidad
         self._reducir_demanda(picker, producto_id, cantidad)
@@ -793,8 +801,18 @@ class Simulation:
         propuestas: dict[str, tuple[int, int]] = {}
         if self._modo_dinamico:
             for picker in self.pickers:
+                # --- NUEVA LÍNEA: No planificar si está recolectando ---
+                if getattr(picker, "tiempo_recoleccion", 0) > 0:
+                    continue
                 self._planificar_picker_dinamico(picker)
+                
         for picker in self.pickers:
+            # --- NUEVA LÍNEA: Frenar y descontar tiempo ---
+            if getattr(picker, "tiempo_recoleccion", 0) > 0:
+                picker.tiempo_recoleccion -= 1
+                continue
+            # ------------------------------------------------
+            
             if self._modo_dinamico:
                 tramo = self._tramos_dinamicos[picker.id]
                 indice = self._indices_ruta[picker.id]
@@ -1003,6 +1021,9 @@ class Simulation:
                         not self._modo_dinamico
                         or self._estado_picker[picker.id] != "terminado"
                     ),
+                    
+                    # --- NUEVA LÍNEA: Informar a la UI si está recolectando ---
+                    "recolectando": getattr(picker, "tiempo_recoleccion", 0) > 0
                 }
                 for picker in self.pickers
             ],
@@ -1049,6 +1070,8 @@ class Simulation:
             picker.mover_a(inicial["posicion"])
             picker.items_transportados = list(inicial["items"])
             picker.carga_actual_kg = inicial["carga"]
+            # --- NUEVA LÍNEA: Reiniciar la pausa ---
+            picker.tiempo_recoleccion = 0 
         
         self._indices_ruta = {
             picker.id: (

@@ -35,6 +35,7 @@ class Picker:
         self.prioridad = prioridad
         self.carga_actual_kg = 0.0
         self.items_transportados: list[tuple[str, int]] = []
+        self.tiempo_recoleccion = 0 
 
     @staticmethod
     def _validar_posicion(posicion: tuple[int, int]) -> None:

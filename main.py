@@ -73,7 +73,7 @@ def _crear_pickers(datos_pickers: list[dict[str, Any]]) -> list[Picker]:
                 picker_id=datos["id"],
                 posicion_inicial=tuple(posicion),
                 capacidad_carga_kg=datos["capacidad_carga_kg"],
-                prioridad=datos.get("prioridad", 1), # <-- CORRECCIÓN A: Lee la prioridad del JSON
+                prioridad=datos.get("prioridad", 1), # Lee la prioridad del JSON
             )
         )
     return pickers
@@ -107,12 +107,7 @@ def _crear_waves(
     inventario: GestorInventario,
     configuracion: dict[str, Any],
 ) -> tuple[list[Wave], dict[str, list[Orden]], dict[str, list[Wave]]]:
-    """Distribuye pedidos en waves sin limitar su peso a la carga del picker.
-
-    El picker puede completar el trabajo de una wave en varios viajes. Cada
-    unidad individual debe caber en al menos un picker; los límites de cantidad
-    de pedidos/productos de la wave siguen vigentes.
-    """
+    """Distribuye pedidos en waves sin limitar su peso a la carga del picker."""
     max_pedidos = configuracion.get("wave_max_pedidos", len(pedidos) or 1)
     max_productos = configuracion.get("wave_max_productos", 1)
     if (
@@ -141,7 +136,7 @@ def _crear_waves(
     for pedido in pedidos:
         peso_pedido = pedido.peso_total(inventario)
         
-        # CORRECCIÓN B: Priorizamos a los pickers con mayor prioridad al asignar waves
+        # Priorizamos a los pickers con mayor prioridad al asignar waves
         candidatos = sorted(
             pickers,
             key=lambda picker: (-picker.prioridad, carga_wave_actual[picker.id], picker.id),
@@ -358,6 +353,8 @@ class _SimulationTk:
         estado_pickers = {
             picker["id"]: picker for picker in estado["pickers"]
         }
+        
+        # Acá se arma el diccionario que lee la UI. 
         estado["pickers"] = [
             {
                 "id": picker.id,
@@ -379,6 +376,10 @@ class _SimulationTk:
                 "activo": estado_pickers.get(picker.id, {}).get(
                     "activo", False
                 ),
+                # --- ACÁ ESTÁ LA LÍNEA MÁGICA QUE FALTABA ---
+                "recolectando": estado_pickers.get(picker.id, {}).get(
+                    "recolectando", False
+                )
             }
             for picker in self.pickers
         ]
@@ -471,12 +472,7 @@ class _SimulationTk:
 
 
 def _seleccionar_escenario(raiz_proyecto: Path) -> Path:
-    """Muestra los escenarios JSON disponibles y devuelve el elegido.
-
-    La lista se vuelve a consultar cada vez que se ejecuta el programa, así
-    cualquier escenario nuevo agregado a data/scenarios aparece sin modificar
-    el código. También se acepta escribir el nombre o la ruta de otro JSON.
-    """
+    """Muestra los escenarios JSON disponibles y devuelve el elegido."""
     carpeta_escenarios = raiz_proyecto / "data" / "scenarios"
     escenarios = sorted(
         carpeta_escenarios.glob("*.json"),
