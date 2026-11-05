@@ -13,12 +13,7 @@ COLOR_VOLVER_TERMINADA = "#10b981"
 
 
 class Ventana(tk.Frame):
-    """Vista de la simulación (colores y diseño originales).
-
-    Puede usarse embebida (master = ventana principal del controlador) o sola (master=None),
-    en cuyo caso crea su propia ventana y se arranca con iniciar().
-    on_volver: función que lleva de vuelta al menú (la entrega el controlador).
-    """
+    """Vista de la simulación (colores y diseño originales)."""
 
     def __init__(self, warehouse, tamano_celda=30, master=None, on_volver=None):
         super().__init__(master)
@@ -52,7 +47,7 @@ class Ventana(tk.Frame):
             frame_btn,
             text="📊 Comparar Estrategias",
             command=self.btn_comparar_estrategias,
-            bg="#e0f2fe", # Un color celestito para que resalte
+            bg="#e0f2fe", 
             font=("Arial", 9, "bold")
         ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 2), padx=2)
 
@@ -85,7 +80,7 @@ class Ventana(tk.Frame):
         self.txt_pedidos = tk.Text(self.panel, height=6, width=35, font=("Arial", 9), bg="#ffffff", state=tk.DISABLED)
         self.txt_pedidos.pack(fill=tk.X)
 
-        # 5. Volver al menú (siempre visible, abajo del panel)
+        # 5. Volver al menú
         self.btn_volver = tk.Button(self.panel, text="← Volver al menú", command=self.btn_volver_menu)
         self.btn_volver.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
         self._estilo_volver_original = {
@@ -145,7 +140,6 @@ class Ventana(tk.Frame):
 
         self._mostrar_comparacion(resultado)
 
-
     def _mostrar_comparacion(self, comparacion):
         if not comparacion.get("totales"):
             messagebox.showinfo("Sin datos", "No hay waves para comparar.", parent=self.root)
@@ -154,36 +148,29 @@ class Ventana(tk.Frame):
         totales = comparacion["totales"]
         nombres = list(totales)
 
-        # Crear ventana emergente
         ventana = tk.Toplevel(self.root)
         ventana.title("Comparación de Estrategias")
         ventana.geometry("600x400")
-        ventana.minsize(400, 300) # Tamaño mínimo para que no se rompa
-        ventana.transient(self.root) # Que quede adelante
+        ventana.minsize(400, 300)
+        ventana.transient(self.root)
 
-        # Frame principal
         frame = tk.Frame(ventana, padx=20, pady=20)
         frame.pack(fill=tk.BOTH, expand=True)
 
-        # Título
         tk.Label(frame, text="Resumen de Estrategias", font=("Arial", 14, "bold")).pack(pady=(0, 15))
 
-        # Diccionario para mostrar nombres claros en la UI
         nombres_ui = {
             "A": "A (Orden de pedidos)",
             "B": "B (Vecino más cercano)"
         }
 
-        # --- TABLA (Treeview) ---
-        # Usamos los nombres claros en los encabezados
         columnas = ["Métrica"] + [nombres_ui.get(n, f"Estrategia {n}") for n in nombres]
         tabla = ttk.Treeview(frame, columns=columnas, show="headings", height=6)
 
         for col in columnas:
             tabla.heading(col, text=col)
-            tabla.column(col, anchor="center", width=150) # Un poco más ancho para que entre el texto
+            tabla.column(col, anchor="center", width=150)
 
-        # Insertar datos
         filas = [
             ("Tiempo total (ms)", "tiempo_ms", "{:.3f}"),
             ("Distancia total", "distancia", "{}"),
@@ -197,7 +184,6 @@ class Ventana(tk.Frame):
 
         tabla.pack(fill=tk.BOTH, expand=True)
 
-        # --- Ganadores ---
         ganadores_frame = tk.Frame(frame, pady=10)
         ganadores_frame.pack(fill=tk.X)
 
@@ -212,12 +198,9 @@ class Ventana(tk.Frame):
         tk.Label(ganadores_frame, text=texto_tiempo,
                  font=("Arial", 11, "bold"), fg="#0ea5e9").pack(anchor="w")
 
-        # Botón cerrar
         tk.Button(frame, text="Cerrar", command=ventana.destroy, width=15).pack(pady=(10, 0))
 
-    # --- Volver al menú ---
     def _simulacion_terminada(self, estado=None):
-        """True si la simulación terminó (o si no hay ninguna en marcha)."""
         if not self.simulacion:
             return True
         if estado is None:
@@ -297,10 +280,14 @@ class Ventana(tk.Frame):
             puntos_px.extend([cx, cy])
         self.canvas.create_line(puntos_px, fill=color, width=2, dash=(4, 2), arrow=tk.LAST)
 
-    def dibujar_picker(self, x, y, id_picker):
+    def dibujar_picker(self, x, y, id_picker, recolectando=False):
         cx, cy = self._obtener_centro(x, y)
         radio = self.tamano_celda * 0.35
-        self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill="#ef4444", outline="#991b1b", width=2)
+        
+        color_relleno = "#10b981" if recolectando else "#ef4444"
+        color_borde = "#047857" if recolectando else "#991b1b"
+        
+        self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill=color_relleno, outline=color_borde, width=2)
         self.canvas.create_text(cx, cy, text=str(id_picker), fill="white", font=("Arial", 8, "bold"))
 
     def actualizar_desde_simulacion(self):
@@ -316,7 +303,7 @@ class Ventana(tk.Frame):
 
         for p in estado.get('pickers', []):
             if p.get("activo", True):
-                self.dibujar_picker(p['x'], p['y'], p['id'])
+                self.dibujar_picker(p['x'], p['y'], p['id'], p.get("recolectando", False))
 
         self.lbl_wave.config(text=f"Wave: {estado.get('wave_actual', 0)} / {estado.get('waves_totales', 0)}")
         self.lbl_paso.config(text=f"Paso actual: {estado.get('paso_actual', 0)}")
@@ -344,7 +331,10 @@ class Ventana(tk.Frame):
             items = picker.get("items_transportados", [])
             detalle = ", ".join(f"{i['producto_id']}({i['cantidad']})" for i in items) or "Vacío"
 
-            texto = f"• {picker_id}: {cantidad_actual}/{cantidad_objetivo} items\n  {detalle}"
+            esta_recolectando = picker.get("recolectando", False)
+            estado_texto = "📦 ¡RECOLECTANDO!" if esta_recolectando else "🚶 En movimiento"
+
+            texto = f"• {picker_id}: {cantidad_actual}/{cantidad_objetivo} items\n  {estado_texto}\n  {detalle}"
             self.lbl_carga_pickers[picker_id][0].config(text=texto)
 
         self.txt_pedidos.config(state=tk.NORMAL)
