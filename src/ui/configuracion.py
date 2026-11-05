@@ -1,5 +1,7 @@
 
 # src/ui/configuracion.py
+
+# src/ui/configuracion.py
 # Vista de configuración del almacén (solo tkinter / ttk).
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -22,7 +24,7 @@ MAX_VISIBLES = 3  # cada tabla muestra solo los últimos 3 elementos agregados
 def _tarjeta(master, titulo):
     """Devuelve (marco_externo, cuerpo). El marco externo se ubica con grid; el cuerpo recibe el contenido."""
     marco = tk.Frame(master, bg=CREMA_GRISACEO, highlightthickness=1,
-                    highlightbackground=GRIS_VERDOSO)
+                     highlightbackground=GRIS_VERDOSO)
     tk.Label(marco, text=titulo, font=FUENTE_TITULO, bg=CREMA_GRISACEO,
              fg=AZUL_MARINO, anchor="w").pack(fill=tk.X, padx=10, pady=(8, 2))
     cuerpo = tk.Frame(marco, bg=CREMA_GRISACEO)
@@ -74,7 +76,13 @@ class SeccionParametros(tk.Frame):
 
 
 class SeccionTabla(tk.Frame):
-    """Tabla + formulario para agregar elementos. Muestra solo los últimos 3 ingresados."""
+    """Tabla + formulario para agregar elementos. Muestra solo los últimos 3 ingresados.
+
+    campos: lista de dicts con
+    clave, etiqueta, tipo ('str' | 'int' | 'float'), widget ('entry' | 'spin' | 'combo'),
+    valores (lista o función que devuelve lista; solo combo), defecto, ancho
+    columnas: lista de (encabezado, ancho_px, funcion(item) -> texto)
+    """
 
     def __init__(self, master, campos, columnas, texto_agregar, por_fila=4, on_cambio=None, ayuda=None):
         super().__init__(master, bg=CREMA_GRISACEO)
@@ -146,6 +154,7 @@ class SeccionTabla(tk.Frame):
                                                        columnspan=min(por_fila, len(campos)),
                                                        sticky="w", padx=2)
 
+    # --- Combos dependientes ---
     def _valores_combo(self, campo):
         valores = campo.get("valores", [])
         return list(valores() if callable(valores) else valores)
@@ -153,6 +162,7 @@ class SeccionTabla(tk.Frame):
     def _refrescar_combo(self, campo):
         self.widgets[campo["clave"]].configure(values=self._valores_combo(campo))
 
+    # --- Formulario ---
     def _leer_formulario(self):
         item = {}
         for campo in self.campos:
@@ -219,6 +229,7 @@ class SeccionTabla(tk.Frame):
         if self.on_cambio:
             self.on_cambio()
 
+    # --- Tabla ---
     def refrescar(self):
         for fila in self.tabla.get_children():
             self.tabla.delete(fila)
@@ -227,7 +238,7 @@ class SeccionTabla(tk.Frame):
         for pos, item in enumerate(visibles):
             valores = [funcion(item) for (_enc, _ancho, funcion) in self.columnas]
             self.tabla.insert("", tk.END, iid=str(desplazamiento + pos), values=valores,
-                            tags=("par" if pos % 2 == 0 else "impar",))
+                              tags=("par" if pos % 2 == 0 else "impar",))
         total = len(self.items)
         if total == 0:
             self.lbl_info.config(text="Sin elementos")
@@ -236,6 +247,7 @@ class SeccionTabla(tk.Frame):
         else:
             self.lbl_info.config(text=f"Mostrando los últimos {MAX_VISIBLES} de {total}")
 
+    # --- API pública ---
     def obtener_items(self):
         return [dict(item) for item in self.items]
 
@@ -252,7 +264,7 @@ class SeccionTabla(tk.Frame):
 
 
 class VistaConfiguracion(tk.Frame):
-    """Configuración manual del almacén con scroll fluido y optimizado."""
+    """Configuración manual del almacén. Solo arma la interfaz; no valida ni construye el warehouse."""
 
     DIMENSIONES_DEFECTO = [("ancho", "Ancho (X):", 18), ("largo", "Largo (Y):", 16)]
     WAVES_DEFECTO = [("max_pedidos", "Máximo de pedidos por wave:", 3),
@@ -269,7 +281,7 @@ class VistaConfiguracion(tk.Frame):
         tk.Label(cabecera, text="Configure la estructura, inventario y parámetros de preparación",
                  font=FUENTE, bg=AZUL_MARINO_OSCURO, fg=GRIS_VERDOSO).pack(anchor="w")
 
-        # --- Barra inferior ---
+        # --- Barra inferior (se empaqueta antes que el cuerpo para que siempre quede visible) ---
         barra = tk.Frame(self, bg=GRIS_CREMA, padx=12, pady=10)
         barra.pack(side=tk.BOTTOM, fill=tk.X)
         crear_boton(barra, "💾 Guardar configuración", on_guardar).pack(side=tk.LEFT, padx=(0, 6))
@@ -279,98 +291,44 @@ class VistaConfiguracion(tk.Frame):
                     primario=False).pack(side=tk.LEFT, padx=6)
         crear_boton(barra, "← Volver al menú", on_volver, primario=False).pack(side=tk.RIGHT)
 
-        # --- Cuerpo con scroll ---
-        zona = tk.Frame(self, bg=CREMA_PRINCIPAL)
-        zona.pack(fill=tk.BOTH, expand=True)
-        self.canvas = tk.Canvas(zona, bg=CREMA_PRINCIPAL, highlightthickness=0, bd=0,
-                                yscrollincrement=px(20))
-        self._tarea_scroll = None
-        self._unidades_pendientes = 0.0
-        self._moveto_pendiente = None
-
-        scroll = ttk.Scrollbar(zona, orient=tk.VERTICAL, command=self._comando_scrollbar)
-        self.canvas.configure(yscrollcommand=scroll.set)
-        scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        self.cuerpo = tk.Frame(self.canvas, bg=CREMA_PRINCIPAL, padx=12, pady=12)
-        self._ventana_cuerpo = self.canvas.create_window((0, 0), window=self.cuerpo, anchor="nw")
-        
-        self.cuerpo.bind("<Configure>",
-                        lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.canvas.bind("<Configure>",
-                         lambda e: self.canvas.itemconfigure(self._ventana_cuerpo, width=e.width))
-        
-        self.canvas.bind("<Enter>", self._activar_rueda)
-        self.canvas.bind("<Leave>", self._desactivar_rueda)
-
-        self.cuerpo.columnconfigure(0, weight=1, uniform="col")
-        self.cuerpo.columnconfigure(1, weight=1, uniform="col")
+        # --- Cuerpo en pestañas ---
+        # Sin Canvas ni scroll: cada pestaña entra completa en la ventana, así no hay que repintar
+        # widgets desplazándose (la causa de que los elementos se vieran estirados).
+        self.pestanas = ttk.Notebook(self)
+        self.pestanas.pack(fill=tk.BOTH, expand=True, padx=12, pady=(12, 6))
         self._construir_secciones()
 
-    def _activar_rueda(self, _evento):
-        self.canvas.bind_all("<MouseWheel>", self._rueda)
-        self.canvas.bind_all("<Button-4>", self._rueda)
-        self.canvas.bind_all("<Button-5>", self._rueda)
+    # --- Pestañas ---
+    def _nueva_pagina(self, titulo):
+        pagina = tk.Frame(self.pestanas, bg=CREMA_PRINCIPAL, padx=8, pady=8)
+        pagina.columnconfigure(0, weight=1, uniform="col")
+        pagina.columnconfigure(1, weight=1, uniform="col")
+        self.pestanas.add(pagina, text=titulo)
+        return pagina
 
-    def _desactivar_rueda(self, _evento):
-        self.canvas.unbind_all("<MouseWheel>")
-        self.canvas.unbind_all("<Button-4>")
-        self.canvas.unbind_all("<Button-5>")
-
-    PASOS_POR_RUEDA = 3
-
-    def _rueda(self, evento):
-        if evento.num == 4:
-            cantidad = -1
-        elif evento.num == 5:
-            cantidad = 1
+    def _colocar(self, tarjeta, columna, completo=False):
+        # sticky="new": se pega arriba y se estira solo a lo ancho, nunca a lo alto.
+        if completo:
+            tarjeta.grid(row=0, column=0, columnspan=2, sticky="new", pady=6)
         else:
-            cantidad = -evento.delta / 120
-        self._unidades_pendientes += cantidad * self.PASOS_POR_RUEDA
-        self._programar_scroll()
-
-    def _comando_scrollbar(self, *args):
-        if args and args[0] == "moveto":
-            self._moveto_pendiente = args[1]
-            self._programar_scroll()
-        else:
-            self.canvas.yview(*args)
-
-    def _programar_scroll(self):
-        if self._tarea_scroll is None:
-            self._tarea_scroll = self.after(16, self._aplicar_scroll)
-
-    def _aplicar_scroll(self):
-        self._tarea_scroll = None
-        if self._moveto_pendiente is not None:
-            self.canvas.yview_moveto(self._moveto_pendiente)
-            self._moveto_pendiente = None
-        pasos = int(self._unidades_pendientes)
-        if pasos:
-            self.canvas.yview_scroll(pasos, "units")
-            self._unidades_pendientes -= pasos
-
-    def destroy(self):
-        self._desactivar_rueda(None)
-        if self._tarea_scroll is not None:
-            self.after_cancel(self._tarea_scroll)
-            self._tarea_scroll = None
-        super().destroy()
-
-    def _colocar(self, tarjeta, fila, columna):
-        tarjeta.grid(row=fila, column=columna, sticky="nsew",
-                    padx=(0, 6) if columna == 0 else (6, 0), pady=6)
+            tarjeta.grid(row=0, column=columna, sticky="new",
+                         padx=(0, 6) if columna == 0 else (6, 0), pady=6)
 
     def _construir_secciones(self):
+        pag_almacen = self._nueva_pagina("Almacén")
+        pag_puertas = self._nueva_pagina("Puertas y zonas")
+        pag_racks = self._nueva_pagina("Racks y pasillos")
+        pag_pp = self._nueva_pagina("Pickers y productos")
+        pag_pedidos = self._nueva_pagina("Pedidos")
+
         # 1. Dimensiones del almacén
-        marco, cuerpo = _tarjeta(self.cuerpo, "Dimensiones del Almacén")
+        marco, cuerpo = _tarjeta(pag_almacen, "Dimensiones del Almacén")
         self.sec_dimensiones = SeccionParametros(cuerpo, self.DIMENSIONES_DEFECTO)
         self.sec_dimensiones.pack(fill=tk.X, pady=(6, 0))
-        self._colocar(marco, 0, 0)
+        self._colocar(marco, 0)
 
         # 2. Puertas
-        marco, cuerpo = _tarjeta(self.cuerpo, "Puertas")
+        marco, cuerpo = _tarjeta(pag_puertas, "Puertas")
         self.sec_puertas = SeccionTabla(
             cuerpo,
             campos=[
@@ -388,10 +346,10 @@ class VistaConfiguracion(tk.Frame):
             texto_agregar="+ Agregar puerta",
         )
         self.sec_puertas.pack(fill=tk.X)
-        self._colocar(marco, 0, 1)
+        self._colocar(marco, 0)
 
         # 3. Zonas de despacho
-        marco, cuerpo = _tarjeta(self.cuerpo, "Zonas de Despacho")
+        marco, cuerpo = _tarjeta(pag_puertas, "Zonas de Despacho")
         self.sec_zonas = SeccionTabla(
             cuerpo,
             campos=[
@@ -414,19 +372,12 @@ class VistaConfiguracion(tk.Frame):
             texto_agregar="+ Agregar zona",
         )
         self.sec_zonas.pack(fill=tk.X)
-        self._colocar(marco, 1, 0)
+        self._colocar(marco, 1)
 
-        # 4. Racks y pasillos
-        marco, cuerpo = _tarjeta(self.cuerpo, "Racks y Pasillos")
-        pestanas = ttk.Notebook(cuerpo)
-        pestanas.pack(fill=tk.X)
-        marco_racks = tk.Frame(pestanas, bg=CREMA_GRISACEO, pady=6)
-        marco_pasillos = tk.Frame(pestanas, bg=CREMA_GRISACEO, pady=6)
-        pestanas.add(marco_racks, text="Racks")
-        pestanas.add(marco_pasillos, text="Pasillos")
-
+        # 4. Racks
+        marco, cuerpo = _tarjeta(pag_racks, "Racks")
         self.sec_racks = SeccionTabla(
-            marco_racks,
+            cuerpo,
             campos=[
                 {"clave": "id", "etiqueta": "ID", "ancho": 10},
                 {"clave": "x", "etiqueta": "X", "tipo": "int", "widget": "spin", "defecto": 0, "ancho": 5},
@@ -443,9 +394,12 @@ class VistaConfiguracion(tk.Frame):
             por_fila=5,
         )
         self.sec_racks.pack(fill=tk.X)
+        self._colocar(marco, 0)
 
+        # 4b. Pasillos
+        marco, cuerpo = _tarjeta(pag_racks, "Pasillos")
         self.sec_pasillos = SeccionTabla(
-            marco_pasillos,
+            cuerpo,
             campos=[
                 {"clave": "id", "etiqueta": "ID", "ancho": 10},
                 {"clave": "x", "etiqueta": "X", "tipo": "int", "widget": "spin", "defecto": 0, "ancho": 5},
@@ -462,13 +416,13 @@ class VistaConfiguracion(tk.Frame):
                 ("Sentido", 70, lambda i: FLECHAS.get(i["sentido"], i["sentido"])),
             ],
             texto_agregar="+ Agregar pasillo",
-            por_fila=6,
+            por_fila=3,
         )
         self.sec_pasillos.pack(fill=tk.X)
-        self._colocar(marco, 1, 1)
+        self._colocar(marco, 1)
 
         # 5. Pickers
-        marco, cuerpo = _tarjeta(self.cuerpo, "Pickers")
+        marco, cuerpo = _tarjeta(pag_pp, "Pickers")
         self.sec_pickers = SeccionTabla(
             cuerpo,
             campos=[
@@ -485,10 +439,10 @@ class VistaConfiguracion(tk.Frame):
             texto_agregar="+ Agregar picker",
         )
         self.sec_pickers.pack(fill=tk.X)
-        self._colocar(marco, 2, 0)
+        self._colocar(marco, 0)
 
         # 6. Productos
-        marco, cuerpo = _tarjeta(self.cuerpo, "Productos")
+        marco, cuerpo = _tarjeta(pag_pp, "Productos")
         self.sec_productos = SeccionTabla(
             cuerpo,
             campos=[
@@ -514,10 +468,10 @@ class VistaConfiguracion(tk.Frame):
             texto_agregar="+ Agregar producto",
         )
         self.sec_productos.pack(fill=tk.X)
-        self._colocar(marco, 2, 1)
+        self._colocar(marco, 1)
 
         # 7. Pedidos
-        marco, cuerpo = _tarjeta(self.cuerpo, "Pedidos")
+        marco, cuerpo = _tarjeta(pag_pedidos, "Pedidos")
         self.sec_pedidos = SeccionTabla(
             cuerpo,
             campos=[
@@ -538,19 +492,22 @@ class VistaConfiguracion(tk.Frame):
             ayuda="Productos: ej. P001 x2, P002 x1",
         )
         self.sec_pedidos.pack(fill=tk.X)
-        self._colocar(marco, 3, 0)
+        self._colocar(marco, 0, completo=True)
 
         # 8. Configuración de waves
-        marco, cuerpo = _tarjeta(self.cuerpo, "Configuración de Waves")
+        marco, cuerpo = _tarjeta(pag_almacen, "Configuración de Waves")
         self.sec_waves = SeccionParametros(cuerpo, self.WAVES_DEFECTO)
         self.sec_waves.pack(fill=tk.X, pady=(6, 8))
         tk.Label(cuerpo,
-                 text="Estos valores limitan cuántos pedidos y productos pueden agruparse en una wave de preparación.",
+                 text="Estos valores limitan cuántos pedidos y productos pueden agruparse "
+                      "en una wave de preparación.",
                  font=("Arial", 9), bg=BEIGE_CLARO, fg=NEGRO_AZULADO, wraplength=px(380),
                  justify=tk.LEFT, padx=10, pady=8).pack(fill=tk.X)
-        self._colocar(marco, 3, 1)
+        self._colocar(marco, 1)
 
+    # --- API pública ---
     def obtener_configuracion(self):
+        """Devuelve todo lo ingresado como diccionario (listo para serializar a JSON)."""
         return {
             "almacen": self.sec_dimensiones.obtener(),
             "puertas": self.sec_puertas.obtener_items(),
@@ -564,6 +521,7 @@ class VistaConfiguracion(tk.Frame):
         }
 
     def cargar_configuracion(self, datos):
+        """Carga en la vista un diccionario con la misma estructura que obtener_configuracion()."""
         self.sec_dimensiones.cargar(datos.get("almacen", {}))
         self.sec_puertas.cargar_items(datos.get("puertas", []))
         self.sec_zonas.cargar_items(datos.get("zonas_despacho", []))

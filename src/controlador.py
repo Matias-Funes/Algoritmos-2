@@ -12,7 +12,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.ui.configuracion import VistaConfiguracion
-from src.ui.estilos import CREMA_PRINCIPAL, ajustar_ventana, aplicar_estilos_ttk
+from src.ui.estilos import CREMA_PRINCIPAL, activar_dpi, ajustar_ventana, aplicar_estilos_ttk, px
 from src.ui.menu import VistaMenu
 from src.ui.visualization import Ventana
 
@@ -30,6 +30,7 @@ class Controlador:
         self.tamano_celda = tamano_celda
         self.carpeta_json = carpeta_json
 
+        activar_dpi()  # antes de crear Tk: evita el texto borroso en pantallas con escala > 100%
         self.root = tk.Tk()
         self.root.title("Wave Picking - Simulador")
         self.root.configure(bg=CREMA_PRINCIPAL)
@@ -40,7 +41,7 @@ class Controlador:
         self.menu = None
 
         # Datos disponibles para la simulación
-        self.ruta_json = None      # ruta del archivo JSON subido
+        self.ruta_json = None  # ruta del archivo JSON subido
         self.config_manual = None  # datos guardados desde la vista de configuración
 
         self.warehouse = None
@@ -60,7 +61,7 @@ class Controlador:
             ajustar_ventana(self.root, tamano[0], tamano[1], minimo)
         else:
             self.root.minsize(1, 1)  # saca el mínimo de la vista anterior
-            self.root.geometry("")   # tamaño automático según el contenido
+            self.root.geometry("")  # tamaño automático según el contenido
 
     def mostrar_menu(self):
         # Si venimos de la simulación, se deja pausada antes de destruir la vista.
@@ -90,10 +91,10 @@ class Controlador:
         if self.config_manual is not None:
             vista.cargar_configuracion(self.config_manual)
         self.vista_config = vista
-        self._mostrar(vista, (1150, 780), (950, 500))
+        self._mostrar(vista, (1100, 620), (950, 500))
 
     def mostrar_simulacion(self):
-        ventana = Ventana(self.warehouse, tamano_celda=self.tamano_celda,
+        ventana = Ventana(self.warehouse, tamano_celda=px(self.tamano_celda),
                           master=self.root, on_volver=self.mostrar_menu)
         # Si la simulación necesita la ventana para programar sus pasos (after), se la vincula.
         vincular = getattr(self.simulacion, "vincular_interfaz", None)
@@ -131,6 +132,7 @@ class Controlador:
             )
             return
         if self.ruta_json is None:
+            # TODO: convertir la configuración manual al formato de escenario del motor.
             messagebox.showinfo(
                 "Configuración manual",
                 "La configuración manual todavía no está conectada con el motor de "
@@ -148,6 +150,7 @@ class Controlador:
 
     # --- Configuración manual ---
     def guardar_configuracion(self):
+        # TODO: validar los datos antes de guardarlos.
         self.config_manual = self.vista_config.obtener_configuracion()
         messagebox.showinfo("Configuración", "Configuración guardada correctamente.")
         self.mostrar_menu()
