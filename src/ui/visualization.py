@@ -47,7 +47,12 @@ class Ventana(tk.Frame):
         tk.Button(frame_btn, text="⏸ Pausar", command=self.btn_pausar).grid(row=0, column=1, sticky="ew", pady=2, padx=2)
         tk.Button(frame_btn, text="⏯ Continuar", command=self.btn_continuar).grid(row=1, column=0, sticky="ew", pady=2, padx=2)
         tk.Button(frame_btn, text="🔄 Reiniciar", command=self.btn_reset).grid(row=1, column=1, sticky="ew", pady=2, padx=2)
-        tk.Button(frame_btn, text="⏭ Paso a Paso", command=self.btn_paso).grid(row=2, column=0, columnspan=2, sticky="ew", pady=2, padx=2)
+
+        frame_pasos = tk.Frame(frame_btn, bg="#f8fafc")
+        frame_pasos.grid(row=2, column=0, columnspan=2, sticky="ew", pady=2)
+
+        tk.Button(frame_pasos, text="⏮ Atrás", command=self.btn_paso_atras).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 1))
+        tk.Button(frame_pasos, text="⏭ Adelante", command=self.btn_paso).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(1, 2))
         tk.Button(
             frame_btn,
             text="📊 Comparar Estrategias",
@@ -126,6 +131,11 @@ class Ventana(tk.Frame):
         if self.simulacion:
             self.simulacion.avanzar_paso()
             self.actualizar_desde_simulacion()
+
+    def btn_paso_atras(self):
+        if self.simulacion:
+            if self.simulacion.retroceder_paso():
+                self.actualizar_desde_simulacion()
 
     def btn_reset(self):
         if self.simulacion:

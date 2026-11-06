@@ -137,9 +137,7 @@ class TestViajesDinamicos(unittest.TestCase):
             ]
             if all(
                 anterior != nueva
-                for anterior, nueva in zip(
-                    posiciones_anteriores, posiciones_nuevas
-                )
+                for anterior, nueva in zip(posiciones_anteriores, posiciones_nuevas)
             ):
                 hubo_avance_simultaneo = True
             if not quedan_pasos:
@@ -212,11 +210,30 @@ class TestViajesDinamicos(unittest.TestCase):
         self.assertTrue(
             all(
                 abs(x1 - x2) + abs(y1 - y2) == 1
-                for (x1, y1), (x2, y2) in zip(
-                    ruta_recalculada, ruta_recalculada[1:]
-                )
+                for (x1, y1), (x2, y2) in zip(ruta_recalculada, ruta_recalculada[1:])
             )
         )
+
+    def test_retroceder_paso(self):
+        """Prueba que el botón de atrás devuelve a los pickers a su posición anterior."""
+        from pathlib import Path
+
+        from main import construir_simulacion
+
+        wh, sim = construir_simulacion(Path("data/scenarios/escenario_basico.json"))
+
+        # Avanzamos 3 pasos
+        sim.avanzar_paso()
+        sim.avanzar_paso()
+        sim.avanzar_paso()
+
+        posicion_adelantada = sim.pickers[0].posicion_actual
+
+        # Retrocedemos 1 paso
+        sim.retroceder_paso()
+
+        # La posición debería ser distinta a la de adelante
+        self.assertNotEqual(sim.pickers[0].posicion_actual, posicion_adelantada)
 
 
 if __name__ == "__main__":

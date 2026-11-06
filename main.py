@@ -312,6 +312,7 @@ class _SimulationTk:
             for producto in productos
         }
         self._simulacion_actual = self._crear_simulacion_fase(0)
+        self.historial_snapshots = []
 
     def _crear_simulacion_fase(self, indice: int) -> Simulation:
         """Crea un motor común que planifica el trabajo de toda la flota."""
@@ -396,6 +397,14 @@ class _SimulationTk:
         """Avanza el viaje actual o prepara el próximo al completar la wave."""
         if self._fase_completada:
             return False
+
+        # GUARDAMOS LA FOTO ANTES DE AVANZAR (solo si no terminó)
+        self.historial_snapshots.append(self.get_snapshot())
+
+        # Si el historial se hace muy largo, podemos limitarlo (ej. a 1000 pasos)
+        if len(self.historial_snapshots) > 1000:
+            self.historial_snapshots.pop(0)
+
         if self._simulacion_actual.avanzar_paso():
             return True
 
@@ -476,6 +485,19 @@ class _SimulationTk:
             self._programar_paso(self.intervalo_ms)
         else:
             self._en_ejecucion = False
+
+    def retroceder_paso(self) -> bool:
+        """Revierte el estado al paso anterior usando el historial."""
+        if not self.historial_snapshots:
+            return False # No hay pasos para atrás
+
+        # Sacamos la última foto y la restauramos
+        snapshot_anterior = self.historial_snapshots.pop()
+        self.restaurar_snapshot(snapshot_anterior)
+
+        # Pausamos por si estaba corriendo en automático
+        self.pausar()
+        return True
 
     def comparar_estrategias(self):
         if self.grafo is None or self.inventario is None or not self.waves:
