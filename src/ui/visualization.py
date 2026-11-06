@@ -10,7 +10,14 @@ if __package__ in (None, ""):
 from src.core.cell import AMBOS, DESPACHO, PASILLO, PUERTA, RACK, E, N, O, S
 
 COLOR_VOLVER_TERMINADA = "#10b981"
-
+COLORES_PICKERS = [
+    "#0ea5e9", # Celeste
+    "#10b981", # Verde
+    "#f59e0b", # Naranja
+    "#8b5cf6", # Violeta
+    "#ec4899", # Rosa
+    "#ef4444", # Rojo (el original)
+]
 
 class Ventana(tk.Frame):
     """Vista de la simulación (colores y diseño originales).
@@ -326,10 +333,11 @@ class Ventana(tk.Frame):
             puntos_px.extend([cx, cy])
         self.canvas.create_line(puntos_px, fill=color, width=2, dash=(4, 2), arrow=tk.LAST)
 
-    def dibujar_picker(self, x, y, id_picker):
+    def dibujar_picker(self, x, y, id_picker, color="#ef4444"):
         cx, cy = self._obtener_centro(x, y)
         radio = self.tamano_celda * 0.35
-        self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill="#ef4444", outline="#991b1b", width=2)
+        # Usamos el color asignado para el relleno, y un gris oscuro para el borde
+        self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill=color, outline="#1e293b", width=2)
         self.canvas.create_text(cx, cy, text=str(id_picker), fill="white", font=("Arial", 8, "bold"))
 
     def actualizar_desde_simulacion(self):
@@ -340,12 +348,21 @@ class Ventana(tk.Frame):
         self.canvas.delete("all")
         self.dibujar_warehouse()
 
-        for ruta in estado.get('rutas', []):
-            self.dibujar_recorrido(ruta)
+        # Obtenemos las rutas y los pickers
+        rutas = estado.get('rutas', [])
+        pickers_estado = estado.get('pickers', [])
 
-        for p in estado.get('pickers', []):
+        # Recorremos los pickers con su índice para asignarles un color
+        for i, p in enumerate(pickers_estado):
+            color = COLORES_PICKERS[i % len(COLORES_PICKERS)]
+
+            # 1. Dibujar el recorrido del picker (si tiene ruta)
+            if i < len(rutas):
+                self.dibujar_recorrido(rutas[i], color=color)
+
+            # 2. Dibujar el círculo del picker
             if p.get("activo", True):
-                self.dibujar_picker(p['x'], p['y'], p['id'])
+                self.dibujar_picker(p['x'], p['y'], p['id'], color=color)
 
         self.lbl_wave.config(text=f"Wave: {estado.get('wave_actual', 0)} / {estado.get('waves_totales', 0)}")
         self.lbl_paso.config(text=f"Paso actual: {estado.get('paso_actual', 0)}")
