@@ -11,6 +11,11 @@ from tkinter import filedialog, messagebox
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.io.scenario_builder import (
+    ErrorConfiguracion,
+    escenario_a_config,
+    guardar_escenario,
+)
 from src.ui.configuracion import VistaConfiguracion
 from src.ui.estilos import (
     CREMA_PRINCIPAL,
@@ -47,7 +52,7 @@ class Controlador:
         self.menu = None
 
         # Datos disponibles para la simulación
-        self.ruta_json = None  # ruta del archivo JSON subido
+        self.ruta_json = None      # ruta del archivo JSON subido
         self.config_manual = None  # datos guardados desde la vista de configuración
 
         self.warehouse = None
@@ -67,7 +72,7 @@ class Controlador:
             ajustar_ventana(self.root, tamano[0], tamano[1], minimo)
         else:
             self.root.minsize(1, 1)  # saca el mínimo de la vista anterior
-            self.root.geometry("")  # tamaño automático según el contenido
+            self.root.geometry("")   # tamaño automático según el contenido
 
     def mostrar_menu(self):
         # Si venimos de la simulación, se deja pausada antes de destruir la vista.
@@ -145,13 +150,20 @@ class Controlador:
             )
             return
         if self.ruta_json is None:
-            # TODO: convertir la configuración manual al formato de escenario del motor.
-            messagebox.showinfo(
-                "Configuración manual",
-                "La configuración manual todavía no está conectada con el motor de "
-                "simulación. Cargue un archivo JSON para iniciar la simulación.",
-            )
-            return
+            # Solo hay configuración manual: se genera el escenario y se usa su archivo.
+            try:
+                self.ruta_json = str(self._generar_escenario(self.config_manual))
+            except ErrorConfiguracion as error:
+                messagebox.showerror(
+                    "Configuración incompleta", error.mensaje_completo()
+                )
+                return
+            except OSError as error:
+                messagebox.showerror(
+                    "Error al guardar", f"No se pudo crear el escenario:\n{error}"
+                )
+                return
+        self.menu.set_archivo_json(Path(self.ruta_json).name)
 
         # Leemos el modo elegido en el menú (1 = Global, 0 = Por Picker)
         modo_elegido = self.menu.combo_modo_waves.get()
@@ -170,10 +182,38 @@ class Controlador:
         self.mostrar_simulacion()
 
     # --- Configuración manual ---
+    def _carpeta_escenarios(self):
+        if self.carpeta_json:
+            return Path(self.carpeta_json)
+        return Path.cwd() / "data" / "scenarios"
+
+    def _generar_escenario(self, config):
+        """Valida la configuración y escribe el JSON del escenario. Devuelve su ruta."""
+        ruta, _escenario = guardar_escenario(config, self._carpeta_escenarios())
+        return ruta
+
     def guardar_configuracion(self):
-        # TODO: validar los datos antes de guardarlos.
-        self.config_manual = self.vista_config.obtener_configuracion()
-        messagebox.showinfo("Configuración", "Configuración guardada correctamente.")
+        config = self.vista_config.obtener_configuracion()
+        try:
+            ruta = self._generar_escenario(config)
+        except ErrorConfiguracion as error:
+            messagebox.showerror(
+                "Revise la configuración",
+                "No se pudo crear el escenario:\n\n" + error.mensaje_completo(),
+            )
+            return  # se queda en la vista para corregir
+        except OSError as error:
+            messagebox.showerror(
+                "Error al guardar", f"No se pudo escribir el escenario:\n{error}"
+            )
+            return
+        self.config_manual = config
+        self.ruta_json = str(ruta)  # el escenario generado queda listo para simular
+        messagebox.showinfo(
+            "Configuración",
+            f"Configuración guardada.\nEscenario creado: {ruta.name}\n"
+            f"Carpeta: {ruta.parent}",
+        )
         self.mostrar_menu()
 
     def exportar_json(self):
@@ -215,6 +255,15 @@ class Controlador:
             messagebox.showerror(
                 "Error al importar", "El archivo no tiene el formato esperado."
             )
+            return
+        if "warehouse" in datos:  # es un escenario del motor: se convierte
+            try:
+                datos, avisos = escenario_a_config(datos)
+            except (ValueError, TypeError, KeyError) as error:
+                messagebox.showerror("Error al importar", str(error))
+                return
+            self.vista_config.cargar_configuracion(datos)
+            messagebox.showinfo("Importación", "\n".join(f"• {a}" for a in avisos))
             return
         self.vista_config.cargar_configuracion(datos)
 

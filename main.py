@@ -570,7 +570,12 @@ class _SimulationTk:
             ],
             "stock_productos": {
                 prod.producto_id: prod.cantidad_disponible for prod in self.productos
-            }
+            },
+            # Guardamos el estado interno de la fase actual ---
+            "distancia_fase_actual": self._simulacion_actual.distancia,
+            "recogidos_fase_actual": list(self._simulacion_actual.productos_recogidos),
+            "faltantes_fase_actual": list(self._simulacion_actual.productos_faltantes),
+            "descargas_fase_actual": list(self._simulacion_actual.descargas),
         }
 
     def restaurar_snapshot(self, snapshot: dict):
@@ -597,6 +602,12 @@ class _SimulationTk:
         self._fase_completada = False
         self._simulacion_actual = self._crear_simulacion_fase(self.fase_actual)
         self._simulacion_actual.paso_actual = snapshot["paso_actual"]
+
+        # Restauramos el estado de la fase actual
+        self._simulacion_actual.distancia = snapshot.get("distancia_fase_actual", 0)
+        self._simulacion_actual.productos_recogidos = snapshot.get("recogidos_fase_actual", [])
+        self._simulacion_actual.productos_faltantes = snapshot.get("faltantes_fase_actual", [])
+        self._simulacion_actual.descargas = snapshot.get("descargas_fase_actual", [])
 
         # descontamos de la nueva simulación los productos que los pickers ya traen
         for picker in self._simulacion_actual.pickers:
@@ -657,6 +668,10 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
         f"en {len(fases)} fases de viaje"
     )
 
+    if not fases:
+        # Si no hay fases (por ejemplo, no hay pedidos), creamos una vacía para evitar IndexError
+        fases = [{"asignaciones": {}}]
+
     simulacion = _SimulationTk(
         warehouse=warehouse,
         pickers=pickers,
@@ -676,9 +691,20 @@ def guardar_partida(ruta_json: Path, sim_tk: _SimulationTk):
     from src.io.persistence import crear_datos_escenario
 
     # Extraemos los pedidos reales de las waves actuales
+    # Los guardamos con estado PENDIENTE para que al cargar se vuelvan a agrupar
     pedidos_actuales = []
     for wave in sim_tk.waves:
-        pedidos_actuales.extend(wave.pedidos)
+        for pedido in wave.pedidos:
+            pedido_dict = {
+                "id": pedido.orden_id,
+                "prioridad": pedido.prioridad,
+                "estado": "PENDIENTE",
+                "items": [
+                    {"producto_id": pid, "cantidad": cant}
+                    for pid, cant in pedido.items
+                ]
+            }
+            pedidos_actuales.append(pedido_dict)
 
     datos = crear_datos_escenario(
         sim_tk.warehouse,
@@ -687,6 +713,11 @@ def guardar_partida(ruta_json: Path, sim_tk: _SimulationTk):
         sim_tk.pickers,
         sim_tk.configuracion
     )
+
+    datos["snapshot_simulacion"] = sim_tk.get_snapshot()
+
+    with open(ruta_json, "w", encoding="utf-8") as f:
+        json.dump(datos, f, indent=2, ensure_ascii=False)
 
     datos["snapshot_simulacion"] = sim_tk.get_snapshot()
 
