@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Any, Callable
 
@@ -485,6 +486,60 @@ class _SimulationTk:
         )
 
 
+    def get_snapshot(self) -> dict:
+        """Devuelve un diccionario con el estado exacto para guardar."""
+        estado_actual = self._simulacion_actual.get_estado()
+        return {
+            "fase_actual": self.fase_actual,
+            "paso_actual": self._simulacion_actual.paso_actual,
+            "distancia_acumulada": self._distancia_acumulada,
+            "productos_recogidos_acumulados": self._productos_recogidos_acumulados,
+            "faltantes_acumulados": self._faltantes_acumulados,
+            "descargas_acumuladas": self._descargas_acumuladas,
+            # Guardamos el estado de cada picker
+            "pickers": [
+                {
+                    "id": p.id,
+                    "posicion_actual": p.posicion_actual,
+                    "carga_actual_kg": p.carga_actual_kg,
+                    "items_transportados": p.items_transportados,
+                } for p in self.pickers
+            ],
+            # Guardamos el stock modificado de los productos
+            "stock_productos": {
+                prod.producto_id: prod.cantidad_disponible for prod in self.productos
+            }
+        }
+
+    def restaurar_snapshot(self, snapshot: dict):
+        """Aplica una foto guardada para continuar la simulación."""
+        # 1. Restaurar variables globales
+        self.fase_actual = snapshot["fase_actual"]
+        self._distancia_acumulada = snapshot["distancia_acumulada"]
+        self._productos_recogidos_acumulados = snapshot["productos_recogidos_acumulados"]
+        self._faltantes_acumulados = snapshot["faltantes_acumulados"]
+        self._descargas_acumuladas = snapshot["descargas_acumuladas"]
+
+        # 2. Restaurar stock de productos
+        for prod in self.productos:
+            if prod.producto_id in snapshot["stock_productos"]:
+                prod.cantidad_disponible = snapshot["stock_productos"][prod.producto_id]
+
+        # 3. Restaurar estado de los pickers
+        estado_pickers = {p["id"]: p for p in snapshot["pickers"]}
+        for picker in self.pickers:
+            if picker.id in estado_pickers:
+                data = estado_pickers[picker.id]
+                picker.posicion_actual = tuple(data["posicion_actual"])
+                picker.carga_actual_kg = data["carga_actual_kg"]
+                picker.items_transportados = [tuple(item) for item in data["items_transportados"]]
+
+        # 4. Volver a crear la simulación en la fase correcta
+        self._fase_completada = False
+        self._simulacion_actual = self._crear_simulacion_fase(self.fase_actual)
+        self._simulacion_actual.paso_actual = snapshot["paso_actual"]
+
+
 def construir_simulacion(ruta_escenario: Path) -> tuple[Any, _SimulationTk]:
     """Carga un escenario JSON y arma el warehouse y la simulación.
 
@@ -544,6 +599,20 @@ def construir_simulacion(ruta_escenario: Path) -> tuple[Any, _SimulationTk]:
     )
     return warehouse, simulacion
 
+
+def guardar_partida(ruta_json: Path, warehouse, sim_tk: _SimulationTk, configuracion):
+    from src.io.persistence import crear_datos_escenario
+
+    # 1. Guardamos el escenario base (para reconstruir el mapa)
+    datos_base = crear_datos_escenario(
+        warehouse, sim_tk.productos, [], sim_tk.pickers, configuracion
+    )
+
+    # 2. Le inyectamos el "snapshot" del tiempo actual
+    datos_base["snapshot_simulacion"] = sim_tk.get_snapshot()
+
+    with open(ruta_json, "w", encoding="utf-8") as f:
+        json.dump(datos_base, f, indent=2, ensure_ascii=False)
 
 def main() -> None:
     """Abre la aplicación empezando por el menú."""
