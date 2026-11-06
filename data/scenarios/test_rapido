@@ -1,0 +1,56 @@
+{
+  "warehouse": {
+    "dimensiones": { "ancho_x": 10, "largo_y": 10 },
+    "puertas": [
+      { "id": "PUERTA_1", "tipo": "OUTBOUND", "ubicacion": { "x": 5, "y": 0 } }
+    ],
+    "zonas_despacho": [
+      { "id": "ZONA_1", "puerta_id": "PUERTA_1", "ubicacion": { "x": 4, "y": 1 }, "ancho": 3, "alto": 2, "peso_max_kg": 100.0 }
+    ],
+    "racks": [
+      { "id": "RACK_1", "ubicacion": { "x": 4, "y": 5 }, "ancho": 2, "alto": 2 }
+    ],
+    "pasillos": [
+      { "id": "PAS_H", "ubicacion": { "x": 3, "y": 3 }, "ancho": 4, "alto": 1, "sentido": "AMBOS" },
+      { "id": "PAS_V", "ubicacion": { "x": 3, "y": 4 }, "ancho": 1, "alto": 3, "sentido": "AMBOS" }
+    ]
+  },
+  "pickers": [
+    { 
+      "id": "PK_TEST", 
+      "posicion_inicial": { "x": 5, "y": 3 }, 
+      "capacidad_carga_kg": 50.0, 
+      "prioridad": 1 
+    }
+  ],
+  "productos": [
+    { 
+      "id": "P001", 
+      "nombre": "Caja Nivel 1", 
+      "rack_id": "RACK_1", 
+      "ubicacion": { "x": 4, "y": 5, "z": 1 }, 
+      "cantidad_disponible": 3, 
+      "peso_kg": 1.0 
+    },
+    { 
+      "id": "P002", 
+      "nombre": "Caja Nivel 2", 
+      "rack_id": "RACK_1", 
+      "ubicacion": { "x": 5, "y": 5, "z": 2 }, 
+      "cantidad_disponible": 3, 
+      "peso_kg": 1.0 
+    }
+  ],
+  "pedidos": [
+    { 
+      "id": "PED_TEST", 
+      "prioridad": 5, 
+      "estado": "PENDIENTE", 
+      "items": [
+        { "producto_id": "P001", "cantidad": 3 },
+        { "producto_id": "P002", "cantidad": 3 }
+      ] 
+    }
+  ],
+  "configuracion": { "wave_max_pedidos": 1, "wave_max_productos": 10 }
+}

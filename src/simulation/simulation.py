@@ -329,7 +329,7 @@ class Simulation:
             pasos_por_altura = z * 2
             self.distancia += pasos_por_altura
             self.paso_actual += pasos_por_altura
-            picker.tiempo_recoleccion = 1 
+            picker.tiempo_recoleccion = 5  # <-- PAUSA DE 5 TICKS
             # ------------------------------
             
             if stock is not None:
@@ -794,7 +794,7 @@ class Simulation:
         pasos_por_altura = z * 2
         self.distancia += pasos_por_altura
         self.paso_actual += pasos_por_altura
-        picker.tiempo_recoleccion = 1 
+        picker.tiempo_recoleccion = 5  # <-- PAUSA DE 5 TICKS
         # ------------------------------
         
         if stock is not None:
@@ -810,7 +810,7 @@ class Simulation:
 
     def avanzar_paso(self) -> bool:
         propuestas: dict[str, tuple[int, int]] = {}
-        habia_pausa = False  # <-- CORRECCIÓN: Bandera para no cortar la simulación
+        habia_pausa = False 
 
         if self._modo_dinamico:
             for picker in self.pickers:
@@ -821,7 +821,7 @@ class Simulation:
         for picker in self.pickers:
             if getattr(picker, "tiempo_recoleccion", 0) > 0:
                 picker.tiempo_recoleccion -= 1
-                habia_pausa = True  # <-- CORRECCIÓN
+                habia_pausa = True 
                 continue
             
             if self._modo_dinamico:
@@ -836,7 +836,6 @@ class Simulation:
                     propuestas[picker.id] = ruta[indice]
 
         if not propuestas:
-            # --- CORRECCIÓN: Si hubo pausa, no terminamos, solo avanzamos el reloj ---
             if habia_pausa:
                 self.paso_actual += 1
                 self._en_ejecucion = True
@@ -867,7 +866,6 @@ class Simulation:
         aceptados: set[str] = set()
         bloqueos_por_picker: dict[str, set[str]] = {}
         for pickers_destino in destinos.values():
-            # El ganador de la celda es el que tiene MAYOR prioridad.
             ganador = min(
                 pickers_destino,
                 key=lambda picker: (
