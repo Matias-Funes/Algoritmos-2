@@ -2,7 +2,7 @@
 import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -55,6 +55,9 @@ class Ventana(tk.Frame):
             bg="#e0f2fe", # Un color celestito para que resalte
             font=("Arial", 9, "bold")
         ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 2), padx=2)
+        tk.Button(frame_btn, text="💾 Guardar Partida", command=self.btn_guardar_partida).grid(
+            row=4, column=0, columnspan=2, sticky="ew", pady=2, padx=2
+        )
 
         frame_btn.columnconfigure(0, weight=1)
         frame_btn.columnconfigure(1, weight=1)
@@ -214,6 +217,22 @@ class Ventana(tk.Frame):
 
         # Botón cerrar
         tk.Button(frame, text="Cerrar", command=ventana.destroy, width=15).pack(pady=(10, 0))
+
+    def btn_guardar_partida(self):
+        if not self.simulacion: return
+        ruta = filedialog.asksaveasfilename(
+            title="Guardar Partida",
+            defaultextension=".json",
+            filetypes=[("Archivos JSON", "*.json")]
+        )
+        if not ruta: return
+
+        try:
+            from main import guardar_partida
+            guardar_partida(Path(ruta), self.simulacion)
+            messagebox.showinfo("Guardado", f"Partida guardada en:\n{ruta}", parent=self.root)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar: {e}", parent=self.root)
 
     # --- Volver al menú ---
     def _simulacion_terminada(self, estado=None):

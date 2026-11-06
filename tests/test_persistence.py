@@ -3,7 +3,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from main import _crear_pedidos, _crear_pickers, _crear_productos
+from main import (
+    _crear_pedidos,
+    _crear_pickers,
+    _crear_productos,
+    _SimulationTk,
+    construir_simulacion,
+    guardar_partida,
+)
 from src.io.persistence import crear_datos_escenario, guardar_escenario
 from src.io.scenario_loader import cargar_escenario
 
@@ -40,9 +47,7 @@ class TestPersistenciaEscenario(unittest.TestCase):
                 self.configuracion,
             )
             contenido_guardado = json.loads(ruta.read_text(encoding="utf-8"))
-            warehouse, productos, pedidos, pickers, config = cargar_escenario(
-                str(ruta)
-            )
+            warehouse, productos, pedidos, pickers, config = cargar_escenario(str(ruta))
 
         self.assertEqual(contenido_guardado, original)
         self.assertEqual(warehouse.ancho_x, self.warehouse.ancho_x)
@@ -81,9 +86,7 @@ class TestPersistenciaEscenario(unittest.TestCase):
                 "z": productos[0].ubicacion[2],
             },
         )
-        self.assertEqual(
-            pedidos_cargados[0]["id"], pedidos[0].orden_id
-        )
+        self.assertEqual(pedidos_cargados[0]["id"], pedidos[0].orden_id)
         self.assertEqual(
             pedidos_cargados[0]["items"][0],
             {
@@ -136,6 +139,30 @@ class TestPersistenciaEscenario(unittest.TestCase):
         self.assertNotIn("posicion_actual", datos["pickers"][0])
         self.assertNotIn("carga_actual_kg", datos["pickers"][0])
         self.assertNotIn("items_transportados", datos["pickers"][0])
+
+    def test_guardar_y_cargar_partida_en_curso(self):
+        wh, sim = construir_simulacion(Path("data/scenarios/escenario_basico.json"))
+        sim.avanzar_paso()  # Damos un par de pasos para que se muevan
+        sim.avanzar_paso()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = Path(tmp) / "partida.json"
+            guardar_partida(ruta, sim)
+
+            # 1. Cargamos el escenario base
+            _, sim_nueva = construir_simulacion(ruta)
+
+            # 2. Leemos el snapshot del JSON y lo restauramos
+            with open(ruta, encoding="utf-8") as f:
+                datos = json.load(f)
+            sim_nueva.restaurar_snapshot(datos["snapshot_simulacion"])
+
+            # 3. Verificamos que el estado coincide
+            self.assertEqual(sim_nueva.fase_actual, sim.fase_actual)
+            self.assertEqual(sim_nueva._distancia_acumulada, sim._distancia_acumulada)
+            self.assertEqual(
+                sim_nueva.pickers[0].posicion_actual, sim.pickers[0].posicion_actual
+            )
 
 
 if __name__ == "__main__":

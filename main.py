@@ -72,7 +72,7 @@ def _crear_pickers(datos_pickers: list[dict[str, Any]]) -> list[Picker]:
                 picker_id=datos["id"],
                 posicion_inicial=tuple(posicion),
                 capacidad_carga_kg=datos["capacidad_carga_kg"],
-                prioridad=datos.get("prioridad", 1), # <-- CORRECCIÓN A: Lee la prioridad del JSON
+                prioridad=datos.get("prioridad", 1),
             )
         )
     return pickers
@@ -255,6 +255,7 @@ class _SimulationTk:
         grafo: Any = None,
         inventario: Any = None,
         waves: list[Wave] | None = None,
+        configuracion: dict[str, Any] | None = None,
         intervalo_ms: int = 250,
     ) -> None:
         self.warehouse = warehouse
@@ -267,6 +268,7 @@ class _SimulationTk:
         self.grafo = grafo
         self.inventario = inventario
         self.waves = list(waves or [])
+        self.configuracion = configuracion
         self.fase_actual = 0
         self._root = None
         self._actualizar_interfaz: Callable[[], None] | None = None
@@ -486,9 +488,9 @@ class _SimulationTk:
         )
 
 
+
     def get_snapshot(self) -> dict:
         """Devuelve un diccionario con el estado exacto para guardar."""
-        estado_actual = self._simulacion_actual.get_estado()
         return {
             "fase_actual": self.fase_actual,
             "paso_actual": self._simulacion_actual.paso_actual,
@@ -496,16 +498,14 @@ class _SimulationTk:
             "productos_recogidos_acumulados": self._productos_recogidos_acumulados,
             "faltantes_acumulados": self._faltantes_acumulados,
             "descargas_acumuladas": self._descargas_acumuladas,
-            # Guardamos el estado de cada picker
             "pickers": [
                 {
                     "id": p.id,
-                    "posicion_actual": p.posicion_actual,
+                    "posicion_actual": list(p.posicion_actual), # tupla a lista para JSON
                     "carga_actual_kg": p.carga_actual_kg,
-                    "items_transportados": p.items_transportados,
+                    "items_transportados": list(p.items_transportados),
                 } for p in self.pickers
             ],
-            # Guardamos el stock modificado de los productos
             "stock_productos": {
                 prod.producto_id: prod.cantidad_disponible for prod in self.productos
             }
@@ -513,19 +513,16 @@ class _SimulationTk:
 
     def restaurar_snapshot(self, snapshot: dict):
         """Aplica una foto guardada para continuar la simulación."""
-        # 1. Restaurar variables globales
         self.fase_actual = snapshot["fase_actual"]
         self._distancia_acumulada = snapshot["distancia_acumulada"]
         self._productos_recogidos_acumulados = snapshot["productos_recogidos_acumulados"]
         self._faltantes_acumulados = snapshot["faltantes_acumulados"]
         self._descargas_acumuladas = snapshot["descargas_acumuladas"]
 
-        # 2. Restaurar stock de productos
         for prod in self.productos:
             if prod.producto_id in snapshot["stock_productos"]:
                 prod.cantidad_disponible = snapshot["stock_productos"][prod.producto_id]
 
-        # 3. Restaurar estado de los pickers
         estado_pickers = {p["id"]: p for p in snapshot["pickers"]}
         for picker in self.pickers:
             if picker.id in estado_pickers:
@@ -534,10 +531,17 @@ class _SimulationTk:
                 picker.carga_actual_kg = data["carga_actual_kg"]
                 picker.items_transportados = [tuple(item) for item in data["items_transportados"]]
 
-        # 4. Volver a crear la simulación en la fase correcta
+        # Re-armamos el motor
         self._fase_completada = False
         self._simulacion_actual = self._crear_simulacion_fase(self.fase_actual)
         self._simulacion_actual.paso_actual = snapshot["paso_actual"]
+
+        # descontamos de la nueva simulación los productos que los pickers ya traen
+        for picker in self._simulacion_actual.pickers:
+            for prod_id, cant in picker.items_transportados:
+                self._simulacion_actual._reducir_demanda(picker, prod_id, cant)
+
+
 
 
 def construir_simulacion(ruta_escenario: Path) -> tuple[Any, _SimulationTk]:
@@ -596,23 +600,31 @@ def construir_simulacion(ruta_escenario: Path) -> tuple[Any, _SimulationTk]:
         grafo=grafo,
         inventario=inventario,
         waves=waves,
+        configuracion=configuracion,
     )
     return warehouse, simulacion
 
-
-def guardar_partida(ruta_json: Path, warehouse, sim_tk: _SimulationTk, configuracion):
+def guardar_partida(ruta_json: Path, sim_tk: _SimulationTk):
+    """Guarda el escenario base Y el estado actual de la simulación."""
     from src.io.persistence import crear_datos_escenario
 
-    # 1. Guardamos el escenario base (para reconstruir el mapa)
-    datos_base = crear_datos_escenario(
-        warehouse, sim_tk.productos, [], sim_tk.pickers, configuracion
+    # Extraemos los pedidos reales de las waves actuales
+    pedidos_actuales = []
+    for wave in sim_tk.waves:
+        pedidos_actuales.extend(wave.pedidos)
+
+    datos = crear_datos_escenario(
+        sim_tk.warehouse,
+        sim_tk.productos,
+        pedidos_actuales,
+        sim_tk.pickers,
+        sim_tk.configuracion
     )
 
-    # 2. Le inyectamos el "snapshot" del tiempo actual
-    datos_base["snapshot_simulacion"] = sim_tk.get_snapshot()
+    datos["snapshot_simulacion"] = sim_tk.get_snapshot()
 
     with open(ruta_json, "w", encoding="utf-8") as f:
-        json.dump(datos_base, f, indent=2, ensure_ascii=False)
+        json.dump(datos, f, indent=2, ensure_ascii=False)
 
 def main() -> None:
     """Abre la aplicación empezando por el menú."""
