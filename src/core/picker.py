@@ -17,7 +17,6 @@ class Picker:
         if not isinstance(picker_id, str) or not picker_id:
             raise ValueError("El id del picker debe ser un string no vacío.")
         
-        # Aquí se llamaba al método que faltaba
         self._validar_posicion(posicion_inicial)
         self._validar_peso(
             capacidad_carga_kg,
@@ -35,6 +34,9 @@ class Picker:
         self.prioridad = prioridad
         self.carga_actual_kg = 0.0
         self.items_transportados: list[tuple[str, int]] = []
+        
+        # --- NUEVA LÍNEA: Atributo para la pausa de recolección ---
+        self.tiempo_recoleccion = 0 
 
     @staticmethod
     def _validar_posicion(posicion: tuple[int, int]) -> None:
