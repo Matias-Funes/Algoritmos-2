@@ -12,7 +12,13 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.ui.configuracion import VistaConfiguracion
-from src.ui.estilos import CREMA_PRINCIPAL, activar_dpi, ajustar_ventana, aplicar_estilos_ttk, px
+from src.ui.estilos import (
+    CREMA_PRINCIPAL,
+    activar_dpi,
+    ajustar_ventana,
+    aplicar_estilos_ttk,
+    px,
+)
 from src.ui.menu import VistaMenu
 from src.ui.visualization import Ventana
 
@@ -74,6 +80,7 @@ class Controlador:
             on_cargar_json=self.cargar_json,
             on_config_manual=self.abrir_configuracion,
             on_iniciar=self.iniciar_simulacion,
+            on_cargar_partida=self.cargar_partida,
         )
         menu.set_archivo_json(Path(self.ruta_json).name if self.ruta_json else None)
         menu.set_config_manual(self.config_manual is not None)
@@ -94,8 +101,12 @@ class Controlador:
         self._mostrar(vista, (1100, 620), (950, 500))
 
     def mostrar_simulacion(self):
-        ventana = Ventana(self.warehouse, tamano_celda=px(self.tamano_celda),
-                          master=self.root, on_volver=self.mostrar_menu)
+        ventana = Ventana(
+            self.warehouse,
+            tamano_celda=px(self.tamano_celda),
+            master=self.root,
+            on_volver=self.mostrar_menu,
+        )
         # Si la simulación necesita la ventana para programar sus pasos (after), se la vincula.
         vincular = getattr(self.simulacion, "vincular_interfaz", None)
         if vincular is not None:
@@ -117,7 +128,9 @@ class Controlador:
             with open(ruta, encoding="utf-8") as archivo:
                 json.load(archivo)  # solo se comprueba que sea un JSON válido
         except (OSError, ValueError) as error:
-            messagebox.showerror("Error al cargar", f"No se pudo leer el archivo:\n{error}")
+            messagebox.showerror(
+                "Error al cargar", f"No se pudo leer el archivo:\n{error}"
+            )
             return
         self.ruta_json = ruta
         self.menu.set_archivo_json(Path(ruta).name)
@@ -136,13 +149,17 @@ class Controlador:
             messagebox.showinfo(
                 "Configuración manual",
                 "La configuración manual todavía no está conectada con el motor de "
-                "simulación. Cargue un archivo JSON para iniciar la simulación."
+                "simulación. Cargue un archivo JSON para iniciar la simulación.",
             )
             return
 
         try:
-            self.warehouse, self.simulacion = self.constructor_simulacion(Path(self.ruta_json))
-        except Exception as error:  # el escenario puede ser inválido: se informa sin cerrar la app
+            self.warehouse, self.simulacion = self.constructor_simulacion(
+                Path(self.ruta_json)
+            )
+        except (
+            Exception
+        ) as error:  # el escenario puede ser inválido: se informa sin cerrar la app
             traceback.print_exc()
             messagebox.showerror("No se pudo iniciar la simulación", str(error))
             return
@@ -156,28 +173,76 @@ class Controlador:
         self.mostrar_menu()
 
     def exportar_json(self):
-        ruta = filedialog.asksaveasfilename(title="Exportar configuración", defaultextension=".json",
-                                            filetypes=TIPOS_JSON)
+        ruta = filedialog.asksaveasfilename(
+            title="Exportar configuración",
+            defaultextension=".json",
+            filetypes=TIPOS_JSON,
+        )
         if not ruta:
             return
         try:
             with open(ruta, "w", encoding="utf-8") as archivo:
-                json.dump(self.vista_config.obtener_configuracion(), archivo,
-                          indent=2, ensure_ascii=False)
+                json.dump(
+                    self.vista_config.obtener_configuracion(),
+                    archivo,
+                    indent=2,
+                    ensure_ascii=False,
+                )
         except OSError as error:
-            messagebox.showerror("Error al exportar", f"No se pudo guardar el archivo:\n{error}")
+            messagebox.showerror(
+                "Error al exportar", f"No se pudo guardar el archivo:\n{error}"
+            )
 
     def importar_json(self):
-        ruta = filedialog.askopenfilename(title="Importar configuración", filetypes=TIPOS_JSON)
+        ruta = filedialog.askopenfilename(
+            title="Importar configuración", filetypes=TIPOS_JSON
+        )
         if not ruta:
             return
         try:
             with open(ruta, encoding="utf-8") as archivo:
                 datos = json.load(archivo)
         except (OSError, ValueError) as error:
-            messagebox.showerror("Error al importar", f"No se pudo leer el archivo:\n{error}")
+            messagebox.showerror(
+                "Error al importar", f"No se pudo leer el archivo:\n{error}"
+            )
             return
         if not isinstance(datos, dict):
-            messagebox.showerror("Error al importar", "El archivo no tiene el formato esperado.")
+            messagebox.showerror(
+                "Error al importar", "El archivo no tiene el formato esperado."
+            )
             return
         self.vista_config.cargar_configuracion(datos)
+
+    def cargar_partida(self):
+        """Abre un JSON guardado y restaura la simulación."""
+        ruta = filedialog.askopenfilename(
+            title="Cargar Partida", filetypes=[("Archivos JSON", "*.json")]
+        )
+        if not ruta:
+            return
+
+        try:
+            with open(ruta, encoding="utf-8") as f:
+                datos = json.load(f)
+
+            # Verificamos si es una partida guardada o un escenario normal
+            snapshot = datos.get("snapshot_simulacion")
+            if not snapshot:
+                messagebox.showerror(
+                    "Error", "El archivo no es una partida guardada válida."
+                )
+                return
+
+            # Reconstruimos la simulación desde cero (usa el escenario base del JSON)
+            self.warehouse, self.simulacion = self.constructor_simulacion(Path(ruta))
+
+            # ¡Aplicamos la foto del tiempo!
+            self.simulacion.restaurar_snapshot(snapshot)
+
+            # Lo mandamos a la vista de simulación
+            self.mostrar_simulacion()
+
+        except Exception as error:
+            traceback.print_exc()
+            messagebox.showerror("Error al cargar", str(error))
