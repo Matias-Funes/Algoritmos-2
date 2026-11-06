@@ -122,7 +122,6 @@ class Simulation:
         if isinstance(ubicacion, dict):
             ubicacion = (ubicacion["x"], ubicacion["y"])
         
-        # Lee la prioridad desde el JSON
         prioridad = picker.get("prioridad", 1)
         
         return Picker(
@@ -323,6 +322,16 @@ class Simulation:
                 picker.carga_actual_kg = getattr(picker, "carga_actual_kg", 0.0) + (
                     peso * cantidad
                 )
+            
+            # --- CÁLCULO DE ALTURA (Z) ---
+            ubicacion = self._valor(producto, "ubicacion")
+            z = int(ubicacion[2]) if len(ubicacion) > 2 else 1
+            pasos_por_altura = z * 2
+            self.distancia += pasos_por_altura
+            self.paso_actual += pasos_por_altura
+            picker.tiempo_recoleccion = 1 
+            # ------------------------------
+            
             if stock is not None:
                 producto.cantidad_disponible -= cantidad
             self._reducir_demanda(picker, producto_id, cantidad)
@@ -778,6 +787,16 @@ class Simulation:
             return
 
         picker.recoger(producto, cantidad)
+        
+        # --- CÁLCULO DE ALTURA (Z) ---
+        ubicacion = self._valor(producto, "ubicacion")
+        z = int(ubicacion[2]) if len(ubicacion) > 2 else 1
+        pasos_por_altura = z * 2
+        self.distancia += pasos_por_altura
+        self.paso_actual += pasos_por_altura
+        picker.tiempo_recoleccion = 1 
+        # ------------------------------
+        
         if stock is not None:
             producto.cantidad_disponible -= cantidad
         self._reducir_demanda(picker, producto_id, cantidad)
@@ -791,10 +810,20 @@ class Simulation:
 
     def avanzar_paso(self) -> bool:
         propuestas: dict[str, tuple[int, int]] = {}
+        habia_pausa = False  # <-- CORRECCIÓN: Bandera para no cortar la simulación
+
         if self._modo_dinamico:
             for picker in self.pickers:
+                if getattr(picker, "tiempo_recoleccion", 0) > 0:
+                    continue
                 self._planificar_picker_dinamico(picker)
+                
         for picker in self.pickers:
+            if getattr(picker, "tiempo_recoleccion", 0) > 0:
+                picker.tiempo_recoleccion -= 1
+                habia_pausa = True  # <-- CORRECCIÓN
+                continue
+            
             if self._modo_dinamico:
                 tramo = self._tramos_dinamicos[picker.id]
                 indice = self._indices_ruta[picker.id]
@@ -807,6 +836,12 @@ class Simulation:
                     propuestas[picker.id] = ruta[indice]
 
         if not propuestas:
+            # --- CORRECCIÓN: Si hubo pausa, no terminamos, solo avanzamos el reloj ---
+            if habia_pausa:
+                self.paso_actual += 1
+                self._en_ejecucion = True
+                return True
+            
             if not self._modo_dinamico or all(
                 estado == "terminado"
                 for estado in self._estado_picker.values()
@@ -836,7 +871,7 @@ class Simulation:
             ganador = min(
                 pickers_destino,
                 key=lambda picker: (
-                    -picker.prioridad, # Menor prioridad (ej: 1) se frena, mayor (ej: 5) avanza.
+                    -picker.prioridad, 
                     str(picker.id),
                 ),
             )
@@ -1003,6 +1038,8 @@ class Simulation:
                         not self._modo_dinamico
                         or self._estado_picker[picker.id] != "terminado"
                     ),
+                    # --- CORRECCIÓN ---
+                    "recolectando": getattr(picker, "tiempo_recoleccion", 0) > 0
                 }
                 for picker in self.pickers
             ],
@@ -1013,7 +1050,6 @@ class Simulation:
             "total_productos": self._total_productos,
             "distancia": self.distancia,
             
-            # Le pasamos a la UI los pedidos que se están procesando actualmente
             "pedidos_actuales": (
                 self._demanda_por_picker
                 if self._asignaciones_explicitas
@@ -1049,6 +1085,8 @@ class Simulation:
             picker.mover_a(inicial["posicion"])
             picker.items_transportados = list(inicial["items"])
             picker.carga_actual_kg = inicial["carga"]
+            # --- CORRECCIÓN ---
+            picker.tiempo_recoleccion = 0 
         
         self._indices_ruta = {
             picker.id: (
