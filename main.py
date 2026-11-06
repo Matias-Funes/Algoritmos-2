@@ -570,7 +570,12 @@ class _SimulationTk:
             ],
             "stock_productos": {
                 prod.producto_id: prod.cantidad_disponible for prod in self.productos
-            }
+            },
+            # Guardamos el estado interno de la fase actual ---
+            "distancia_fase_actual": self._simulacion_actual.distancia,
+            "recogidos_fase_actual": list(self._simulacion_actual.productos_recogidos),
+            "faltantes_fase_actual": list(self._simulacion_actual.productos_faltantes),
+            "descargas_fase_actual": list(self._simulacion_actual.descargas),
         }
 
     def restaurar_snapshot(self, snapshot: dict):
@@ -597,6 +602,12 @@ class _SimulationTk:
         self._fase_completada = False
         self._simulacion_actual = self._crear_simulacion_fase(self.fase_actual)
         self._simulacion_actual.paso_actual = snapshot["paso_actual"]
+
+        # Restauramos el estado de la fase actual
+        self._simulacion_actual.distancia = snapshot.get("distancia_fase_actual", 0)
+        self._simulacion_actual.productos_recogidos = snapshot.get("recogidos_fase_actual", [])
+        self._simulacion_actual.productos_faltantes = snapshot.get("faltantes_fase_actual", [])
+        self._simulacion_actual.descargas = snapshot.get("descargas_fase_actual", [])
 
         # descontamos de la nueva simulación los productos que los pickers ya traen
         for picker in self._simulacion_actual.pickers:
