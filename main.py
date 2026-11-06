@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.algorithms.pathfinding import CacheDistancias
+from src.algorithms.wave_manager import generar_waves
 from src.controlador import Controlador
 from src.core.graph_builder import construir_grafo
 from src.core.inventory import GestorInventario, Producto
@@ -99,6 +100,43 @@ def _validar_stock_pedidos(
                 "disponible y se registrará el faltante."
             )
 
+
+def _crear_fases_por_wave(
+    pedidos: list[Orden],
+    pickers: list[Picker],
+    inventario: GestorInventario,
+    grafo: Any,
+    configuracion: dict[str, Any],
+) -> tuple[list[Wave], list[dict[str, Any]]]:
+    """Agrupa pedidos en Waves y luego reparte cada Wave entre todos los pickers."""
+
+    # 1. Configuramos el diccionario que espera generar_waves
+    config_wm = {
+        "max_pedidos": configuracion.get("wave_max_pedidos", 10),
+        "max_productos": configuracion.get("wave_max_productos", 100),
+        "peso_max_kg": sum(p.peso_total(inventario) for p in pedidos) + 1,
+    }
+
+    # 2. Agrupamos inteligentemente (por prioridad y cercanía)
+    waves = generar_waves(pedidos, inventario, grafo, config_wm)
+
+    fases = []
+    # 3. Para cada Wave, repartimos sus pedidos entre TODOS los pickers
+    for wave in waves:
+        asignaciones = {p.id: [] for p in pickers}
+
+        # Repartimos en forma de "Round Robin" o balanceando la carga
+        for i, pedido in enumerate(wave.pedidos):
+            picker_asignado = pickers[i % len(pickers)]
+            asignaciones[picker_asignado.id].append(pedido)
+
+        # 4. Cada Wave se convierte en una Fase de simulación
+        fases.append({
+            "wave_id": wave.id,
+            "asignaciones": asignaciones
+        })
+
+    return waves, fases
 
 def _crear_waves(
     pedidos: list[Orden],
@@ -373,6 +411,8 @@ class _SimulationTk:
                 "x": picker.posicion_actual[0],
                 "y": picker.posicion_actual[1],
                 "carga_actual_kg": picker.carga_actual_kg,
+                "capacidad_carga_kg": picker.capacidad_carga_kg,
+                "wave_actual": estado["wave_actual"],
                 "items_transportados": [
                     dict(item)
                     for item in estado_pickers.get(picker.id, {}).get(
@@ -565,8 +605,7 @@ class _SimulationTk:
 
 
 
-
-def construir_simulacion(ruta_escenario: Path) -> tuple[Any, _SimulationTk]:
+def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (Flota)") -> tuple[Any, _SimulationTk]:
     """Carga un escenario JSON y arma el warehouse y la simulación.
 
     Devuelve (warehouse, simulacion). La simulación todavía no está vinculada a
@@ -592,10 +631,16 @@ def construir_simulacion(ruta_escenario: Path) -> tuple[Any, _SimulationTk]:
     if grafo.node_count() == 0:
         raise ValueError("El almacén no contiene celdas transitables.")
 
-    print("4. Generando waves y asignándolas a los pickers")
-    waves, _, waves_por_picker = _crear_waves(
-        pedidos, pickers, inventario, configuracion
-    )
+    print(f"4. Generando waves (Modo: {modo_waves})")
+
+    if modo_waves == "Wave Global (Flota)":
+        # Lógica NUEVA (Todos trabajan en la misma wave)
+        waves, fases = _crear_fases_por_wave(pedidos, pickers, inventario, grafo, configuracion)
+    else:
+        # Lógica VIEJA (Cada picker tiene su propia wave)
+        waves, _, waves_por_picker = _crear_waves(pedidos, pickers, inventario, configuracion)
+        fases = _crear_fases_simulacion(pickers, waves_por_picker)
+
     print(f"   Waves generadas: {len(waves)}")
 
     print("5. Preparando rutas dinámicas y zonas de despacho")
@@ -606,12 +651,12 @@ def construir_simulacion(ruta_escenario: Path) -> tuple[Any, _SimulationTk]:
             "No hay zonas de despacho accesibles asociadas a una puerta "
             "de salida."
         )
-    fases = _crear_fases_simulacion(pickers, waves_por_picker)
 
     print(
         f"6. Iniciando motor de simulación: {len(waves)} waves "
         f"en {len(fases)} fases de viaje"
     )
+
     simulacion = _SimulationTk(
         warehouse=warehouse,
         pickers=pickers,

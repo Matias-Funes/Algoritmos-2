@@ -153,9 +153,13 @@ class Controlador:
             )
             return
 
+        # Leemos el modo elegido en el menú (1 = Global, 0 = Por Picker)
+        modo_elegido = self.menu.combo_modo_waves.get()
+
         try:
+            # Le pasamos el modo a la función constructora
             self.warehouse, self.simulacion = self.constructor_simulacion(
-                Path(self.ruta_json)
+                Path(self.ruta_json), modo_waves=modo_elegido
             )
         except (
             Exception

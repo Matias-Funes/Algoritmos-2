@@ -33,6 +33,7 @@ class Ventana(tk.Frame):
         self.tamano_celda = tamano_celda
         self.simulacion = None
         self.on_volver = on_volver
+        self.en_ejecucion = False
         self.root = self.winfo_toplevel()
 
         if master is None:
@@ -50,29 +51,38 @@ class Ventana(tk.Frame):
         frame_btn = tk.Frame(self.panel, bg="#f8fafc")
         frame_btn.pack(fill=tk.X)
 
-        tk.Button(frame_btn, text="▶ Iniciar", command=self.btn_iniciar).grid(row=0, column=0, sticky="ew", pady=2, padx=2)
-        tk.Button(frame_btn, text="⏸ Pausar", command=self.btn_pausar).grid(row=0, column=1, sticky="ew", pady=2, padx=2)
-        tk.Button(frame_btn, text="⏯ Continuar", command=self.btn_continuar).grid(row=1, column=0, sticky="ew", pady=2, padx=2)
-        tk.Button(frame_btn, text="🔄 Reiniciar", command=self.btn_reset).grid(row=1, column=1, sticky="ew", pady=2, padx=2)
+        # Fila 0: Play/Pausar (Izquierda) y Reiniciar (Derecha)
+        self.btn_play_pause = tk.Button(
+            frame_btn, text="▶ Iniciar", command=self.btn_toggle_play_pause
+        )
+        # Lo ponemos en la columna 0
+        self.btn_play_pause.grid(row=0, column=0, sticky="ew", pady=2, padx=(2, 1))
 
+        tk.Button(
+            frame_btn, text="🔄 Reiniciar", command=self.btn_reset
+        ).grid(row=0, column=1, sticky="ew", pady=2, padx=(1, 2))
+
+        # Fila 1: Atrás y Adelante (como ya los tenías)
         frame_pasos = tk.Frame(frame_btn, bg="#f8fafc")
-        frame_pasos.grid(row=2, column=0, columnspan=2, sticky="ew", pady=2)
+        frame_pasos.grid(row=1, column=0, columnspan=2, sticky="ew", pady=2)
 
         tk.Button(frame_pasos, text="⏮ Atrás", command=self.btn_paso_atras).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 1))
         tk.Button(frame_pasos, text="⏭ Adelante", command=self.btn_paso).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(1, 2))
-        tk.Button(
-            frame_btn,
-            text="📊 Comparar Estrategias",
-            command=self.btn_comparar_estrategias,
-            bg="#e0f2fe", # Un color celestito para que resalte
-            font=("Arial", 9, "bold")
-        ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 2), padx=2)
+
+        # Fila 2: Guardar y Comparar
         tk.Button(frame_btn, text="💾 Guardar Partida", command=self.btn_guardar_partida).grid(
-            row=4, column=0, columnspan=2, sticky="ew", pady=2, padx=2
+            row=2, column=0, columnspan=2, sticky="ew", pady=2, padx=2
         )
 
+        tk.Button(
+            frame_btn, text="📊 Comparar Estrategias", command=self.btn_comparar_estrategias,
+            bg="#e0f2fe", font=("Arial", 9, "bold")
+        ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 2), padx=2)
+
+        # (Asegurate de mantener los columnconfigure para que se repartan el ancho)
         frame_btn.columnconfigure(0, weight=1)
         frame_btn.columnconfigure(1, weight=1)
+
 
         # 2. Métricas Globales
         tk.Label(self.panel, text="Métricas Globales", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
@@ -119,35 +129,38 @@ class Ventana(tk.Frame):
         self.simulacion = sim
 
     # --- Callbacks ---
-    def btn_iniciar(self):
-        if self.simulacion:
-            self.simulacion.iniciar()
+    def btn_toggle_play_pause(self):
+        if not self.simulacion:
+            return
 
-    def btn_pausar(self):
-        if self.simulacion:
+        if self.en_ejecucion:
             self.simulacion.pausar()
-
-    def btn_continuar(self):
-        if self.simulacion:
-            if hasattr(self.simulacion, 'continuar'):
-                self.simulacion.continuar()
-            else:
-                self.simulacion.iniciar()
+            self.en_ejecucion = False
+            self.btn_play_pause.config(text="▶ Reanudar")
+        else:
+            self.simulacion.iniciar()
+            self.en_ejecucion = True
+            self.btn_play_pause.config(text="⏸ Pausar")
 
     def btn_paso(self):
         if self.simulacion:
+            self.simulacion.pausar() # Pausamos por si estaba corriendo
+            self.en_ejecucion = False
+            self.btn_play_pause.config(text="▶ Iniciar")
             self.simulacion.avanzar_paso()
             self.actualizar_desde_simulacion()
-
-    def btn_paso_atras(self):
-        if self.simulacion:
-            if self.simulacion.retroceder_paso():
-                self.actualizar_desde_simulacion()
 
     def btn_reset(self):
         if self.simulacion:
             self.simulacion.resetear()
             self.actualizar_desde_simulacion()
+            self.en_ejecucion = False
+            self.btn_play_pause.config(text="▶ Iniciar")
+
+    def btn_paso_atras(self):
+        if self.simulacion:
+            if self.simulacion.retroceder_paso():
+                self.actualizar_desde_simulacion()
 
     def btn_comparar_estrategias(self):
         if not self.simulacion:
@@ -333,12 +346,24 @@ class Ventana(tk.Frame):
             puntos_px.extend([cx, cy])
         self.canvas.create_line(puntos_px, fill=color, width=2, dash=(4, 2), arrow=tk.LAST)
 
-    def dibujar_picker(self, x, y, id_picker, color="#ef4444"):
+    def dibujar_picker(self, x, y, p_data, color="#ef4444"):
         cx, cy = self._obtener_centro(x, y)
         radio = self.tamano_celda * 0.35
-        # Usamos el color asignado para el relleno, y un gris oscuro para el borde
+
+        # 1. Círculo principal
         self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill=color, outline="#1e293b", width=2)
-        self.canvas.create_text(cx, cy, text=str(id_picker), fill="white", font=("Arial", 8, "bold"))
+
+        # 2. Inicial adentro del círculo (lee p_data['id'] correctamente)
+        inicial = str(p_data['id'])[-1]
+        self.canvas.create_text(cx, cy, text=inicial, fill="white", font=("Arial", 8, "bold"))
+
+        # 3. Detalle debajo del picker (ID | Wave | Peso)
+        wave = p_data.get('wave_actual', '?')
+        carga = p_data.get('carga_actual_kg', 0)
+        cap = p_data.get('capacidad_carga_kg', 0)
+        detalle = f"{p_data['id']} | W{wave} | {carga:.0f}/{cap:.0f}kg"
+
+        self.canvas.create_text(cx, cy + radio + 10, text=detalle, fill=color, font=("Arial", 7, "bold"))
 
     def actualizar_desde_simulacion(self):
         if not self.simulacion:
@@ -362,7 +387,7 @@ class Ventana(tk.Frame):
 
             # 2. Dibujar el círculo del picker
             if p.get("activo", True):
-                self.dibujar_picker(p['x'], p['y'], p['id'], color=color)
+                self.dibujar_picker(p['x'], p['y'], p, color=color)
 
         self.lbl_wave.config(text=f"Wave: {estado.get('wave_actual', 0)} / {estado.get('waves_totales', 0)}")
         self.lbl_paso.config(text=f"Paso actual: {estado.get('paso_actual', 0)}")
@@ -418,6 +443,10 @@ class Ventana(tk.Frame):
 
         self.txt_pedidos.config(state=tk.DISABLED)
         self._actualizar_boton_volver(estado)
+
+        if estado.get('terminada', False):
+            self.en_ejecucion = False
+            self.btn_play_pause.config(text="▶ Iniciar")
 
     def iniciar(self):
         self.mainloop()
