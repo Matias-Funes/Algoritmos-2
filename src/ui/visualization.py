@@ -33,6 +33,7 @@ class Ventana(tk.Frame):
         self.tamano_celda = tamano_celda
         self.simulacion = None
         self.on_volver = on_volver
+        self.en_ejecucion = False
         self.root = self.winfo_toplevel()
 
         if master is None:
@@ -50,29 +51,38 @@ class Ventana(tk.Frame):
         frame_btn = tk.Frame(self.panel, bg="#f8fafc")
         frame_btn.pack(fill=tk.X)
 
-        tk.Button(frame_btn, text="▶ Iniciar", command=self.btn_iniciar).grid(row=0, column=0, sticky="ew", pady=2, padx=2)
-        tk.Button(frame_btn, text="⏸ Pausar", command=self.btn_pausar).grid(row=0, column=1, sticky="ew", pady=2, padx=2)
-        tk.Button(frame_btn, text="⏯ Continuar", command=self.btn_continuar).grid(row=1, column=0, sticky="ew", pady=2, padx=2)
-        tk.Button(frame_btn, text="🔄 Reiniciar", command=self.btn_reset).grid(row=1, column=1, sticky="ew", pady=2, padx=2)
+        # Fila 0: Play/Pausar (Izquierda) y Reiniciar (Derecha)
+        self.btn_play_pause = tk.Button(
+            frame_btn, text="▶ Iniciar", command=self.btn_toggle_play_pause
+        )
+        # Lo ponemos en la columna 0
+        self.btn_play_pause.grid(row=0, column=0, sticky="ew", pady=2, padx=(2, 1))
 
+        tk.Button(
+            frame_btn, text="🔄 Reiniciar", command=self.btn_reset
+        ).grid(row=0, column=1, sticky="ew", pady=2, padx=(1, 2))
+
+        # Fila 1: Atrás y Adelante (como ya los tenías)
         frame_pasos = tk.Frame(frame_btn, bg="#f8fafc")
-        frame_pasos.grid(row=2, column=0, columnspan=2, sticky="ew", pady=2)
+        frame_pasos.grid(row=1, column=0, columnspan=2, sticky="ew", pady=2)
 
         tk.Button(frame_pasos, text="⏮ Atrás", command=self.btn_paso_atras).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 1))
         tk.Button(frame_pasos, text="⏭ Adelante", command=self.btn_paso).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(1, 2))
-        tk.Button(
-            frame_btn,
-            text="📊 Comparar Estrategias",
-            command=self.btn_comparar_estrategias,
-            bg="#e0f2fe", # Un color celestito para que resalte
-            font=("Arial", 9, "bold")
-        ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 2), padx=2)
+
+        # Fila 2: Guardar y Comparar
         tk.Button(frame_btn, text="💾 Guardar Partida", command=self.btn_guardar_partida).grid(
-            row=4, column=0, columnspan=2, sticky="ew", pady=2, padx=2
+            row=2, column=0, columnspan=2, sticky="ew", pady=2, padx=2
         )
 
+        tk.Button(
+            frame_btn, text="📊 Comparar Estrategias", command=self.btn_comparar_estrategias,
+            bg="#e0f2fe", font=("Arial", 9, "bold")
+        ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 2), padx=2)
+
+        # (Asegurate de mantener los columnconfigure para que se repartan el ancho)
         frame_btn.columnconfigure(0, weight=1)
         frame_btn.columnconfigure(1, weight=1)
+
 
         # 2. Métricas Globales
         tk.Label(self.panel, text="Métricas Globales", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
@@ -119,35 +129,38 @@ class Ventana(tk.Frame):
         self.simulacion = sim
 
     # --- Callbacks ---
-    def btn_iniciar(self):
-        if self.simulacion:
-            self.simulacion.iniciar()
+    def btn_toggle_play_pause(self):
+        if not self.simulacion:
+            return
 
-    def btn_pausar(self):
-        if self.simulacion:
+        if self.en_ejecucion:
             self.simulacion.pausar()
-
-    def btn_continuar(self):
-        if self.simulacion:
-            if hasattr(self.simulacion, 'continuar'):
-                self.simulacion.continuar()
-            else:
-                self.simulacion.iniciar()
+            self.en_ejecucion = False
+            self.btn_play_pause.config(text="▶ Reanudar")
+        else:
+            self.simulacion.iniciar()
+            self.en_ejecucion = True
+            self.btn_play_pause.config(text="⏸ Pausar")
 
     def btn_paso(self):
         if self.simulacion:
+            self.simulacion.pausar() # Pausamos por si estaba corriendo
+            self.en_ejecucion = False
+            self.btn_play_pause.config(text="▶ Iniciar")
             self.simulacion.avanzar_paso()
             self.actualizar_desde_simulacion()
-
-    def btn_paso_atras(self):
-        if self.simulacion:
-            if self.simulacion.retroceder_paso():
-                self.actualizar_desde_simulacion()
 
     def btn_reset(self):
         if self.simulacion:
             self.simulacion.resetear()
             self.actualizar_desde_simulacion()
+            self.en_ejecucion = False
+            self.btn_play_pause.config(text="▶ Iniciar")
+
+    def btn_paso_atras(self):
+        if self.simulacion:
+            if self.simulacion.retroceder_paso():
+                self.actualizar_desde_simulacion()
 
     def btn_comparar_estrategias(self):
         if not self.simulacion:
@@ -171,69 +184,136 @@ class Ventana(tk.Frame):
             messagebox.showinfo("Sin datos", "No hay waves para comparar.", parent=self.root)
             return
 
-        totales = comparacion["totales"]
-        nombres = list(totales)
-
         # Crear ventana emergente
         ventana = tk.Toplevel(self.root)
         ventana.title("Comparación de Estrategias")
-        ventana.geometry("600x400")
-        ventana.minsize(400, 300) # Tamaño mínimo para que no se rompa
-        ventana.transient(self.root) # Que quede adelante
+        ventana.geometry("700x500")
+        ventana.minsize(600, 400)
+        ventana.transient(self.root)
+        ventana.configure(bg="#f8fafc")
 
-        # Frame principal
-        frame = tk.Frame(ventana, padx=20, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
+        # Estilos para las pestañas y tablas
+        style = ttk.Style(ventana)
+        style.theme_use("clam")
+        style.configure("Treeview", rowheight=25, font=("Arial", 10))
+        style.configure("Treeview.Heading", font=("Arial", 10, "bold"))
 
-        # Título
-        tk.Label(frame, text="Resumen de Estrategias", font=("Arial", 14, "bold")).pack(pady=(0, 15))
+        # --- Pestañas ---
+        notebook = ttk.Notebook(ventana)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Diccionario para mostrar nombres claros en la UI
-        nombres_ui = {
-            "A": "A (Orden de pedidos)",
-            "B": "B (Vecino más cercano)"
-        }
+        tab_global = tk.Frame(notebook, bg="#f8fafc", padx=10, pady=10)
+        tab_detalle = tk.Frame(notebook, bg="#f8fafc", padx=10, pady=10)
 
-        # --- TABLA (Treeview) ---
-        # Usamos los nombres claros en los encabezados
-        columnas = ["Métrica"] + [nombres_ui.get(n, f"Estrategia {n}") for n in nombres]
-        tabla = ttk.Treeview(frame, columns=columnas, show="headings", height=6)
+        notebook.add(tab_global, text="Resumen Global")
+        notebook.add(tab_detalle, text="Detalle por Wave")
 
-        for col in columnas:
-            tabla.heading(col, text=col)
-            tabla.column(col, anchor="center", width=150) # Un poco más ancho para que entre el texto
+        # ==========================================
+        # PESTAÑA 1: RESUMEN GLOBAL
+        # ==========================================
+        nombres_ui = {"A": "A (Orden de pedidos)", "B": "B (Vecino más cercano)"}
+        totales = comparacion["totales"]
+        nombres = list(totales)
 
-        # Insertar datos
-        filas = [
+        columnas_global = ["Métrica"] + [nombres_ui.get(n, n) for n in nombres]
+        tabla_global = ttk.Treeview(tab_global, columns=columnas_global, show="headings", height=5)
+
+        for col in columnas_global:
+            tabla_global.heading(col, text=col)
+            tabla_global.column(col, anchor="center", width=180)
+            if col == "Métrica":
+                tabla_global.column(col, anchor="w", width=150)
+
+        filas_global = [
             ("Tiempo total (ms)", "tiempo_ms", "{:.3f}"),
             ("Distancia total", "distancia", "{}"),
             ("Nodos visitados", "nodos", "{}"),
             ("Aristas recorridas", "aristas", "{}"),
         ]
 
-        for etiqueta, clave, fmt in filas:
+        for etiqueta, clave, fmt in filas_global:
             valores = [etiqueta] + [fmt.format(totales[n].get(clave, 0)) for n in nombres]
-            tabla.insert("", tk.END, values=valores)
+            tabla_global.insert("", tk.END, values=valores)
 
-        tabla.pack(fill=tk.BOTH, expand=True)
+        tabla_global.pack(fill=tk.X, pady=10)
 
-        # --- Ganadores ---
-        ganadores_frame = tk.Frame(frame, pady=10)
-        ganadores_frame.pack(fill=tk.X)
-
+        # Ganadores y Eficiencia
         ganador_dist = comparacion.get('ganador_distancia', '-')
         ganador_tiempo = comparacion.get('ganador_tiempo', '-')
 
-        texto_dist = f"🏆 Ganador distancia: {nombres_ui.get(ganador_dist, ganador_dist)}"
-        texto_tiempo = f"⏱️ Ganador tiempo: {nombres_ui.get(ganador_tiempo, ganador_tiempo)}"
+        # Calcular % de ahorro
+        eficiencia = ""
+        if len(nombres) == 2:
+            d_a = totales["A"].get("distancia", 0)
+            d_b = totales["B"].get("distancia", 0)
+            if d_a > 0:
+                if d_b < d_a:
+                    ahorro = ((d_a - d_b) / d_a) * 100
+                    eficiencia = f"La Estrategia B ahorró un {ahorro:.1f}% de distancia respecto a A."
+                else:
+                    ahorro = ((d_b - d_a) / d_b) * 100
+                    eficiencia = f"La Estrategia A ahorró un {ahorro:.1f}% de distancia respecto a B."
 
-        tk.Label(ganadores_frame, text=texto_dist,
-                 font=("Arial", 11, "bold"), fg="#0ea5e9").pack(anchor="w")
-        tk.Label(ganadores_frame, text=texto_tiempo,
-                 font=("Arial", 11, "bold"), fg="#0ea5e9").pack(anchor="w")
+        frame_ganadores = tk.Frame(tab_global, bg="#f8fafc")
+        frame_ganadores.pack(fill=tk.X, pady=10)
 
-        # Botón cerrar
-        tk.Button(frame, text="Cerrar", command=ventana.destroy, width=15).pack(pady=(10, 0))
+        tk.Label(frame_ganadores, text=f"🏆 Mejor Distancia: {nombres_ui.get(ganador_dist, ganador_dist)}",
+                 font=("Arial", 12, "bold"), fg="#0ea5e9", bg="#f8fafc").pack(anchor="w")
+        tk.Label(frame_ganadores, text=f"⏱️ Mejor Tiempo: {nombres_ui.get(ganador_tiempo, ganador_tiempo)}",
+                 font=("Arial", 12, "bold"), fg="#0ea5e9", bg="#f8fafc").pack(anchor="w")
+        if eficiencia:
+            tk.Label(frame_ganadores, text=f"💡 {eficiencia}",
+                     font=("Arial", 11, "italic"), fg="#10b981", bg="#f8fafc").pack(anchor="w", pady=(5,0))
+
+        # ==========================================
+        # PESTAÑA 2: DETALLE POR WAVE
+        # ==========================================
+        tk.Label(tab_detalle, text="Distancia recorrida por la flota en cada Wave",
+                 font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(0, 10))
+
+        columnas_detalle = ["Wave", "Distancia A", "Distancia B", "Ganador"]
+        tabla_detalle = ttk.Treeview(tab_detalle, columns=columnas_detalle, show="headings", height=10)
+
+        for col in columnas_detalle:
+            tabla_detalle.heading(col, text=col)
+            tabla_detalle.column(col, anchor="center", width=130)
+
+        # Llenar la tabla con los datos de 'por_wave'
+        victorias = {"A": 0, "B": 0, "Empate": 0}
+
+        for fila in comparacion["por_wave"]:
+            wave_id = fila["wave_id"]
+            est = fila["estrategias"]
+
+            # Manejo de errores por si una wave falló
+            if "error" in est.get("A", {}) or "error" in est.get("B", {}):
+                tabla_detalle.insert("", tk.END, values=[wave_id, "Error", "Error", "-"])
+                continue
+
+            d_a = est["A"]["distancia"]
+            d_b = est["B"]["distancia"]
+
+            if d_a < d_b:
+                ganador = "A"
+                victorias["A"] += 1
+            elif d_b < d_a:
+                ganador = "B"
+                victorias["B"] += 1
+            else:
+                ganador = "Empate"
+                victorias["Empate"] += 1
+
+            tabla_detalle.insert("", tk.END, values=[wave_id, d_a, d_b, ganador])
+
+        tabla_detalle.pack(fill=tk.BOTH, expand=True)
+
+        # Resumen de victorias por wave
+        texto_victorias = f"Victorias: A ({victorias['A']}) | B ({victorias['B']}) | Empates ({victorias['Empate']})"
+        tk.Label(tab_detalle, text=texto_victorias, font=("Arial", 11, "bold"),
+                 bg="#f8fafc", fg="#64748b").pack(anchor="e", pady=10)
+
+        # Botón Cerrar
+        tk.Button(ventana, text="Cerrar", command=ventana.destroy, width=15).pack(pady=(0, 10))
 
     def btn_guardar_partida(self):
         if not self.simulacion: return
@@ -333,12 +413,24 @@ class Ventana(tk.Frame):
             puntos_px.extend([cx, cy])
         self.canvas.create_line(puntos_px, fill=color, width=2, dash=(4, 2), arrow=tk.LAST)
 
-    def dibujar_picker(self, x, y, id_picker, color="#ef4444"):
+    def dibujar_picker(self, x, y, p_data, color="#ef4444"):
         cx, cy = self._obtener_centro(x, y)
         radio = self.tamano_celda * 0.35
-        # Usamos el color asignado para el relleno, y un gris oscuro para el borde
+
+        # 1. Círculo principal
         self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill=color, outline="#1e293b", width=2)
-        self.canvas.create_text(cx, cy, text=str(id_picker), fill="white", font=("Arial", 8, "bold"))
+
+        # 2. Inicial adentro del círculo (lee p_data['id'] correctamente)
+        inicial = str(p_data['id'])[-1]
+        self.canvas.create_text(cx, cy, text=inicial, fill="white", font=("Arial", 8, "bold"))
+
+        # 3. Detalle debajo del picker (ID | Wave | Peso)
+        wave = p_data.get('wave_actual', '?')
+        carga = p_data.get('carga_actual_kg', 0)
+        cap = p_data.get('capacidad_carga_kg', 0)
+        detalle = f"{p_data['id']} | W{wave} | {carga:.0f}/{cap:.0f}kg"
+
+        self.canvas.create_text(cx, cy + radio + 10, text=detalle, fill=color, font=("Arial", 7, "bold"))
 
     def actualizar_desde_simulacion(self):
         if not self.simulacion:
@@ -362,7 +454,7 @@ class Ventana(tk.Frame):
 
             # 2. Dibujar el círculo del picker
             if p.get("activo", True):
-                self.dibujar_picker(p['x'], p['y'], p['id'], color=color)
+                self.dibujar_picker(p['x'], p['y'], p, color=color)
 
         self.lbl_wave.config(text=f"Wave: {estado.get('wave_actual', 0)} / {estado.get('waves_totales', 0)}")
         self.lbl_paso.config(text=f"Paso actual: {estado.get('paso_actual', 0)}")
@@ -418,6 +510,10 @@ class Ventana(tk.Frame):
 
         self.txt_pedidos.config(state=tk.DISABLED)
         self._actualizar_boton_volver(estado)
+
+        if estado.get('terminada', False):
+            self.en_ejecucion = False
+            self.btn_play_pause.config(text="▶ Iniciar")
 
     def iniciar(self):
         self.mainloop()
