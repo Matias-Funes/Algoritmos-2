@@ -125,6 +125,46 @@ class Ventana(tk.Frame):
         self.canvas = tk.Canvas(self, width=self.ancho_px, height=self.alto_px, bg="#e2e8f0")
         self.canvas.pack(side=tk.RIGHT, padx=10, pady=10)
 
+    def _obtener_emoji_producto(self, nombre_producto):
+        nombre = nombre_producto.lower()
+
+        # --- Hardware y Periféricos ---
+        if "monitor" in nombre: return "🖥️"
+        if "notebook" in nombre: return "💻"
+        if "tablet" in nombre: return "📱"
+        if "teclado" in nombre: return "⌨️"
+        if "mouse" in nombre: return "🖱️"
+        if "impresora" in nombre: return "🖨️"
+        if "scanner" in nombre: return "📄"
+        if "proyector" in nombre: return "📽️"
+        if "webcam" in nombre or "cámara" in nombre: return "📷"
+        if "micrófono" in nombre: return "🎤"
+        if "parlante" in nombre: return "🔊"
+        if "auricular" in nombre: return "🎧"
+
+        # --- Componentes de PC ---
+        if "placa" in nombre: return "🎮"
+        if "memoria" in nombre or "ram" in nombre: return "🧠"
+        if "disco" in nombre: return "💾"
+        if "fuente" in nombre: return "⚡"
+        if "gabinete" in nombre: return "🗄️"
+        if "soporte" in nombre: return "📐"
+
+        # --- Redes y Conectividad ---
+        if "router" in nombre: return "📡"
+        if "switch" in nombre: return "🔀"
+        if "hub" in nombre: return "🔗"
+        if "cable" in nombre: return "🔌"
+        if "cargador" in nombre: return "🔋"
+        if "ups" in nombre: return "🔋" # Batería/UPS
+
+        # --- Muebles y Oficina ---
+        if "silla" in nombre or "escritorio" in nombre: return "🪑"
+        if "lámpara" in nombre: return "💡"
+
+        # --- Por defecto ---
+        return "📦"
+
     def set_simulacion(self, sim):
         self.simulacion = sim
 
@@ -371,6 +411,33 @@ class Ventana(tk.Frame):
         return cx, cy
 
     def dibujar_warehouse(self):
+        # 1. Agrupamos los emojis por celda (x, y)
+        productos_por_celda = {}
+
+        if self.simulacion and hasattr(self.simulacion, 'productos'):
+            # Ordenamos por altura Z para que el nivel 1 quede abajo de todo
+            productos_ordenados = sorted(
+                self.simulacion.productos,
+                key=lambda p: p.ubicacion[2]
+            )
+
+            for prod in productos_ordenados:
+                x, y, z = prod.ubicacion
+                coords = (x, y)
+                emoji = self._obtener_emoji_producto(prod.nombre)
+
+                if coords not in productos_por_celda:
+                    productos_por_celda[coords] = []
+
+                # Evitamos duplicados si hay dos productos iguales en la misma celda
+                if emoji not in productos_por_celda[coords]:
+                    productos_por_celda[coords].append(emoji)
+
+                # Máximo 3 productos por celda (por los niveles Z)
+                if len(productos_por_celda[coords]) == 3:
+                    pass # Ya tenemos los 3 niveles
+
+        # 2. Dibujamos la grilla
         for y in range(self.warehouse.largo_y):
             for x in range(self.warehouse.ancho_x):
                 cell = self.warehouse.grid[y][x]
@@ -380,28 +447,52 @@ class Ventana(tk.Frame):
                 y2 = y1 + self.tamano_celda
 
                 color = "#f1f5f9"
-                if cell.tipo == RACK:
-                    color = "#1e3a8a"
-                elif cell.tipo == DESPACHO:
-                    color = "#10b981"
-                elif cell.tipo == PUERTA:
-                    color = "#f59e0b"
-                elif cell.tipo == "VACIA":
-                    color = "#cbd5e1"
+                if cell.tipo == RACK: color = "#1e3a8a"
+                elif cell.tipo == DESPACHO: color = "#10b981"
+                elif cell.tipo == PUERTA: color = "#f59e0b"
+                elif cell.tipo == "VACIA": color = "#cbd5e1"
 
                 self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="#e2e8f0")
+                cx, cy = self._obtener_centro(x, y)
 
-                if cell.tipo == PASILLO and cell.sentido != AMBOS:
-                    cx, cy = self._obtener_centro(x, y)
+                # 3. Dibujamos los iconos
+                if cell.tipo == RACK:
+                    if (x, y) in productos_por_celda:
+                        emojis = productos_por_celda[(x, y)]
+                        cantidad = len(emojis)
+
+                        # Ajustamos el tamaño y la posición según cuántos haya
+                        if cantidad == 1:
+                            tam = int(self.tamano_celda * 0.8)
+                            self.canvas.create_text(cx, cy, text=emojis[0], font=("Noto Color Emoji", tam))
+                        elif cantidad == 2:
+                            tam = int(self.tamano_celda * 0.5)
+                            self.canvas.create_text(cx, cy - self.tamano_celda * 0.2, text=emojis[0], font=("Noto Color Emoji", tam))
+                            self.canvas.create_text(cx, cy + self.tamano_celda * 0.2, text=emojis[1], font=("Noto Color Emoji", tam))
+                        elif cantidad >= 3:
+                            tam = int(self.tamano_celda * 0.4)
+                            self.canvas.create_text(cx, cy - self.tamano_celda * 0.3, text=emojis[0], font=("Noto Color Emoji", tam))
+                            self.canvas.create_text(cx, cy, text=emojis[1], font=("Noto Color Emoji", tam))
+                            self.canvas.create_text(cx, cy + self.tamano_celda * 0.3, text=emojis[2], font=("Noto Color Emoji", tam))
+                    else:
+                        # Rack vacío
+                        tam = int(self.tamano_celda * 0.8)
+                        self.canvas.create_text(cx, cy, text="📚", font=("Noto Color Emoji", tam))
+
+                elif cell.tipo == PUERTA:
+                    tam = int(self.tamano_celda * 0.8)
+                    self.canvas.create_text(cx, cy, text="🚪", font=("Noto Color Emoji", tam))
+                elif cell.tipo == DESPACHO:
+                    tam = int(self.tamano_celda * 0.8)
+                    self.canvas.create_text(cx, cy, text="🛒", font=("Noto Color Emoji", tam))
+
+                # 4. Flechas de los pasillos
+                elif cell.tipo == PASILLO and cell.sentido != AMBOS:
                     flecha = ""
-                    if cell.sentido == N:
-                        flecha = "↑"
-                    elif cell.sentido == S:
-                        flecha = "↓"
-                    elif cell.sentido == E:
-                        flecha = "→"
-                    elif cell.sentido == O:
-                        flecha = "←"
+                    if cell.sentido == N: flecha = "↑"
+                    elif cell.sentido == S: flecha = "↓"
+                    elif cell.sentido == E: flecha = "→"
+                    elif cell.sentido == O: flecha = "←"
                     self.canvas.create_text(cx, cy, text=flecha, fill="#64748b", font=("Arial", 10, "bold"))
 
     def dibujar_recorrido(self, ruta, color="#0ea5e9"):
@@ -415,21 +506,20 @@ class Ventana(tk.Frame):
 
     def dibujar_picker(self, x, y, p_data, color="#ef4444"):
         cx, cy = self._obtener_centro(x, y)
-        radio = self.tamano_celda * 0.35
 
-        # 1. Círculo principal
-        self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill=color, outline="#1e293b", width=2)
-
-        # 2. Inicial adentro del círculo (lee p_data['id'] correctamente)
-        inicial = str(p_data['id'])[-1]
-        self.canvas.create_text(cx, cy, text=inicial, fill="white", font=("Arial", 8, "bold"))
-
-        # 3. Detalle debajo del picker (ID | Wave | Peso)
-        wave = p_data.get('wave_actual', '?')
         carga = p_data.get('carga_actual_kg', 0)
+        # Si lleva más de 0kg de carga, mostramos el camión, sino el carrito
+        emoji = "🚚" if carga > 0 else "🛒"
+
+        tamano_emoji = int(self.tamano_celda * 0.9)
+        self.canvas.create_text(cx, cy, text=emoji, font=("Noto Color Emoji", tamano_emoji))
+
+        # El detalle debajo del picker (ID | Wave | Peso)
+        wave = p_data.get('wave_actual', '?')
         cap = p_data.get('capacidad_carga_kg', 0)
         detalle = f"{p_data['id']} | W{wave} | {carga:.0f}/{cap:.0f}kg"
 
+        radio = self.tamano_celda * 0.35
         self.canvas.create_text(cx, cy + radio + 10, text=detalle, fill=color, font=("Arial", 7, "bold"))
 
     def actualizar_desde_simulacion(self):
