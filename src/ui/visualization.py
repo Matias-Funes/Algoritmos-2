@@ -19,6 +19,19 @@ COLORES_PICKERS = [
     "#ef4444", # Rojo (el original)
 ]
 
+import platform
+
+
+def _fuente_emoji():
+    """Devuelve la fuente de emojis correcta según el sistema operativo."""
+    sistema = platform.system()
+    if sistema == "Windows":
+        return "Segoe UI Emoji"
+    elif sistema == "Darwin": # Mac
+        return "Apple Color Emoji"
+    else: # Linux
+        return "Noto Color Emoji"
+
 class Ventana(tk.Frame):
     """Vista de la simulación (colores y diseño originales)."""
 
@@ -494,27 +507,27 @@ class Ventana(tk.Frame):
                         # Ajustamos el tamaño y la posición según cuántos haya
                         if cantidad == 1:
                             tam = int(self.tamano_celda * 0.8)
-                            self.canvas.create_text(cx, cy, text=emojis[0], font=("Noto Color Emoji", tam))
+                            self.canvas.create_text(cx, cy, text=emojis[0], font=(_fuente_emoji(), tam))
                         elif cantidad == 2:
                             tam = int(self.tamano_celda * 0.5)
-                            self.canvas.create_text(cx, cy - self.tamano_celda * 0.2, text=emojis[0], font=("Noto Color Emoji", tam))
-                            self.canvas.create_text(cx, cy + self.tamano_celda * 0.2, text=emojis[1], font=("Noto Color Emoji", tam))
+                            self.canvas.create_text(cx, cy - self.tamano_celda * 0.2, text=emojis[0], font=(_fuente_emoji(), tam))
+                            self.canvas.create_text(cx, cy + self.tamano_celda * 0.2, text=emojis[1], font=(_fuente_emoji(), tam))
                         elif cantidad >= 3:
                             tam = int(self.tamano_celda * 0.4)
-                            self.canvas.create_text(cx, cy - self.tamano_celda * 0.3, text=emojis[0], font=("Noto Color Emoji", tam))
-                            self.canvas.create_text(cx, cy, text=emojis[1], font=("Noto Color Emoji", tam))
-                            self.canvas.create_text(cx, cy + self.tamano_celda * 0.3, text=emojis[2], font=("Noto Color Emoji", tam))
+                            self.canvas.create_text(cx, cy - self.tamano_celda * 0.3, text=emojis[0], font=(_fuente_emoji(), tam))
+                            self.canvas.create_text(cx, cy, text=emojis[1], font=(_fuente_emoji(), tam))
+                            self.canvas.create_text(cx, cy + self.tamano_celda * 0.3, text=emojis[2], font=(_fuente_emoji(), tam))
                     # else:
                     #     # Rack vacío
                     #     tam = int(self.tamano_celda * 0.8)
-                    #     self.canvas.create_text(cx, cy, text="📚", font=("Noto Color Emoji", tam))
+                    #     self.canvas.create_text(cx, cy, text="📚", font=(_fuente_emoji(), tam))
 
                 elif cell.tipo == PUERTA:
                     tam = int(self.tamano_celda * 0.8)
-                    self.canvas.create_text(cx, cy, text="🚪", font=("Noto Color Emoji", tam))
+                    self.canvas.create_text(cx, cy, text="🚪", font=(_fuente_emoji(), tam))
                 elif cell.tipo == DESPACHO:
-                    tam = int(self.tamano_celda * 0.8)
-                    self.canvas.create_text(cx, cy, text="🛒", font=("Noto Color Emoji", tam))
+                    # Despacho vacío (solo se ve el color verde de fondo)
+                    pass
 
                 # 4. Flechas de los pasillos
                 elif cell.tipo == PASILLO and cell.sentido != AMBOS:
@@ -566,7 +579,7 @@ class Ventana(tk.Frame):
         emoji = "🚚" if carga > 0 else "🛒"
 
         tamano_emoji = int(self.tamano_celda * 0.9)
-        self.canvas.create_text(cx, cy, text=emoji, font=("Noto Color Emoji", tamano_emoji))
+        self.canvas.create_text(cx, cy, text=emoji, font=(_fuente_emoji(), tamano_emoji))
 
         # --- TEXTOS (ARRIBA Y ABAJO) ---
         radio = self.tamano_celda * 0.35
