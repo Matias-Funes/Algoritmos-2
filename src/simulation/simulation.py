@@ -7,8 +7,8 @@ tramos dinámicos entre racks y zonas de despacho.
 
 from __future__ import annotations
 
-import sys
 import heapq
+import sys
 from math import floor
 from pathlib import Path
 from typing import Any
@@ -32,7 +32,9 @@ class Simulation:
         asignaciones: dict[str, Any] | None = None,
         cache_distancias: Any = None,
         puntos_despacho: dict[str, list[tuple[int, int]]] | None = None,
+        estrategia_recorrido: str = "Vecino más cercano (B)"
     ) -> None:
+        self.estrategia_recorrido = estrategia_recorrido
         self.warehouse = warehouse
         self.pickers = [
             self._crear_picker(picker) for picker in pickers
@@ -122,9 +124,10 @@ class Simulation:
         ubicacion = picker["posicion_inicial"]
         if isinstance(ubicacion, dict):
             ubicacion = (ubicacion["x"], ubicacion["y"])
-        
+
+        # Lee la prioridad desde el JSON
         prioridad = picker.get("prioridad", 1)
-        
+
         return Picker(
             picker.get("id", picker.get("picker_id")),
             tuple(ubicacion),
@@ -323,20 +326,20 @@ class Simulation:
                 picker.carga_actual_kg = getattr(picker, "carga_actual_kg", 0.0) + (
                     peso * cantidad
                 )
-            
+
             # --- CÁLCULO DE ALTURA (Z) ---
             ubicacion = self._valor(producto, "ubicacion")
             z = int(ubicacion[2]) if len(ubicacion) > 2 else 1
             pasos_por_altura = z * 2
-            
+
             self.distancia += pasos_por_altura
             self.paso_actual += pasos_por_altura
             self.ultima_altura = z  # <--- NUEVO: Guardamos para la métrica
-            
-            picker.tiempo_recoleccion = 5 
+
+            picker.tiempo_recoleccion = 5
             picker.info_recoleccion = f"Nivel {z}"
             # ------------------------------
-            
+
             if stock is not None:
                 producto.cantidad_disponible -= cantidad
             self._reducir_demanda(picker, producto_id, cantidad)
@@ -371,10 +374,10 @@ class Simulation:
             for picker in self.pickers
         }
         self._indices_ruta = {picker.id: 0 for picker in self.pickers}
-        
+
         for picker in self.pickers:
             self._planificar_picker_dinamico(picker)
-            picker.tiempo_recoleccion = 0 
+            picker.tiempo_recoleccion = 0
 
     def _celdas_recoleccion(self, producto: Any) -> list[tuple[int, int]]:
         ubicacion = self._valor(producto, "ubicacion")
@@ -546,6 +549,7 @@ class Simulation:
         self._establecer_tramo(picker, camino, objetivo)
         return True
 
+
     def _planificar_descarga_dinamica(self, picker: Any) -> bool:
         if not self._puntos_despacho:
             raise ValueError(
@@ -640,6 +644,7 @@ class Simulation:
                         picker, producto_id, cantidad, "stock_agotado"
                     )
 
+                # ... (el resto del código sigue igual)
             demanda = (
                 self._demanda_por_picker.get(picker.id, {})
                 if self._asignaciones_explicitas
@@ -701,11 +706,23 @@ class Simulation:
                 opciones.append((distancia, producto_id, camino))
 
             if opciones:
-                _, producto_id, camino = min(
-                    opciones, key=lambda opcion: (opcion[0], opcion[1])
-                )
+                if self.estrategia_recorrido == "Orden de pedidos (A)":
+                    primer_producto = list(demanda.keys())[0]
+                    elegido = None
+                    for dist, prod_id, camino in opciones:
+                        if prod_id == primer_producto:
+                            elegido = (dist, prod_id, camino)
+                            break
+
+                    if elegido is None:
+                        _, producto_id, camino = min(opciones, key=lambda opcion: (opcion[0], opcion[1]))
+                    else:
+                        _, producto_id, camino = elegido
+                else:
+                    _, producto_id, camino = min(opciones, key=lambda opcion: (opcion[0], opcion[1]))
+
                 objetivo = {"tipo": "producto", "producto_id": producto_id}
-                
+
                 if len(camino) == 1:
                     if tuple(picker.posicion_actual) == camino[0]:
                         self._atender_objetivo_dinamico(picker, objetivo)
@@ -797,20 +814,20 @@ class Simulation:
             return
 
         picker.recoger(producto, cantidad)
-        
+
         # --- CÁLCULO DE ALTURA (Z) ---
         ubicacion = self._valor(producto, "ubicacion")
         z = int(ubicacion[2]) if len(ubicacion) > 2 else 1
         pasos_por_altura = z * 2
-        
+
         self.distancia += pasos_por_altura
         self.paso_actual += pasos_por_altura
         self.ultima_altura = z  # <--- NUEVO: Guardamos para la métrica
-        
+
         picker.tiempo_recoleccion = 5
         picker.info_recoleccion = f"Nivel {z}"
         # ------------------------------
-        
+
         if stock is not None:
             producto.cantidad_disponible -= cantidad
         self._reducir_demanda(picker, producto_id, cantidad)
@@ -824,22 +841,22 @@ class Simulation:
 
     def avanzar_paso(self) -> bool:
         propuestas: dict[str, tuple[int, int]] = {}
-        habia_pausa = False 
+        habia_pausa = False
 
         if self._modo_dinamico:
             for picker in self.pickers:
                 if getattr(picker, "tiempo_recoleccion", 0) > 0:
                     continue
                 self._planificar_picker_dinamico(picker)
-                
+
         for picker in self.pickers:
             if getattr(picker, "tiempo_recoleccion", 0) > 0:
                 picker.tiempo_recoleccion -= 1
                 if picker.tiempo_recoleccion == 0:
-                    picker.info_recoleccion = ""  
-                habia_pausa = True 
+                    picker.info_recoleccion = ""
+                habia_pausa = True
                 continue
-            
+
             if self._modo_dinamico:
                 tramo = self._tramos_dinamicos[picker.id]
                 indice = self._indices_ruta[picker.id]
@@ -856,7 +873,7 @@ class Simulation:
                 self.paso_actual += 1
                 self._en_ejecucion = True
                 return True
-            
+
             if not self._modo_dinamico or all(
                 estado == "terminado"
                 for estado in self._estado_picker.values()
@@ -885,7 +902,7 @@ class Simulation:
             ganador = min(
                 pickers_destino,
                 key=lambda picker: (
-                    -picker.prioridad, 
+                    -picker.prioridad,
                     str(picker.id),
                 ),
             )
@@ -1063,14 +1080,16 @@ class Simulation:
             ),
             "total_productos": self._total_productos,
             "distancia": self.distancia,
+
+            # Le pasamos a la UI los pedidos que se están procesando actualmente
             "ultima_altura": self.ultima_altura,  # <--- NUEVO: Métrica de altura
-            
+
             "pedidos_actuales": (
                 self._demanda_por_picker
                 if self._asignaciones_explicitas
                 else self._demanda_global
             ),
-            
+
             "recolecciones": [dict(item) for item in self.productos_recogidos],
             "faltantes": [dict(item) for item in self.productos_faltantes],
             "productos_despachados": sum(
@@ -1100,8 +1119,8 @@ class Simulation:
             picker.mover_a(inicial["posicion"])
             picker.items_transportados = list(inicial["items"])
             picker.carga_actual_kg = inicial["carga"]
-            picker.tiempo_recoleccion = 0 
-        
+            picker.tiempo_recoleccion = 0
+
         self._indices_ruta = {
             picker.id: (
                 1

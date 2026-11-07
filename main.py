@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 from pathlib import Path
 from typing import Any, Callable
 
@@ -294,6 +295,7 @@ class _SimulationTk:
         inventario: Any = None,
         waves: list[Wave] | None = None,
         configuracion: dict[str, Any] | None = None,
+        estrategia_recorrido: str = "Vecino más cercano (B)",
         intervalo_ms: int = 250,
     ) -> None:
         self.warehouse = warehouse
@@ -307,6 +309,7 @@ class _SimulationTk:
         self.inventario = inventario
         self.waves = list(waves or [])
         self.configuracion = configuracion
+        self.estrategia_recorrido = estrategia_recorrido
         self.fase_actual = 0
         self._root = None
         self._actualizar_interfaz: Callable[[], None] | None = None
@@ -351,6 +354,7 @@ class _SimulationTk:
         }
         self._simulacion_actual = self._crear_simulacion_fase(0)
         self.historial_snapshots = []
+        self.estrategia_recorrido = estrategia_recorrido
 
     def _crear_simulacion_fase(self, indice: int) -> Simulation:
         """Crea un motor común que planifica el trabajo de toda la flota."""
@@ -362,6 +366,7 @@ class _SimulationTk:
             asignaciones=fase["asignaciones"],
             cache_distancias=self.cache_distancias,
             puntos_despacho=self.puntos_despacho,
+            estrategia_recorrido=self.estrategia_recorrido,
         )
 
     def vincular_interfaz(
@@ -616,7 +621,7 @@ class _SimulationTk:
 
 
 
-def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (Flota)") -> tuple[Any, _SimulationTk]:
+def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (Flota)", estrategia_recorrido: str = "Vecino más cercano (B)") -> tuple[Any, _SimulationTk]:
     """Carga un escenario JSON y arma el warehouse y la simulación.
 
     Devuelve (warehouse, simulacion). La simulación todavía no está vinculada a
@@ -635,6 +640,26 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
         inventario.agregar_producto(producto)
     pedidos = _crear_pedidos(pedidos_raw)
     pickers = _crear_pickers(pickers_raw)
+
+   # ASIGNAR POSICIONES ALEATORIAS EN PASILLOS
+    # (Asegurate de que el warehouse ya se cargó antes de esta línea)
+    celdas_transitables = warehouse.celdas_transitables()
+    if celdas_transitables:
+        celdas_disponibles = list(celdas_transitables)
+        random.shuffle(celdas_disponibles)
+
+        for picker in pickers:
+            if not celdas_disponibles:
+                celdas_disponibles = list(celdas_transitables)
+                random.shuffle(celdas_disponibles)
+
+            celda_aleatoria = celdas_disponibles.pop()
+            nueva_pos = (celda_aleatoria.x, celda_aleatoria.y)
+
+            # Sobreescribimos la posición del JSON con la nueva aleatoria
+            picker.posicion_inicial = nueva_pos
+            picker.posicion_actual = nueva_pos
+
     _validar_stock_pedidos(pedidos, inventario)
 
     print("3. Construyendo grafo de circulación")
@@ -683,6 +708,7 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
         inventario=inventario,
         waves=waves,
         configuracion=configuracion,
+        estrategia_recorrido=estrategia_recorrido,
     )
     return warehouse, simulacion
 
