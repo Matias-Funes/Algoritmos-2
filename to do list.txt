@@ -1,0 +1,186 @@
+1. Módulo de Waves y lógica del main.py
+1.1 Entender cómo se generan, asignan y ejecutan las waves
+Problema: El equipo no tiene claridad total sobre el flujo real de las waves: dónde se crean, quién las asigna a los pickers y en qué momento se ejecutan. Esto genera confusión al explicar el sistema en la defensa y al depurar errores.
+
+Acción esperada:
+
+Leer y documentar el recorrido completo desde main.py: _crear_fases_por_wave / _crear_waves → generar_waves (en wave_manager.py) → _SimulationTk → Simulation.
+
+Hacer un diagrama de flujo simple que muestre:
+
+Qué pedidos entran.
+Cómo se agrupan en waves.
+Cómo se reparten entre pickers.
+Cómo se ejecutan en fases de simulación.
+Verificar que la estrategia de generación de waves sea determinista y justificable (requisito de la guía, sección 7).
+
+1.2 Investigar cómo generar una o más waves
+Problema: No está claro si el sistema puede generar múltiples waves cuando la cantidad de pedidos supera la capacidad configurada. Hay que confirmar que la lógica de "cerrar una wave y abrir la siguiente" funciona.
+
+Acción esperada:
+
+Probar con escenarios que tengan más pedidos que la capacidad de una wave (wave_max_pedidos / wave_max_productos) y verificar que se generan varias waves.
+
+Confirmar que los pedidos que no entran en una wave no se pierden (quedan pendientes o se reasignan).
+
+Documentar el comportamiento observado.
+
+1.3 Cambio entre modo "Flota" y modo "Picker individual"
+Problema: El main.py tiene dos lógicas distintas para generar waves y fases:
+
+Modo Flota (Wave Global): todos los pickers trabajan sobre la misma wave.
+
+Modo Individual: cada picker tiene sus propias waves.
+
+La cantidad de waves cambia según el modo, pero no está claro que ambas rutas estén bien resueltas ni cuál conviene dejar como principal.
+
+Acción esperada:
+
+Revisar en main.py las funciones _crear_fases_por_wave y _crear_waves / _crear_fases_simulacion.
+
+Decidir con el equipo cuál es el modo principal (el que se va a defender) y dejar el otro como alternativa documentada o eliminarlo.
+
+Verificar que en ambos modos la cantidad de waves generada tenga sentido respecto a la cantidad de pedidos y la capacidad configurada.
+
+2. Simulación de Pickers
+2.1 Pickers que no aparecen ni trabajan en modo flota
+Problema: Cuando hay muchos pickers en el modo flota, algunos no aparecen en el mapa o no ejecutan trabajo. Esto rompe la simulación simultánea que pide la guía (sección 3.6 y 12).
+
+Acción esperada:
+
+Reproducir el bug con un escenario que tenga, por ejemplo, 4 o más pickers.
+
+Revisar en _crear_fases_por_wave el reparto "Round Robin": si hay más pickers que pedidos, algunos quedan sin asignación y nunca se activan.
+
+Definir qué debe pasar con un picker sin trabajo: ¿desaparece? ¿queda quieto en su posición inicial? La guía dice que todos los pickers deben poder desplazarse simultáneamente, pero no exige que todos tengan carga. Lo importante es que no desaparezcan de la visualización sin explicación.
+
+Verificar que la simulación no se cuelgue esperando a un picker sin trabajo.
+
+3. Interfaz y Visualización
+3.1 Lista de pickers que se sale de la pantalla
+Problema: En el panel lateral, cuando hay muchos pickers, la lista de estados crece hacia abajo y no se puede ver completa. No hay scroll.
+
+Acción esperada:
+
+Envolver el frame_carga_pickers en un Canvas con Scrollbar vertical (patrón estándar de Tkinter para scroll).
+
+O limitar la altura del panel y agregar scroll solo a esa sección.
+
+Verificar que el scroll funcione con mouse y con la barra.
+
+3.2 La ventana no se adapta al tamaño de la pantalla
+Problema: En pantallas chicas o con muchos elementos, la ventana puede exceder el tamaño visible y no hay forma de redimensionar correctamente.
+
+Acción esperada:
+
+Al iniciar la ventana, calcular el tamaño del Canvas según el tamaño del warehouse, pero limitarlo al tamaño disponible de la pantalla (por ejemplo, con winfo_screenwidth() / winfo_screenheight()).
+
+Si el warehouse es más grande que la pantalla, permitir scroll o zoom.
+
+Probar con escenarios de distintos tamaños (chico, mediano, grande).
+
+3.3 Mostrar solo el camino pendiente, no el ya recorrido
+Problema (prioridad alta): La simulación dibuja la ruta completa desde el inicio, incluyendo las celdas ya pisadas por el picker. Eso hace difícil ver qué le queda por delante al picker en cada paso.
+
+Acción esperada:
+
+En Simulation.get_estado(), en lugar de devolver rutas completas, devolver solo el tramo pendiente desde la posición actual del picker hasta el final de su ruta o hasta el próximo objetivo.
+
+En Ventana.dibujar_recorrido, dibujar solo ese tramo.
+
+Verificar que al retroceder un paso (retroceder_paso) el tramo se recalcule correctamente.
+
+Esta es la corrección de mayor impacto visual para la demo final. Conviene hacerla antes que las demás de UI.
+
+3.4 Agregar acción "Salir aplicación"
+Problema: No hay forma limpia de cerrar la aplicación desde el menú.
+
+Acción esperada:
+
+Agregar un botón "Salir" en el menú principal que cierre la ventana (root.destroy() o root.quit()).
+
+Confirmar con el usuario antes de salir si hay una simulación en curso (similar al comportamiento de "Volver al menú").
+
+4. Repositorio y Configuración
+4.1 Agregar los JSON generados al .gitignore
+Problema: Cada integrante genera escenarios JSON en su rama y esos archivos se están subiendo al repositorio, ensuciando el historial y generando conflictos.
+
+Acción esperada:
+
+Agregar al .gitignore patrones como:
+
+text
+data/scenarios/generado*.json
+data/scenarios/escenario_manual_*.json
+data/results/*.csv
+Decidir con el equipo qué escenarios sí se quieren versionar (los de prueba oficiales) y cuáles no.
+
+Limpiar los JSON ya subidos si corresponde (git rm --cached).
+
+5. Métricas y Análisis
+5.1 Agregar tiempo de ejecución
+Problema: La guía (sección 9 y 21) exige medir el tiempo de ejecución de cada estrategia, pero la interfaz no lo muestra de forma clara.
+
+Acción esperada:
+
+Verificar que comparar_estrategias en benchmark.py ya lo calcula (sí lo hace, con time.perf_counter()).
+
+Mostrarlo en la ventana de comparación de estrategias (ya aparece en la tabla de _mostrar_comparacion).
+
+Agregarlo también al panel principal de métricas de la simulación, si se quiere ver en vivo.
+
+5.2 Productos recogidos por wave individual
+Problema: La métrica actual muestra productos recogidos acumulados de toda la simulación, no por wave. La guía pide poder analizar cada wave por separado (sección 9 y 21).
+
+Acción esperada:
+
+En _SimulationTk.get_estado(), agregar un campo productos_recogidos_wave_actual que se reinicie al cambiar de fase.
+
+Mostrarlo en el panel lateral junto a la wave actual.
+
+En el resumen final o en la comparación, mostrar una tabla por wave con: distancia, productos recogidos, tiempo.
+
+5.3 Cantidad de operaciones relevantes del algoritmo
+Problema: La guía (sección 21) pide registrar "cantidad de operaciones relevantes del algoritmo". Hoy se mide nodos_visitados, pero eso mide el esfuerzo de Dijkstra, no las operaciones de la estrategia de recorrido en sí.
+
+Acción esperada:
+
+Definir qué se considera "operación relevante":
+
+Consultas al caché de distancias (cache.distancia(...)).
+
+Cantidad de tramos expandidos (len(camino)).
+
+Comparaciones en el bucle de vecino más cercano (estrategia B).
+
+Instrumentar cada estrategia para contar esas operaciones y devolverlas en el dict de resultado.
+
+Agregarlas al CSV de experimentos y a la ventana de comparación.
+
+6. Análisis del Punto 20 (Complejidad)
+6.1 Definir dónde y cómo se hace el análisis de complejidad
+Problema: La guía dedica una sección entera (sección 20) al análisis de complejidad temporal y espacial, pero el equipo no tiene claro dónde se documenta ni qué nivel de profundidad se espera.
+
+Acción esperada:
+
+Investigar con otros equipos o con el profesor qué formato esperan (¿en el informe? ¿en el README? ¿como anexo?).
+
+Mientras tanto, avanzar con un documento en docs/analisis_complejidad.md que cubra:
+
+Complejidad de construir_grafo: O(V + E).
+
+Complejidad de Dijkstra: O((V + E) log V).
+
+Complejidad de CacheDistancias: primera consulta O(Dijkstra), siguientes O(1).
+
+Complejidad de estrategia_A: O(K · Dijkstra) peor caso, O(K) con caché caliente.
+
+Complejidad de estrategia_B: O(K²) consultas al caché.
+
+Complejidad de generar_waves: según la documentación del propio wave_manager.py.
+
+Incluir mejor caso, peor caso y caso promedio para cada algoritmo principal.
+
+Relacionar con los experimentos del CSV (tablas y gráficos).
+
+Este punto no se resuelve solo con código: requiere redacción y evidencia experimental. Conviene asignarlo a alguien del equipo con tiempo suficiente.

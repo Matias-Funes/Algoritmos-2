@@ -20,6 +20,10 @@ from src.io.scenario_loader import cargar_escenario
 from src.simulation.simulation import Simulation
 
 
+# =============================================================================
+# Preparación de datos: convertir el JSON a objetos del dominio y validar stock.
+# Son funciones auxiliares; no ejecutan la simulación por sí solas.
+# =============================================================================
 def _crear_productos(datos_productos: list[dict[str, Any]]) -> list[Producto]:
     """Convierte los productos crudos del JSON en objetos del dominio."""
     productos = []
@@ -102,6 +106,10 @@ def _validar_stock_pedidos(
             )
 
 
+# =============================================================================
+# Generación de waves y fases: agrupar pedidos y decidir qué trabajo hace
+# cada picker en cada turno.
+# =============================================================================
 def _crear_fases_por_wave(
     pedidos: list[Orden],
     pickers: list[Picker],
@@ -111,27 +119,26 @@ def _crear_fases_por_wave(
 ) -> tuple[list[Wave], list[dict[str, Any]]]:
     """Agrupa pedidos en Waves y luego reparte cada Wave entre todos los pickers."""
 
-    # 1. Configuramos el diccionario que espera generar_waves
+    # generar_waves recibe los límites de tamaño y un peso máximo que permite
+    # mantener juntos los pedidos; la agrupación considera prioridad y cercanía.
     config_wm = {
         "max_pedidos": configuracion.get("wave_max_pedidos", 10),
         "max_productos": configuracion.get("wave_max_productos", 100),
         "peso_max_kg": sum(p.peso_total(inventario) for p in pedidos) + 1,
     }
 
-    # 2. Agrupamos inteligentemente (por prioridad y cercanía)
     waves = generar_waves(pedidos, inventario, grafo, config_wm)
 
     fases = []
-    # 3. Para cada Wave, repartimos sus pedidos entre TODOS los pickers
+    # En este modo, cada wave es una fase compartida por toda la flota.
     for wave in waves:
         asignaciones = {p.id: [] for p in pickers}
 
-        # Repartimos en forma de "Round Robin" o balanceando la carga
+        # Round robin: pedidos consecutivos se distribuyen entre los pickers.
         for i, pedido in enumerate(wave.pedidos):
             picker_asignado = pickers[i % len(pickers)]
             asignaciones[picker_asignado.id].append(pedido)
 
-        # 4. Cada Wave se convierte en una Fase de simulación
         fases.append({
             "wave_id": wave.id,
             "asignaciones": asignaciones
@@ -151,6 +158,9 @@ def _crear_waves(
     unidad individual debe caber en al menos un picker; los límites de cantidad
     de pedidos/productos de la wave siguen vigentes.
     """
+    # Este modo asigna cada pedido a un picker y crea waves individuales por
+    # picker. El peso total puede requerir varios viajes; la carga se controla
+    # durante la ejecución de cada viaje.
     max_pedidos = configuracion.get("wave_max_pedidos", len(pedidos) or 1)
     max_productos = configuracion.get("wave_max_productos", 1)
     if (
@@ -179,7 +189,8 @@ def _crear_waves(
     for pedido in pedidos:
         peso_pedido = pedido.peso_total(inventario)
 
-        # CORRECCIÓN B: Priorizamos a los pickers con mayor prioridad al asignar waves
+        # Primero se consideran los pickers de mayor prioridad y, en empate,
+        # los que llevan menos carga asignada hasta ahora.
         candidatos = sorted(
             pickers,
             key=lambda picker: (-picker.prioridad, carga_wave_actual[picker.id], picker.id),
@@ -200,6 +211,8 @@ def _crear_waves(
             )
         asignado = False
 
+        # Se intenta agregar el pedido a una wave existente del picker. Si no
+        # cabe por cantidad de pedidos/productos, se abre una wave nueva.
         for picker in candidatos:
             wave = wave_actual.get(picker.id)
             if wave is None or not wave.puede_aceptar(pedido, inventario):
@@ -233,6 +246,9 @@ def _crear_waves(
     return waves, pedidos_por_picker, waves_por_picker
 
 
+# =============================================================================
+# Preparación del recorrido y zonas de despacho.
+# =============================================================================
 def _crear_fases_simulacion(
     pickers: list[Picker],
     waves_por_picker: dict[str, list[Wave]],
@@ -280,6 +296,10 @@ def _obtener_puntos_despacho(
     return puntos_por_zona
 
 
+# =============================================================================
+# Adaptador de simulación para la interfaz: sincroniza fases, estado visual,
+# controles de reproducción y snapshots sin bloquear el bucle de Tkinter.
+# =============================================================================
 class _SimulationTk:
     """Coordina fases y presenta viajes dinámicos al bucle de Tk."""
 
@@ -298,6 +318,8 @@ class _SimulationTk:
         estrategia_recorrido: str = "Vecino más cercano (B)",
         intervalo_ms: int = 250,
     ) -> None:
+        # Conservamos los datos compartidos por todas las fases y preparamos
+        # los contadores necesarios para mostrar el avance global.
         self.warehouse = warehouse
         self.pickers = pickers
         self.productos = productos
@@ -369,6 +391,7 @@ class _SimulationTk:
             estrategia_recorrido=self.estrategia_recorrido,
         )
 
+    # --- Estado que consume la interfaz ---
     def vincular_interfaz(
         self, root: Any, actualizar_interfaz: Callable[[], None]
     ) -> None:
@@ -378,6 +401,8 @@ class _SimulationTk:
 
     def get_estado(self) -> dict[str, Any]:
         """Devuelve el estado del turno activo y de toda la flota."""
+        # El motor informa sobre la fase actual; aquí se agregan los resultados
+        # de fases ya terminadas para entregar una vista global a la interfaz.
         estado = self._simulacion_actual.get_estado()
         faltantes_actuales = estado["faltantes"]
         descargas_actuales = estado["descargas"]
@@ -438,15 +463,16 @@ class _SimulationTk:
         ]
         return estado
 
+    # --- Avance, reproducción automática y controles ---
     def avanzar_paso(self) -> bool:
         """Avanza el viaje actual o prepara el próximo al completar la wave."""
         if self._fase_completada:
             return False
 
-        # GUARDAMOS LA FOTO ANTES DE AVANZAR (solo si no terminó)
+        # Guardamos el estado previo para permitir volver un paso atrás.
         self.historial_snapshots.append(self.get_snapshot())
 
-        # Si el historial se hace muy largo, podemos limitarlo (ej. a 1000 pasos)
+        # Limitamos el historial para evitar que crezca sin límite.
         if len(self.historial_snapshots) > 1000:
             self.historial_snapshots.pop(0)
 
@@ -544,6 +570,7 @@ class _SimulationTk:
         self.pausar()
         return True
 
+    # --- Comparación de estrategias y guardado/restauración de estado ---
     def comparar_estrategias(self):
         if self.grafo is None or self.inventario is None or not self.waves:
             return {"por_wave": [], "totales": {},
@@ -603,7 +630,7 @@ class _SimulationTk:
                 picker.carga_actual_kg = data["carga_actual_kg"]
                 picker.items_transportados = [tuple(item) for item in data["items_transportados"]]
 
-        # Re-armamos el motor
+        # Reconstruimos el motor de la fase guardada y reponemos su progreso.
         self._fase_completada = False
         self._simulacion_actual = self._crear_simulacion_fase(self.fase_actual)
         self._simulacion_actual.paso_actual = snapshot["paso_actual"]
@@ -614,13 +641,16 @@ class _SimulationTk:
         self._simulacion_actual.productos_faltantes = snapshot.get("faltantes_fase_actual", [])
         self._simulacion_actual.descargas = snapshot.get("descargas_fase_actual", [])
 
-        # descontamos de la nueva simulación los productos que los pickers ya traen
+        # La demanda pendiente debe excluir lo que ya está cargado en los pickers.
         for picker in self._simulacion_actual.pickers:
             for prod_id, cant in picker.items_transportados:
                 self._simulacion_actual._reducir_demanda(picker, prod_id, cant)
 
 
-
+# =============================================================================
+# Construcción de una simulación a partir del escenario seleccionado.
+# Este es el flujo principal de preparación antes de abrir la interfaz.
+# =============================================================================
 def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (Flota)", estrategia_recorrido: str = "Vecino más cercano (B)") -> tuple[Any, _SimulationTk]:
     """Carga un escenario JSON y arma el warehouse y la simulación.
 
@@ -633,6 +663,7 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
         cargar_escenario(str(ruta_escenario))
     )
 
+    # Convertimos los datos leídos en objetos que usan los algoritmos y el motor.
     print("2. Creando inventario, pedidos y pickers")
     productos = _crear_productos(productos_raw)
     inventario = GestorInventario()
@@ -641,8 +672,7 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
     pedidos = _crear_pedidos(pedidos_raw)
     pickers = _crear_pickers(pickers_raw)
 
-   # ASIGNAR POSICIONES ALEATORIAS EN PASILLOS
-    # (Asegurate de que el warehouse ya se cargó antes de esta línea)
+    # Cada ejecución comienza con los pickers en celdas transitables aleatorias.
     celdas_transitables = warehouse.celdas_transitables()
     if celdas_transitables:
         celdas_disponibles = list(celdas_transitables)
@@ -656,12 +686,14 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
             celda_aleatoria = celdas_disponibles.pop()
             nueva_pos = (celda_aleatoria.x, celda_aleatoria.y)
 
-            # Sobreescribimos la posición del JSON con la nueva aleatoria
+            # La posición aleatoria reemplaza la posición inicial del escenario.
             picker.posicion_inicial = nueva_pos
             picker.posicion_actual = nueva_pos
 
+    # Se avisa si los pedidos solicitan más unidades que el inventario inicial.
     _validar_stock_pedidos(pedidos, inventario)
 
+    # El grafo representa las celdas por las que los pickers pueden circular.
     print("3. Construyendo grafo de circulación")
     grafo = construir_grafo(warehouse)
     if grafo.node_count() == 0:
@@ -671,14 +703,21 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
 
     if modo_waves == "Wave Global (Flota)":
         # Lógica NUEVA (Todos trabajan en la misma wave)
+        
+        # Una wave compartida se convierte en una fase y sus pedidos se reparten
+        # entre todos los pickers.
         waves, fases = _crear_fases_por_wave(pedidos, pickers, inventario, grafo, configuracion)
     else:
         # Lógica VIEJA (Cada picker tiene su propia wave)
+
+        # Alternativamente, cada picker recibe sus propias waves; las waves que
+        # ocupan el mismo turno se ejecutan juntas en una fase.
         waves, _, waves_por_picker = _crear_waves(pedidos, pickers, inventario, configuracion)
         fases = _crear_fases_simulacion(pickers, waves_por_picker)
 
     print(f"   Waves generadas: {len(waves)}")
 
+    # Se prepara el cálculo de rutas y las celdas de destino junto a las salidas.
     print("5. Preparando rutas dinámicas y zonas de despacho")
     cache = CacheDistancias(grafo)
     puntos_despacho = _obtener_puntos_despacho(warehouse, grafo)
@@ -694,7 +733,7 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
     )
 
     if not fases:
-        # Si no hay fases (por ejemplo, no hay pedidos), creamos una vacía para evitar IndexError
+        # El adaptador necesita al menos una fase, incluso si no hay pedidos.
         fases = [{"asignaciones": {}}]
 
     simulacion = _SimulationTk(
@@ -712,6 +751,10 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
     )
     return warehouse, simulacion
 
+
+# =============================================================================
+# Persistencia: guardar el escenario y una fotografía del progreso actual.
+# =============================================================================
 def guardar_partida(ruta_json: Path, sim_tk: _SimulationTk):
     """Guarda el escenario base Y el estado actual de la simulación."""
     from src.io.persistence import crear_datos_escenario
@@ -750,6 +793,10 @@ def guardar_partida(ruta_json: Path, sim_tk: _SimulationTk):
     with open(ruta_json, "w", encoding="utf-8") as f:
         json.dump(datos, f, indent=2, ensure_ascii=False)
 
+
+# =============================================================================
+# Entrada del programa: interpretar argumentos y arrancar el controlador/UI.
+# =============================================================================
 def main() -> None:
     """Abre la aplicación empezando por el menú."""
     raiz_proyecto = Path(__file__).resolve().parent
@@ -764,6 +811,8 @@ def main() -> None:
     )
     argumentos = parser.parse_args()
 
+    # El controlador administra el menú. Si se indicó un escenario en la línea
+    # de comandos, se lo dejamos seleccionado para que aparezca ya cargado.
     controlador = Controlador(
         constructor_simulacion=construir_simulacion,
         tamano_celda=16,
