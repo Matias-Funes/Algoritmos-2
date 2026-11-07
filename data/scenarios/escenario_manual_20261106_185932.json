@@ -1,0 +1,160 @@
+{
+  "warehouse": {
+    "dimensiones": {
+      "ancho_x": 10,
+      "largo_y": 15
+    },
+    "puertas": [
+      {
+        "id": "PUERTA_OUT_1",
+        "tipo": "OUTBOUND",
+        "ubicacion": {
+          "x": 5,
+          "y": 0
+        }
+      }
+    ],
+    "zonas_despacho": [
+      {
+        "id": "ZONA_A",
+        "puerta_id": "PUERTA_OUT_1",
+        "ubicacion": {
+          "x": 2,
+          "y": 1
+        },
+        "ancho": 7,
+        "alto": 2,
+        "peso_max_kg": 500.0
+      }
+    ],
+    "racks": [
+      {
+        "id": "RA01",
+        "ubicacion": {
+          "x": 4,
+          "y": 6
+        },
+        "ancho": 2,
+        "alto": 6
+      }
+    ],
+    "pasillos": [
+      {
+        "id": "PAS_VA00",
+        "ubicacion": {
+          "x": 0,
+          "y": 6
+        },
+        "ancho": 4,
+        "alto": 6,
+        "sentido": "N"
+      },
+      {
+        "id": "PAS_VA01",
+        "ubicacion": {
+          "x": 6,
+          "y": 6
+        },
+        "ancho": 4,
+        "alto": 6,
+        "sentido": "S"
+      },
+      {
+        "id": "PAS_H_INF",
+        "ubicacion": {
+          "x": 0,
+          "y": 3
+        },
+        "ancho": 10,
+        "alto": 3,
+        "sentido": "AMBOS"
+      },
+      {
+        "id": "PAS_H_SUP",
+        "ubicacion": {
+          "x": 0,
+          "y": 12
+        },
+        "ancho": 10,
+        "alto": 3,
+        "sentido": "AMBOS"
+      }
+    ]
+  },
+  "pickers": [
+    {
+      "id": "PK_01",
+      "posicion_inicial": {
+        "x": 5,
+        "y": 4
+      },
+      "capacidad_carga_kg": 100.0
+    }
+  ],
+  "productos": [
+    {
+      "id": "P001",
+      "nombre": "Televisor",
+      "rack_id": "RA01",
+      "ubicacion": {
+        "x": 4,
+        "y": 6,
+        "z": 1
+      },
+      "cantidad_disponible": 3,
+      "peso_kg": 2.0
+    },
+    {
+      "id": "P002",
+      "nombre": "Mesa",
+      "rack_id": "RA01",
+      "ubicacion": {
+        "x": 5,
+        "y": 8,
+        "z": 1
+      },
+      "cantidad_disponible": 5,
+      "peso_kg": 5.0
+    }
+  ],
+  "pedidos": [
+    {
+      "id": "PED_01",
+      "prioridad": 1,
+      "estado": "PENDIENTE",
+      "items": [
+        {
+          "producto_id": "P001",
+          "cantidad": 1
+        }
+      ]
+    },
+    {
+      "id": "PED_02",
+      "prioridad": 1,
+      "estado": "PENDIENTE",
+      "items": [
+        {
+          "producto_id": "P002",
+          "cantidad": 1
+        }
+      ]
+    },
+    {
+      "id": "PED_03",
+      "prioridad": 1,
+      "estado": "PENDIENTE",
+      "items": [
+        {
+          "producto_id": "P002",
+          "cantidad": 2
+        }
+      ]
+    }
+  ],
+  "configuracion": {
+    "wave_max_pedidos": 1,
+    "wave_max_productos": 10,
+    "wave_max_peso_kg": 100.0
+  }
+}
