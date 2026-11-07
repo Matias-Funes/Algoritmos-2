@@ -102,6 +102,65 @@ def _validar_stock_pedidos(
             )
 
 
+class _ParteDePedido:
+    """Porción del trabajo de una wave asignada a un picker.
+
+    Imita lo mínimo de Orden que usa la simulación: la lista `items` de
+    (producto_id, cantidad).
+    """
+
+    def __init__(self, orden_id: str, items: list[tuple[str, int]]) -> None:
+        self.orden_id = orden_id
+        self.items = items
+
+
+def _repartir_wave_entre_pickers(
+    wave: Wave,
+    pickers: list[Picker],
+    inventario: GestorInventario,
+) -> dict[str, list[_ParteDePedido]]:
+    """Reparte las unidades de una wave entre todos los pickers, balanceando el peso.
+
+    Se van asignando las unidades más pesadas primero, siempre al picker con menos
+    carga (y menos unidades) que pueda cargarlas. Así ningún picker queda sin trabajo
+    mientras la wave tenga al menos tantas unidades como pickers.
+    """
+    unidades: list[tuple[float, str]] = []
+    for pedido in wave.pedidos:
+        for producto_id, cantidad in pedido.items:
+            peso = inventario.obtener_producto(producto_id).peso_kg
+            unidades.extend([(peso, producto_id)] * cantidad)
+    unidades.sort(key=lambda u: (-u[0], u[1]))
+
+    carga = {p.id: 0.0 for p in pickers}
+    cantidad_unidades = {p.id: 0 for p in pickers}
+    recogido: dict[str, dict[str, int]] = {p.id: {} for p in pickers}
+
+    for peso, producto_id in unidades:
+        candidatos = [p for p in pickers if p.capacidad_carga_kg >= peso]
+        if not candidatos:
+            raise ValueError(
+                f"Ningún picker puede transportar una unidad de {producto_id}."
+            )
+        elegido = min(
+            candidatos,
+            key=lambda p: (carga[p.id], cantidad_unidades[p.id], p.id),
+        )
+        carga[elegido.id] += peso
+        cantidad_unidades[elegido.id] += 1
+        por_producto = recogido[elegido.id]
+        por_producto[producto_id] = por_producto.get(producto_id, 0) + 1
+
+    return {
+        picker_id: (
+            [_ParteDePedido(f"{wave.id}/{picker_id}", list(por_producto.items()))]
+            if por_producto
+            else []
+        )
+        for picker_id, por_producto in recogido.items()
+    }
+
+
 def _crear_fases_por_wave(
     pedidos: list[Orden],
     pickers: list[Picker],
@@ -121,15 +180,11 @@ def _crear_fases_por_wave(
     # 2. Agrupamos inteligentemente (por prioridad y cercanía)
     waves = generar_waves(pedidos, inventario, grafo, config_wm)
 
+    # 3. Cada Wave se reparte por UNIDADES de producto entre TODOS los pickers, así
+    #    trabajan todos aunque la wave tenga pocos pedidos (antes: un pedido por picker).
     fases = []
-    # 3. Para cada Wave, repartimos sus pedidos entre TODOS los pickers
     for wave in waves:
-        asignaciones = {p.id: [] for p in pickers}
-
-        # Repartimos en forma de "Round Robin" o balanceando la carga
-        for i, pedido in enumerate(wave.pedidos):
-            picker_asignado = pickers[i % len(pickers)]
-            asignaciones[picker_asignado.id].append(pedido)
+        asignaciones = _repartir_wave_entre_pickers(wave, pickers, inventario)
 
         # 4. Cada Wave se convierte en una Fase de simulación
         fases.append({
@@ -534,7 +589,7 @@ class _SimulationTk:
     def retroceder_paso(self) -> bool:
         """Revierte el estado al paso anterior usando el historial."""
         if not self.historial_snapshots:
-            return False # No hay pasos para atrás
+            return False  # No hay pasos para atrás
 
         # Sacamos la última foto y la restauramos
         snapshot_anterior = self.historial_snapshots.pop()
@@ -568,7 +623,7 @@ class _SimulationTk:
             "pickers": [
                 {
                     "id": p.id,
-                    "posicion_actual": list(p.posicion_actual), # tupla a lista para JSON
+                    "posicion_actual": list(p.posicion_actual),  # tupla a lista para JSON
                     "carga_actual_kg": p.carga_actual_kg,
                     "items_transportados": list(p.items_transportados),
                 } for p in self.pickers
@@ -641,7 +696,7 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
     pedidos = _crear_pedidos(pedidos_raw)
     pickers = _crear_pickers(pickers_raw)
 
-   # ASIGNAR POSICIONES ALEATORIAS EN PASILLOS
+    # ASIGNAR POSICIONES ALEATORIAS EN PASILLOS
     # (Asegurate de que el warehouse ya se cargó antes de esta línea)
     celdas_transitables = warehouse.celdas_transitables()
     if celdas_transitables:
