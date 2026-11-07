@@ -106,6 +106,26 @@ class VistaMenu(tk.Frame):
         self.combo_modo_waves.current(0)  # 0 = Wave Global por defecto
         self.combo_modo_waves.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(5, 0))
 
+        # --- Fila 4.5: Selector de Estrategia ---
+        frame_estrategia = tk.Frame(contenedor, bg=CREMA_PRINCIPAL)
+        frame_estrategia.grid(row=5, column=1, sticky="ew", pady=(0, 10))
+
+        tk.Label(
+            frame_estrategia,
+            text="Estrategia de recorrido:",
+            bg=CREMA_PRINCIPAL,
+            font=FUENTE,
+        ).pack(side=tk.LEFT)
+
+        self.combo_estrategia = ttk.Combobox(
+            frame_estrategia,
+            state="readonly",
+            values=["Vecino más cercano (B)", "Orden de pedidos (A)"],
+            width=20,
+        )
+        self.combo_estrategia.current(0)
+        self.combo_estrategia.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(5, 0))
+
         # --- Fila 5: Cargar Partida ---
         crear_boton(
             contenedor,
@@ -113,7 +133,7 @@ class VistaMenu(tk.Frame):
             on_cargar_partida,
             width=24,
             primario=False,
-        ).grid(row=5, column=1, sticky="ew", pady=(0, 8))
+        ).grid(row=6, column=1, sticky="ew", pady=(0, 8))
 
         # --- Fila 6: Aviso en línea ---
         self.lbl_aviso = tk.Label(

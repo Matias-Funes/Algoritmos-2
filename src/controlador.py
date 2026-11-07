@@ -52,7 +52,7 @@ class Controlador:
         self.menu = None
 
         # Datos disponibles para la simulación
-        self.ruta_json = None      # ruta del archivo JSON subido
+        self.ruta_json = None  # ruta del archivo JSON subido
         self.config_manual = None  # datos guardados desde la vista de configuración
 
         self.warehouse = None
@@ -72,7 +72,7 @@ class Controlador:
             ajustar_ventana(self.root, tamano[0], tamano[1], minimo)
         else:
             self.root.minsize(1, 1)  # saca el mínimo de la vista anterior
-            self.root.geometry("")   # tamaño automático según el contenido
+            self.root.geometry("")  # tamaño automático según el contenido
 
     def mostrar_menu(self):
         # Si venimos de la simulación, se deja pausada antes de destruir la vista.
@@ -167,11 +167,14 @@ class Controlador:
 
         # Leemos el modo elegido en el menú (1 = Global, 0 = Por Picker)
         modo_elegido = self.menu.combo_modo_waves.get()
+        estrategia_elegida = self.menu.combo_estrategia.get()
 
         try:
             # Le pasamos el modo a la función constructora
             self.warehouse, self.simulacion = self.constructor_simulacion(
-                Path(self.ruta_json), modo_waves=modo_elegido
+                Path(self.ruta_json),
+                modo_waves=modo_elegido,
+                estrategia_recorrido=estrategia_elegida,
             )
         except (
             Exception

@@ -294,6 +294,7 @@ class _SimulationTk:
         inventario: Any = None,
         waves: list[Wave] | None = None,
         configuracion: dict[str, Any] | None = None,
+        estrategia_recorrido: str = "Vecino más cercano (B)",
         intervalo_ms: int = 250,
     ) -> None:
         self.warehouse = warehouse
@@ -307,6 +308,7 @@ class _SimulationTk:
         self.inventario = inventario
         self.waves = list(waves or [])
         self.configuracion = configuracion
+        self.estrategia_recorrido = estrategia_recorrido
         self.fase_actual = 0
         self._root = None
         self._actualizar_interfaz: Callable[[], None] | None = None
@@ -351,6 +353,7 @@ class _SimulationTk:
         }
         self._simulacion_actual = self._crear_simulacion_fase(0)
         self.historial_snapshots = []
+        self.estrategia_recorrido = estrategia_recorrido
 
     def _crear_simulacion_fase(self, indice: int) -> Simulation:
         """Crea un motor común que planifica el trabajo de toda la flota."""
@@ -362,6 +365,7 @@ class _SimulationTk:
             asignaciones=fase["asignaciones"],
             cache_distancias=self.cache_distancias,
             puntos_despacho=self.puntos_despacho,
+            estrategia_recorrido=self.estrategia_recorrido,
         )
 
     def vincular_interfaz(
@@ -616,7 +620,7 @@ class _SimulationTk:
 
 
 
-def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (Flota)") -> tuple[Any, _SimulationTk]:
+def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (Flota)", estrategia_recorrido: str = "Vecino más cercano (B)") -> tuple[Any, _SimulationTk]:
     """Carga un escenario JSON y arma el warehouse y la simulación.
 
     Devuelve (warehouse, simulacion). La simulación todavía no está vinculada a
@@ -683,6 +687,7 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
         inventario=inventario,
         waves=waves,
         configuracion=configuracion,
+        estrategia_recorrido=estrategia_recorrido,
     )
     return warehouse, simulacion
 
