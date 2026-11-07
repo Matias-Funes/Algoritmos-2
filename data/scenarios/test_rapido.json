@@ -29,15 +29,15 @@
       "nombre": "Caja Nivel 1", 
       "rack_id": "RACK_1", 
       "ubicacion": { "x": 4, "y": 5, "z": 1 }, 
-      "cantidad_disponible": 3, 
+      "cantidad_disponible": 2, 
       "peso_kg": 1.0 
     },
     { 
       "id": "P002", 
-      "nombre": "Caja Nivel 2", 
+      "nombre": "Caja Nivel 3", 
       "rack_id": "RACK_1", 
-      "ubicacion": { "x": 5, "y": 5, "z": 2 }, 
-      "cantidad_disponible": 3, 
+      "ubicacion": { "x": 5, "y": 5, "z": 3 }, 
+      "cantidad_disponible": 2, 
       "peso_kg": 1.0 
     }
   ],
@@ -47,10 +47,10 @@
       "prioridad": 5, 
       "estado": "PENDIENTE", 
       "items": [
-        { "producto_id": "P001", "cantidad": 3 },
-        { "producto_id": "P002", "cantidad": 3 }
+        { "producto_id": "P001", "cantidad": 1 },
+        { "producto_id": "P002", "cantidad": 1 }
       ] 
     }
   ],
-  "configuracion": { "wave_max_pedidos": 1, "wave_max_productos": 10 }
+  "configuracion": { "wave_max_pedidos": 5, "wave_max_productos": 10 }
 }

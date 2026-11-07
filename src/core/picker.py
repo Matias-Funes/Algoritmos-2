@@ -35,8 +35,10 @@ class Picker:
         self.carga_actual_kg = 0.0
         self.items_transportados: list[tuple[str, int]] = []
         
-        # --- NUEVA LÍNEA: Atributo para la pausa de recolección ---
+        # --- ATRIBUTOS PARA LA RECOLECCIÓN Y MÉTRICAS ---
         self.tiempo_recoleccion = 0 
+        self.info_recoleccion = ""
+        self.ultima_altura = 0  # <-- NUEVO: Guarda el último nivel (z) recogido
 
     @staticmethod
     def _validar_posicion(posicion: tuple[int, int]) -> None:
@@ -121,6 +123,7 @@ class Picker:
                 [producto_id, cantidad]
                 for producto_id, cantidad in self.items_transportados
             ],
+            "ultima_altura": self.ultima_altura  # <-- Guardamos la altura
         }
 
     @staticmethod
@@ -162,6 +165,7 @@ class Picker:
 
             picker.carga_actual_kg = float(carga_actual)
             picker.items_transportados = items
+            picker.ultima_altura = datos.get("ultima_altura", 0) # <-- Recuperamos la altura
             return picker
         except KeyError as error:
             raise ValueError(

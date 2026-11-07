@@ -91,6 +91,10 @@ class Ventana(tk.Frame):
         self.lbl_distancia = tk.Label(self.panel, text="Distancia Total: 0 m", font=("Arial", 10), bg="#f8fafc")
         self.lbl_distancia.pack(anchor="w")
 
+        # --- NUEVA MÉTRICA DE ALTURA ---
+        self.lbl_altura = tk.Label(self.panel, text="Última altura recogida: Nivel 0", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_altura.pack(anchor="w")
+
         # 3. Panel de Pickers
         tk.Label(self.panel, text="Estado Pickers", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
         self.frame_carga_pickers = tk.Frame(self.panel, bg="#f8fafc")
@@ -346,7 +350,7 @@ class Ventana(tk.Frame):
         cy = ((self.warehouse.largo_y - 1 - y) * self.tamano_celda) + (self.tamano_celda / 2)
         return cx, cy
 
-    # --- NUEVO MÉTODO: Lee el stock en tiempo real del inventario ---
+    # --- Lee el stock en tiempo real del inventario ---
     def _obtener_stock_por_celda(self):
         """Devuelve un diccionario {(x,y): cantidad_total} con el stock actual."""
         stock_map = {}
@@ -441,8 +445,10 @@ class Ventana(tk.Frame):
         cx, cy = self._obtener_centro(x, y)
         radio = self.tamano_celda * 0.35
 
+        esta_recolectando = p_data.get("recolectando", False)
+
         # --- CAMBIO DE COLOR SI ESTÁ RECOLECTANDO ---
-        if p_data.get("recolectando", False):
+        if esta_recolectando:
             color = "#10b981" # Verde brillante
         # --------------------------------------------
 
@@ -486,6 +492,9 @@ class Ventana(tk.Frame):
         self.lbl_paso.config(text=f"Paso actual: {estado.get('paso_actual', 0)}")
         self.lbl_productos.config(text=f"Productos Recogidos: {estado.get('productos_recogidos', 0)} / {estado.get('total_productos', 0)}")
         self.lbl_distancia.config(text=f"Distancia Total: {estado.get('distancia', 0)} m")
+        
+        # --- ACTUALIZAR MÉTRICA DE ALTURA ---
+        self.lbl_altura.config(text=f"Última altura recogida: Nivel {estado.get('ultima_altura', 0)}")
 
         pickers_estado = estado.get("pickers", [])
         ids_pickers = {picker["id"] for picker in pickers_estado}
@@ -508,7 +517,14 @@ class Ventana(tk.Frame):
             items = picker.get("items_transportados", [])
             detalle = ", ".join(f"{i['producto_id']}({i['cantidad']})" for i in items) or "Vacío"
 
-            texto = f"• {picker_id}: {cantidad_actual}/{cantidad_objetivo} items\n  {detalle}"
+            esta_recolectando = picker.get("recolectando", False)
+            
+            if esta_recolectando:
+                estado_texto = "📦 ¡RECOLECTANDO!"
+            else:
+                estado_texto = "🚶 En movimiento"
+
+            texto = f"• {picker_id}: {cantidad_actual}/{cantidad_objetivo} items\n  {estado_texto}\n  {detalle}"
             self.lbl_carga_pickers[picker_id][0].config(text=texto)
 
         self.txt_pedidos.config(state=tk.NORMAL)
@@ -523,16 +539,32 @@ class Ventana(tk.Frame):
                 primer_valor = list(pedidos.values())[0]
                 if isinstance(primer_valor, dict):
                     es_anidado = True
+            
+            # --- NUEVO: Helper para buscar la altura ---
+            def obtener_altura(pid):
+                try:
+                    inv = getattr(self.simulacion, "inventario", None)
+                    if inv:
+                        prod = inv.obtener_producto(pid)
+                        return int(prod.ubicacion[2]) if len(prod.ubicacion) > 2 else 0
+                except Exception:
+                    pass
+                return 0
+            # ---------------------------------------------
 
             if es_anidado:
                 for picker_id, demanda in pedidos.items():
                     if demanda:
                         self.txt_pedidos.insert(tk.END, f"Picker {picker_id}:\n")
                         for prod_id, cant in demanda.items():
-                            self.txt_pedidos.insert(tk.END, f"  - {prod_id}: {cant} unidades\n")
+                            altura = obtener_altura(prod_id)
+                            # --- FORMATO CON COMA Y ALTURA ---
+                            self.txt_pedidos.insert(tk.END, f"  - {prod_id}: {cant} unidades, altura ({altura})\n")
             else:
                 for prod_id, cant in pedidos.items():
-                    self.txt_pedidos.insert(tk.END, f"- {prod_id}: {cant} unidades\n")
+                    altura = obtener_altura(prod_id)
+                    # --- FORMATO CON COMA Y ALTURA ---
+                    self.txt_pedidos.insert(tk.END, f"- {prod_id}: {cant} unidades, altura ({altura})\n")
 
         self.txt_pedidos.config(state=tk.DISABLED)
         self._actualizar_boton_volver(estado)

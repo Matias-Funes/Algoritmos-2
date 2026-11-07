@@ -1,0 +1,387 @@
+{
+  "warehouse": {
+    "dimensiones": {
+      "ancho_x": 35,
+      "largo_y": 25
+    },
+    "puertas": [
+      {
+        "id": "PUERTA_OUT_1",
+        "tipo": "OUTBOUND",
+        "ubicacion": {
+          "x": 8,
+          "y": 0
+        }
+      },
+      {
+        "id": "PUERTA_MIX_1",
+        "tipo": "AMBOS",
+        "ubicacion": {
+          "x": 26,
+          "y": 0
+        }
+      }
+    ],
+    "zonas_despacho": [
+      {
+        "id": "ZONA_A",
+        "puerta_id": "PUERTA_OUT_1",
+        "ubicacion": {
+          "x": 5,
+          "y": 1
+        },
+        "ancho": 7,
+        "alto": 2,
+        "peso_max_kg": 500.0
+      },
+      {
+        "id": "ZONA_B",
+        "puerta_id": "PUERTA_MIX_1",
+        "ubicacion": {
+          "x": 23,
+          "y": 1
+        },
+        "ancho": 7,
+        "alto": 2,
+        "peso_max_kg": 500.0
+      }
+    ],
+    "racks": [
+      {
+        "id": "RA01",
+        "ubicacion": {
+          "x": 4,
+          "y": 6
+        },
+        "ancho": 2,
+        "alto": 6
+      },
+      {
+        "id": "RA02",
+        "ubicacion": {
+          "x": 9,
+          "y": 6
+        },
+        "ancho": 2,
+        "alto": 6
+      },
+      {
+        "id": "RA03",
+        "ubicacion": {
+          "x": 14,
+          "y": 6
+        },
+        "ancho": 2,
+        "alto": 6
+      },
+      {
+        "id": "RA04",
+        "ubicacion": {
+          "x": 19,
+          "y": 6
+        },
+        "ancho": 2,
+        "alto": 6
+      },
+      {
+        "id": "RA05",
+        "ubicacion": {
+          "x": 24,
+          "y": 6
+        },
+        "ancho": 2,
+        "alto": 6
+      },
+      {
+        "id": "RA06",
+        "ubicacion": {
+          "x": 29,
+          "y": 6
+        },
+        "ancho": 2,
+        "alto": 6
+      },
+      {
+        "id": "RB01",
+        "ubicacion": {
+          "x": 4,
+          "y": 16
+        },
+        "ancho": 2,
+        "alto": 6
+      },
+      {
+        "id": "RB02",
+        "ubicacion": {
+          "x": 9,
+          "y": 16
+        },
+        "ancho": 2,
+        "alto": 6
+      },
+      {
+        "id": "RB03",
+        "ubicacion": {
+          "x": 14,
+          "y": 16
+        },
+        "ancho": 2,
+        "alto": 6
+      },
+      {
+        "id": "RB04",
+        "ubicacion": {
+          "x": 19,
+          "y": 16
+        },
+        "ancho": 2,
+        "alto": 6
+      },
+      {
+        "id": "RB05",
+        "ubicacion": {
+          "x": 24,
+          "y": 16
+        },
+        "ancho": 2,
+        "alto": 6
+      }
+    ],
+    "pasillos": [
+      {
+        "id": "PAS_VA00",
+        "ubicacion": {
+          "x": 0,
+          "y": 6
+        },
+        "ancho": 4,
+        "alto": 6,
+        "sentido": "N"
+      },
+      {
+        "id": "PAS_VA01",
+        "ubicacion": {
+          "x": 6,
+          "y": 6
+        },
+        "ancho": 3,
+        "alto": 6,
+        "sentido": "S"
+      },
+      {
+        "id": "PAS_VA02",
+        "ubicacion": {
+          "x": 11,
+          "y": 6
+        },
+        "ancho": 3,
+        "alto": 6,
+        "sentido": "N"
+      },
+      {
+        "id": "PAS_VA03",
+        "ubicacion": {
+          "x": 16,
+          "y": 6
+        },
+        "ancho": 3,
+        "alto": 6,
+        "sentido": "S"
+      },
+      {
+        "id": "PAS_VA04",
+        "ubicacion": {
+          "x": 21,
+          "y": 6
+        },
+        "ancho": 3,
+        "alto": 6,
+        "sentido": "N"
+      },
+      {
+        "id": "PAS_VA05",
+        "ubicacion": {
+          "x": 26,
+          "y": 6
+        },
+        "ancho": 3,
+        "alto": 6,
+        "sentido": "S"
+      },
+      {
+        "id": "PAS_VA06",
+        "ubicacion": {
+          "x": 31,
+          "y": 6
+        },
+        "ancho": 4,
+        "alto": 6,
+        "sentido": "N"
+      },
+      {
+        "id": "PAS_VB00",
+        "ubicacion": {
+          "x": 0,
+          "y": 16
+        },
+        "ancho": 4,
+        "alto": 6,
+        "sentido": "S"
+      },
+      {
+        "id": "PAS_VB01",
+        "ubicacion": {
+          "x": 6,
+          "y": 16
+        },
+        "ancho": 3,
+        "alto": 6,
+        "sentido": "N"
+      },
+      {
+        "id": "PAS_VB02",
+        "ubicacion": {
+          "x": 11,
+          "y": 16
+        },
+        "ancho": 3,
+        "alto": 6,
+        "sentido": "S"
+      },
+      {
+        "id": "PAS_VB03",
+        "ubicacion": {
+          "x": 16,
+          "y": 16
+        },
+        "ancho": 3,
+        "alto": 6,
+        "sentido": "N"
+      },
+      {
+        "id": "PAS_VB04",
+        "ubicacion": {
+          "x": 21,
+          "y": 16
+        },
+        "ancho": 3,
+        "alto": 6,
+        "sentido": "S"
+      },
+      {
+        "id": "PAS_VB05",
+        "ubicacion": {
+          "x": 26,
+          "y": 16
+        },
+        "ancho": 3,
+        "alto": 6,
+        "sentido": "N"
+      },
+      {
+        "id": "PAS_H_INF",
+        "ubicacion": {
+          "x": 0,
+          "y": 3
+        },
+        "ancho": 35,
+        "alto": 3,
+        "sentido": "AMBOS"
+      },
+      {
+        "id": "PAS_H_MED",
+        "ubicacion": {
+          "x": 0,
+          "y": 12
+        },
+        "ancho": 35,
+        "alto": 4,
+        "sentido": "AMBOS"
+      },
+      {
+        "id": "PAS_H_SUP",
+        "ubicacion": {
+          "x": 0,
+          "y": 22
+        },
+        "ancho": 35,
+        "alto": 3,
+        "sentido": "AMBOS"
+      }
+    ]
+  },
+  "pickers": [
+    {
+      "id": "PK_01",
+      "posicion_inicial": {
+        "x": 8,
+        "y": 4
+      },
+      "capacidad_carga_kg": 100.0
+    },
+    {
+      "id": "PK_02",
+      "posicion_inicial": {
+        "x": 26,
+        "y": 4
+      },
+      "capacidad_carga_kg": 100.0
+    },
+    {
+      "id": "PK_03",
+      "posicion_inicial": {
+        "x": 8,
+        "y": 13
+      },
+      "capacidad_carga_kg": 100.0
+    },
+    {
+      "id": "PK_04",
+      "posicion_inicial": {
+        "x": 26,
+        "y": 13
+      },
+      "capacidad_carga_kg": 100.0
+    },
+    {
+      "id": "PK_05",
+      "posicion_inicial": {
+        "x": 17,
+        "y": 23
+      },
+      "capacidad_carga_kg": 100.0
+    }
+  ],
+  "productos": [
+    {
+      "id": "P001",
+      "nombre": "tele",
+      "rack_id": "RA01",
+      "ubicacion": {
+        "x": 4,
+        "y": 6,
+        "z": 1
+      },
+      "cantidad_disponible": 10,
+      "peso_kg": 2.0
+    }
+  ],
+  "pedidos": [
+    {
+      "id": "PED_01",
+      "prioridad": 1,
+      "estado": "PENDIENTE",
+      "items": [
+        {
+          "producto_id": "P001",
+          "cantidad": 1
+        }
+      ]
+    }
+  ],
+  "configuracion": {
+    "wave_max_pedidos": 1,
+    "wave_max_productos": 14,
+    "wave_max_peso_kg": 998.0
+  }
+}
