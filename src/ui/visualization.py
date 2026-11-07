@@ -20,12 +20,7 @@ COLORES_PICKERS = [
 ]
 
 class Ventana(tk.Frame):
-    """Vista de la simulación (colores y diseño originales).
-
-    Puede usarse embebida (master = ventana principal del controlador) o sola (master=None),
-    en cuyo caso crea su propia ventana y se arranca con iniciar().
-    on_volver: función que lleva de vuelta al menú (la entrega el controlador).
-    """
+    """Vista de la simulación (colores y diseño originales)."""
 
     def __init__(self, warehouse, tamano_celda=30, master=None, on_volver=None):
         super().__init__(master)
@@ -55,14 +50,13 @@ class Ventana(tk.Frame):
         self.btn_play_pause = tk.Button(
             frame_btn, text="▶ Iniciar", command=self.btn_toggle_play_pause
         )
-        # Lo ponemos en la columna 0
         self.btn_play_pause.grid(row=0, column=0, sticky="ew", pady=2, padx=(2, 1))
 
         tk.Button(
             frame_btn, text="🔄 Reiniciar", command=self.btn_reset
         ).grid(row=0, column=1, sticky="ew", pady=2, padx=(1, 2))
 
-        # Fila 1: Atrás y Adelante (como ya los tenías)
+        # Fila 1: Atrás y Adelante
         frame_pasos = tk.Frame(frame_btn, bg="#f8fafc")
         frame_pasos.grid(row=1, column=0, columnspan=2, sticky="ew", pady=2)
 
@@ -79,10 +73,8 @@ class Ventana(tk.Frame):
             bg="#e0f2fe", font=("Arial", 9, "bold")
         ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 2), padx=2)
 
-        # (Asegurate de mantener los columnconfigure para que se repartan el ancho)
         frame_btn.columnconfigure(0, weight=1)
         frame_btn.columnconfigure(1, weight=1)
-
 
         # 2. Métricas Globales
         tk.Label(self.panel, text="Métricas Globales", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
@@ -99,6 +91,10 @@ class Ventana(tk.Frame):
         self.lbl_distancia = tk.Label(self.panel, text="Distancia Total: 0 m", font=("Arial", 10), bg="#f8fafc")
         self.lbl_distancia.pack(anchor="w")
 
+        # --- NUEVA MÉTRICA DE ALTURA ---
+        self.lbl_altura = tk.Label(self.panel, text="Última altura recogida: Nivel 0", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_altura.pack(anchor="w")
+
         # 3. Panel de Pickers
         tk.Label(self.panel, text="Estado Pickers", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
         self.frame_carga_pickers = tk.Frame(self.panel, bg="#f8fafc")
@@ -110,7 +106,7 @@ class Ventana(tk.Frame):
         self.txt_pedidos = tk.Text(self.panel, height=6, width=35, font=("Arial", 9), bg="#ffffff", state=tk.DISABLED)
         self.txt_pedidos.pack(fill=tk.X)
 
-        # 5. Volver al menú (siempre visible, abajo del panel)
+        # 5. Volver al menú
         self.btn_volver = tk.Button(self.panel, text="← Volver al menú", command=self.btn_volver_menu)
         self.btn_volver.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
         self._estilo_volver_original = {
@@ -184,7 +180,7 @@ class Ventana(tk.Frame):
 
     def btn_paso(self):
         if self.simulacion:
-            self.simulacion.pausar() # Pausamos por si estaba corriendo
+            self.simulacion.pausar()
             self.en_ejecucion = False
             self.btn_play_pause.config(text="▶ Iniciar")
             self.simulacion.avanzar_paso()
@@ -218,13 +214,11 @@ class Ventana(tk.Frame):
 
         self._mostrar_comparacion(resultado)
 
-
     def _mostrar_comparacion(self, comparacion):
         if not comparacion.get("totales"):
             messagebox.showinfo("Sin datos", "No hay waves para comparar.", parent=self.root)
             return
 
-        # Crear ventana emergente
         ventana = tk.Toplevel(self.root)
         ventana.title("Comparación de Estrategias")
         ventana.geometry("700x500")
@@ -232,13 +226,11 @@ class Ventana(tk.Frame):
         ventana.transient(self.root)
         ventana.configure(bg="#f8fafc")
 
-        # Estilos para las pestañas y tablas
         style = ttk.Style(ventana)
         style.theme_use("clam")
         style.configure("Treeview", rowheight=25, font=("Arial", 10))
         style.configure("Treeview.Heading", font=("Arial", 10, "bold"))
 
-        # --- Pestañas ---
         notebook = ttk.Notebook(ventana)
         notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -248,9 +240,7 @@ class Ventana(tk.Frame):
         notebook.add(tab_global, text="Resumen Global")
         notebook.add(tab_detalle, text="Detalle por Wave")
 
-        # ==========================================
-        # PESTAÑA 1: RESUMEN GLOBAL
-        # ==========================================
+        # PESTAÑA 1
         nombres_ui = {"A": "A (Orden de pedidos)", "B": "B (Vecino más cercano)"}
         totales = comparacion["totales"]
         nombres = list(totales)
@@ -277,11 +267,9 @@ class Ventana(tk.Frame):
 
         tabla_global.pack(fill=tk.X, pady=10)
 
-        # Ganadores y Eficiencia
         ganador_dist = comparacion.get('ganador_distancia', '-')
         ganador_tiempo = comparacion.get('ganador_tiempo', '-')
 
-        # Calcular % de ahorro
         eficiencia = ""
         if len(nombres) == 2:
             d_a = totales["A"].get("distancia", 0)
@@ -305,9 +293,7 @@ class Ventana(tk.Frame):
             tk.Label(frame_ganadores, text=f"💡 {eficiencia}",
                      font=("Arial", 11, "italic"), fg="#10b981", bg="#f8fafc").pack(anchor="w", pady=(5,0))
 
-        # ==========================================
-        # PESTAÑA 2: DETALLE POR WAVE
-        # ==========================================
+        # PESTAÑA 2
         tk.Label(tab_detalle, text="Distancia recorrida por la flota en cada Wave",
                  font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(0, 10))
 
@@ -318,14 +304,12 @@ class Ventana(tk.Frame):
             tabla_detalle.heading(col, text=col)
             tabla_detalle.column(col, anchor="center", width=130)
 
-        # Llenar la tabla con los datos de 'por_wave'
         victorias = {"A": 0, "B": 0, "Empate": 0}
 
         for fila in comparacion["por_wave"]:
             wave_id = fila["wave_id"]
             est = fila["estrategias"]
 
-            # Manejo de errores por si una wave falló
             if "error" in est.get("A", {}) or "error" in est.get("B", {}):
                 tabla_detalle.insert("", tk.END, values=[wave_id, "Error", "Error", "-"])
                 continue
@@ -347,12 +331,10 @@ class Ventana(tk.Frame):
 
         tabla_detalle.pack(fill=tk.BOTH, expand=True)
 
-        # Resumen de victorias por wave
         texto_victorias = f"Victorias: A ({victorias['A']}) | B ({victorias['B']}) | Empates ({victorias['Empate']})"
         tk.Label(tab_detalle, text=texto_victorias, font=("Arial", 11, "bold"),
                  bg="#f8fafc", fg="#64748b").pack(anchor="e", pady=10)
 
-        # Botón Cerrar
         tk.Button(ventana, text="Cerrar", command=ventana.destroy, width=15).pack(pady=(0, 10))
 
     def btn_guardar_partida(self):
@@ -371,9 +353,7 @@ class Ventana(tk.Frame):
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar: {e}", parent=self.root)
 
-    # --- Volver al menú ---
     def _simulacion_terminada(self, estado=None):
-        """True si la simulación terminó (o si no hay ninguna en marcha)."""
         if not self.simulacion:
             return True
         if estado is None:
@@ -410,7 +390,30 @@ class Ventana(tk.Frame):
         cy = ((self.warehouse.largo_y - 1 - y) * self.tamano_celda) + (self.tamano_celda / 2)
         return cx, cy
 
-    def dibujar_warehouse(self):
+    # --- Lee el stock en tiempo real del inventario ---
+    def _obtener_stock_por_celda(self):
+        """Devuelve un diccionario {(x,y): cantidad_total} con el stock actual."""
+        stock_map = {}
+        if not self.simulacion:
+            return stock_map
+
+        inventario = getattr(self.simulacion, "inventario", None)
+        if not inventario:
+            return stock_map
+
+        try:
+            for prod in inventario.todos_los_productos():
+                x, y = prod.ubicacion[0], prod.ubicacion[1]
+                stock_map[(x, y)] = stock_map.get((x, y), 0) + prod.cantidad_disponible
+        except AttributeError:
+            pass
+
+        return stock_map
+
+    def dibujar_warehouse(self, stock_map=None):
+        if stock_map is None:
+            stock_map = {}
+
         # 1. Agrupamos los emojis por celda (x, y)
         productos_por_celda = {}
 
@@ -495,6 +498,23 @@ class Ventana(tk.Frame):
                     elif cell.sentido == O: flecha = "←"
                     self.canvas.create_text(cx, cy, text=flecha, fill="#64748b", font=("Arial", 10, "bold"))
 
+    def _dibujar_icono_paquete(self, cx, cy):
+        """Dibuja una caja de cartón pequeña en el centro de la celda."""
+        tam = self.tamano_celda * 0.45
+        x1, y1 = cx - tam, cy - tam
+        x2, y2 = cx + tam, cy + tam
+
+        self.canvas.create_rectangle(
+            x1, y1, x2, y2,
+            fill="#d97706", outline="#190b03", width=1
+        )
+        self.canvas.create_line(x1, cy, x2, cy, fill="#fde68a", width=1)
+        self.canvas.create_line(cx, y1, cx, y2, fill="#fde68a", width=1)
+        self.canvas.create_polygon(
+            x1, y1, x1 + tam * 0.5, y1, x1, y1 + tam * 0.5,
+            fill="#fef08a", outline=""
+        )
+
     def dibujar_recorrido(self, ruta, color="#0ea5e9"):
         if not ruta or len(ruta) < 2:
             return
@@ -506,6 +526,13 @@ class Ventana(tk.Frame):
 
     def dibujar_picker(self, x, y, p_data, color="#ef4444"):
         cx, cy = self._obtener_centro(x, y)
+
+        esta_recolectando = p_data.get("recolectando", False)
+
+        # --- CAMBIO DE COLOR SI ESTÁ RECOLECTANDO ---
+        if esta_recolectando:
+            color = "#10b981" # Verde brillante
+        # --------------------------------------------
 
         carga = p_data.get('carga_actual_kg', 0)
         # Si lleva más de 0kg de carga, mostramos el camión, sino el carrito
@@ -528,21 +555,21 @@ class Ventana(tk.Frame):
 
         estado = self.simulacion.get_estado()
         self.canvas.delete("all")
-        self.dibujar_warehouse()
 
-        # Obtenemos las rutas y los pickers
+        # --- OBTENER STOCK Y PASARLO AL DIBUJO ---
+        stock_map = self._obtener_stock_por_celda()
+        self.dibujar_warehouse(stock_map)
+        # -----------------------------------------
+
         rutas = estado.get('rutas', [])
         pickers_estado = estado.get('pickers', [])
 
-        # Recorremos los pickers con su índice para asignarles un color
         for i, p in enumerate(pickers_estado):
             color = COLORES_PICKERS[i % len(COLORES_PICKERS)]
 
-            # 1. Dibujar el recorrido del picker (si tiene ruta)
             if i < len(rutas):
                 self.dibujar_recorrido(rutas[i], color=color)
 
-            # 2. Dibujar el círculo del picker
             if p.get("activo", True):
                 self.dibujar_picker(p['x'], p['y'], p, color=color)
 
@@ -550,6 +577,9 @@ class Ventana(tk.Frame):
         self.lbl_paso.config(text=f"Paso actual: {estado.get('paso_actual', 0)}")
         self.lbl_productos.config(text=f"Productos Recogidos: {estado.get('productos_recogidos', 0)} / {estado.get('total_productos', 0)}")
         self.lbl_distancia.config(text=f"Distancia Total: {estado.get('distancia', 0)} m")
+
+        # --- ACTUALIZAR MÉTRICA DE ALTURA ---
+        self.lbl_altura.config(text=f"Última altura recogida: Nivel {estado.get('ultima_altura', 0)}")
 
         pickers_estado = estado.get("pickers", [])
         ids_pickers = {picker["id"] for picker in pickers_estado}
@@ -572,7 +602,14 @@ class Ventana(tk.Frame):
             items = picker.get("items_transportados", [])
             detalle = ", ".join(f"{i['producto_id']}({i['cantidad']})" for i in items) or "Vacío"
 
-            texto = f"• {picker_id}: {cantidad_actual}/{cantidad_objetivo} items\n  {detalle}"
+            esta_recolectando = picker.get("recolectando", False)
+
+            if esta_recolectando:
+                estado_texto = "📦 ¡RECOLECTANDO!"
+            else:
+                estado_texto = "🚶 En movimiento"
+
+            texto = f"• {picker_id}: {cantidad_actual}/{cantidad_objetivo} items\n  {estado_texto}\n  {detalle}"
             self.lbl_carga_pickers[picker_id][0].config(text=texto)
 
         self.txt_pedidos.config(state=tk.NORMAL)
@@ -588,15 +625,31 @@ class Ventana(tk.Frame):
                 if isinstance(primer_valor, dict):
                     es_anidado = True
 
+            # --- NUEVO: Helper para buscar la altura ---
+            def obtener_altura(pid):
+                try:
+                    inv = getattr(self.simulacion, "inventario", None)
+                    if inv:
+                        prod = inv.obtener_producto(pid)
+                        return int(prod.ubicacion[2]) if len(prod.ubicacion) > 2 else 0
+                except Exception:
+                    pass
+                return 0
+            # ---------------------------------------------
+
             if es_anidado:
                 for picker_id, demanda in pedidos.items():
                     if demanda:
                         self.txt_pedidos.insert(tk.END, f"Picker {picker_id}:\n")
                         for prod_id, cant in demanda.items():
-                            self.txt_pedidos.insert(tk.END, f"  - {prod_id}: {cant} unidades\n")
+                            altura = obtener_altura(prod_id)
+                            # --- FORMATO CON COMA Y ALTURA ---
+                            self.txt_pedidos.insert(tk.END, f"  - {prod_id}: {cant} unidades, altura ({altura})\n")
             else:
                 for prod_id, cant in pedidos.items():
-                    self.txt_pedidos.insert(tk.END, f"- {prod_id}: {cant} unidades\n")
+                    altura = obtener_altura(prod_id)
+                    # --- FORMATO CON COMA Y ALTURA ---
+                    self.txt_pedidos.insert(tk.END, f"- {prod_id}: {cant} unidades, altura ({altura})\n")
 
         self.txt_pedidos.config(state=tk.DISABLED)
         self._actualizar_boton_volver(estado)
