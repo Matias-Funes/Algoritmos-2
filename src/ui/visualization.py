@@ -29,7 +29,6 @@ class Ventana(tk.Frame):
         self.simulacion = None
         self.on_volver = on_volver
         self.en_ejecucion = False
-        self.mostrar_grilla = True
         self.root = self.winfo_toplevel()
 
         if master is None:
@@ -64,17 +63,11 @@ class Ventana(tk.Frame):
         tk.Button(frame_pasos, text="⏮ Atrás", command=self.btn_paso_atras).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 1))
         tk.Button(frame_pasos, text="⏭ Adelante", command=self.btn_paso).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(1, 2))
 
-        # Fila 2: Guardar (Izquierda) y Mostrar Grilla (Derecha)
-        tk.Button(
-            frame_btn, text="💾 Guardar", command=self.btn_guardar_partida
-        ).grid(row=2, column=0, sticky="ew", pady=2, padx=(2, 1))
-
-        self.btn_grilla = tk.Button(
-            frame_btn, text="👁 Grilla", command=self.btn_toggle_grilla
+        # Fila 2: Guardar y Comparar
+        tk.Button(frame_btn, text="💾 Guardar Partida", command=self.btn_guardar_partida).grid(
+            row=2, column=0, columnspan=2, sticky="ew", pady=2, padx=2
         )
-        self.btn_grilla.grid(row=2, column=1, sticky="ew", pady=2, padx=(1, 2))
 
-        # Fila 3: Comparar Estrategias
         tk.Button(
             frame_btn, text="📊 Comparar Estrategias", command=self.btn_comparar_estrategias,
             bg="#e0f2fe", font=("Arial", 9, "bold")
@@ -128,57 +121,6 @@ class Ventana(tk.Frame):
         self.canvas = tk.Canvas(self, width=self.ancho_px, height=self.alto_px, bg="#e2e8f0")
         self.canvas.pack(side=tk.RIGHT, padx=10, pady=10)
 
-    def _obtener_emoji_producto(self, nombre_producto):
-        nombre = nombre_producto.lower()
-
-        # --- Hardware y Periféricos ---
-        if "monitor" in nombre: return "🖥️"
-        if "notebook" in nombre: return "💻"
-        if "tablet" in nombre: return "📱"
-        if "teclado" in nombre: return "⌨️"
-        if "mouse" in nombre: return "🖱️"
-        if "impresora" in nombre: return "🖨️"
-        if "scanner" in nombre: return "📄"
-        if "proyector" in nombre: return "📽️"
-        if "webcam" in nombre or "cámara" in nombre: return "📷"
-        if "micrófono" in nombre: return "🎤"
-        if "parlante" in nombre: return "🔊"
-        if "auricular" in nombre: return "🎧"
-
-        # --- Componentes de PC ---
-        if "placa" in nombre: return "🎮"
-        if "memoria" in nombre or "ram" in nombre: return "🧠"
-        if "disco" in nombre: return "💾"
-        if "fuente" in nombre: return "⚡"
-        if "gabinete" in nombre: return "🗄️"
-        if "soporte" in nombre: return "📐"
-
-        # --- Redes y Conectividad ---
-        if "router" in nombre: return "📡"
-        if "switch" in nombre: return "🔀"
-        if "hub" in nombre: return "🔗"
-        if "cable" in nombre: return "🔌"
-        if "cargador" in nombre: return "🔋"
-        if "ups" in nombre: return "🔋" # Batería/UPS
-
-        # --- Muebles y Oficina ---
-        if "silla" in nombre or "escritorio" in nombre: return "🪑"
-        if "lámpara" in nombre: return "💡"
-
-        # --- Por defecto ---
-        return "📦"
-
-    def btn_toggle_grilla(self):
-        self.mostrar_grilla = not self.mostrar_grilla
-
-        if self.mostrar_grilla:
-            self.btn_grilla.config(text="👁 Ocultar Grilla")
-        else:
-            self.btn_grilla.config(text="👁 Mostrar Grilla")
-
-        # Forzamos un redibujado para aplicar el cambio
-        self.actualizar_desde_simulacion()
-
     def set_simulacion(self, sim):
         self.simulacion = sim
 
@@ -198,7 +140,7 @@ class Ventana(tk.Frame):
 
     def btn_paso(self):
         if self.simulacion:
-            self.simulacion.pausar()
+            self.simulacion.pausar() 
             self.en_ejecucion = False
             self.btn_play_pause.config(text="▶ Iniciar")
             self.simulacion.avanzar_paso()
@@ -414,51 +356,24 @@ class Ventana(tk.Frame):
         stock_map = {}
         if not self.simulacion:
             return stock_map
-
+        
         inventario = getattr(self.simulacion, "inventario", None)
         if not inventario:
             return stock_map
-
+            
         try:
             for prod in inventario.todos_los_productos():
                 x, y = prod.ubicacion[0], prod.ubicacion[1]
                 stock_map[(x, y)] = stock_map.get((x, y), 0) + prod.cantidad_disponible
         except AttributeError:
             pass
-
+            
         return stock_map
 
     def dibujar_warehouse(self, stock_map=None):
         if stock_map is None:
             stock_map = {}
 
-        # 1. Agrupamos los emojis por celda (x, y)
-        productos_por_celda = {}
-
-        if self.simulacion and hasattr(self.simulacion, 'productos'):
-            # Ordenamos por altura Z para que el nivel 1 quede abajo de todo
-            productos_ordenados = sorted(
-                self.simulacion.productos,
-                key=lambda p: p.ubicacion[2]
-            )
-
-            for prod in productos_ordenados:
-                x, y, z = prod.ubicacion
-                coords = (x, y)
-                emoji = self._obtener_emoji_producto(prod.nombre)
-
-                if coords not in productos_por_celda:
-                    productos_por_celda[coords] = []
-
-                # Evitamos duplicados si hay dos productos iguales en la misma celda
-                if emoji not in productos_por_celda[coords]:
-                    productos_por_celda[coords].append(emoji)
-
-                # Máximo 3 productos por celda (por los niveles Z)
-                if len(productos_por_celda[coords]) == 3:
-                    pass # Ya tenemos los 3 niveles
-
-        # 2. Dibujamos la grilla
         for y in range(self.warehouse.largo_y):
             for x in range(self.warehouse.ancho_x):
                 cell = self.warehouse.grid[y][x]
@@ -468,61 +383,36 @@ class Ventana(tk.Frame):
                 y2 = y1 + self.tamano_celda
 
                 color = "#f1f5f9"
-                if cell.tipo == RACK: color = "#1e3a8a"
-                elif cell.tipo == DESPACHO: color = "#10b981"
-                elif cell.tipo == PUERTA: color = "#f59e0b"
-                elif cell.tipo == "VACIA": color = "#cbd5e1"
-
-                # 1. Dibujamos el fondo de color
                 if cell.tipo == RACK:
-                    # Si es un rack, forzamos que siempre tenga borde (grilla)
-                    outline_color = "#e2e8f0"
-                else:
-                    # Si es otro tipo de celda, respetamos el botón de ocultar/mostrar
-                    outline_color = "#e2e8f0" if self.mostrar_grilla else ""
-
-                self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline=outline_color)
-
-                cx, cy = self._obtener_centro(x, y)
-
-                # 3. Dibujamos los iconos
-                if cell.tipo == RACK:
-                    if (x, y) in productos_por_celda:
-                        emojis = productos_por_celda[(x, y)]
-                        cantidad = len(emojis)
-
-                        # Ajustamos el tamaño y la posición según cuántos haya
-                        if cantidad == 1:
-                            tam = int(self.tamano_celda * 0.8)
-                            self.canvas.create_text(cx, cy, text=emojis[0], font=("Noto Color Emoji", tam))
-                        elif cantidad == 2:
-                            tam = int(self.tamano_celda * 0.5)
-                            self.canvas.create_text(cx, cy - self.tamano_celda * 0.2, text=emojis[0], font=("Noto Color Emoji", tam))
-                            self.canvas.create_text(cx, cy + self.tamano_celda * 0.2, text=emojis[1], font=("Noto Color Emoji", tam))
-                        elif cantidad >= 3:
-                            tam = int(self.tamano_celda * 0.4)
-                            self.canvas.create_text(cx, cy - self.tamano_celda * 0.3, text=emojis[0], font=("Noto Color Emoji", tam))
-                            self.canvas.create_text(cx, cy, text=emojis[1], font=("Noto Color Emoji", tam))
-                            self.canvas.create_text(cx, cy + self.tamano_celda * 0.3, text=emojis[2], font=("Noto Color Emoji", tam))
-                    # else:
-                    #     # Rack vacío
-                    #     tam = int(self.tamano_celda * 0.8)
-                    #     self.canvas.create_text(cx, cy, text="📚", font=("Noto Color Emoji", tam))
-
-                elif cell.tipo == PUERTA:
-                    tam = int(self.tamano_celda * 0.8)
-                    self.canvas.create_text(cx, cy, text="🚪", font=("Noto Color Emoji", tam))
+                    color = "#1e3a8a"
                 elif cell.tipo == DESPACHO:
-                    tam = int(self.tamano_celda * 0.8)
-                    self.canvas.create_text(cx, cy, text="🛒", font=("Noto Color Emoji", tam))
+                    color = "#10b981"
+                elif cell.tipo == PUERTA:
+                    color = "#f59e0b"
+                elif cell.tipo == "VACIA":
+                    color = "#cbd5e1"
 
-                # 4. Flechas de los pasillos
-                elif cell.tipo == PASILLO and cell.sentido != AMBOS:
+                self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="#e2e8f0")
+
+                # --- DIBUJAR EL ÍCONO DEL PAQUETE EN LOS RACKS ---
+                if cell.tipo == RACK:
+                    stock = stock_map.get((x, y), 0)
+                    if stock > 0:
+                        cx, cy = self._obtener_centro(x, y)
+                        self._dibujar_icono_paquete(cx, cy)
+                # -------------------------------------------------
+
+                if cell.tipo == PASILLO and cell.sentido != AMBOS:
+                    cx, cy = self._obtener_centro(x, y)
                     flecha = ""
-                    if cell.sentido == N: flecha = "↑"
-                    elif cell.sentido == S: flecha = "↓"
-                    elif cell.sentido == E: flecha = "→"
-                    elif cell.sentido == O: flecha = "←"
+                    if cell.sentido == N:
+                        flecha = "↑"
+                    elif cell.sentido == S:
+                        flecha = "↓"
+                    elif cell.sentido == E:
+                        flecha = "→"
+                    elif cell.sentido == O:
+                        flecha = "←"
                     self.canvas.create_text(cx, cy, text=flecha, fill="#64748b", font=("Arial", 10, "bold"))
 
     def _dibujar_icono_paquete(self, cx, cy):
@@ -530,13 +420,13 @@ class Ventana(tk.Frame):
         tam = self.tamano_celda * 0.45
         x1, y1 = cx - tam, cy - tam
         x2, y2 = cx + tam, cy + tam
-
+        
         self.canvas.create_rectangle(
-            x1, y1, x2, y2,
+            x1, y1, x2, y2, 
             fill="#d97706", outline="#190b03", width=1
         )
-        self.canvas.create_line(x1, cy, x2, cy, fill="#fde68a", width=1)
-        self.canvas.create_line(cx, y1, cx, y2, fill="#fde68a", width=1)
+        self.canvas.create_line(x1, cy, x2, cy, fill="#fde68a", width=1) 
+        self.canvas.create_line(cx, y1, cx, y2, fill="#fde68a", width=1) 
         self.canvas.create_polygon(
             x1, y1, x1 + tam * 0.5, y1, x1, y1 + tam * 0.5,
             fill="#fef08a", outline=""
@@ -553,6 +443,7 @@ class Ventana(tk.Frame):
 
     def dibujar_picker(self, x, y, p_data, color="#ef4444"):
         cx, cy = self._obtener_centro(x, y)
+        radio = self.tamano_celda * 0.35
 
         esta_recolectando = p_data.get("recolectando", False)
 
@@ -561,26 +452,17 @@ class Ventana(tk.Frame):
             color = "#10b981" # Verde brillante
         # --------------------------------------------
 
-        carga = p_data.get('carga_actual_kg', 0)
-        # Si lleva más de 0kg de carga, mostramos el camión, sino el carrito
-        emoji = "🚚" if carga > 0 else "🛒"
+        self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill=color, outline="#1e293b", width=2)
 
-        tamano_emoji = int(self.tamano_celda * 0.9)
-        self.canvas.create_text(cx, cy, text=emoji, font=("Noto Color Emoji", tamano_emoji))
-
-        # --- TEXTOS (ARRIBA Y ABAJO) ---
-        radio = self.tamano_celda * 0.35
+        inicial = str(p_data['id'])[-1]
+        self.canvas.create_text(cx, cy, text=inicial, fill="white", font=("Arial", 8, "bold"))
 
         wave = p_data.get('wave_actual', '?')
+        carga = p_data.get('carga_actual_kg', 0)
         cap = p_data.get('capacidad_carga_kg', 0)
+        detalle = f"{p_data['id']} | W{wave} | {carga:.0f}/{cap:.0f}kg"
 
-        # Texto arriba: ID y Wave
-        texto_arriba = f"{p_data['id']} | W{wave}"
-        self.canvas.create_text(cx, cy - radio - 10, text=texto_arriba, fill=color, font=("Arial", 7, "bold"))
-
-        # Texto abajo: Peso
-        texto_abajo = f"{carga:.0f}/{cap:.0f}kg"
-        self.canvas.create_text(cx, cy + radio + 10, text=texto_abajo, fill=color, font=("Arial", 7, "bold"))
+        self.canvas.create_text(cx, cy + radio + 10, text=detalle, fill=color, font=("Arial", 7, "bold"))
 
     def actualizar_desde_simulacion(self):
         if not self.simulacion:
@@ -588,7 +470,7 @@ class Ventana(tk.Frame):
 
         estado = self.simulacion.get_estado()
         self.canvas.delete("all")
-
+        
         # --- OBTENER STOCK Y PASARLO AL DIBUJO ---
         stock_map = self._obtener_stock_por_celda()
         self.dibujar_warehouse(stock_map)
@@ -610,7 +492,7 @@ class Ventana(tk.Frame):
         self.lbl_paso.config(text=f"Paso actual: {estado.get('paso_actual', 0)}")
         self.lbl_productos.config(text=f"Productos Recogidos: {estado.get('productos_recogidos', 0)} / {estado.get('total_productos', 0)}")
         self.lbl_distancia.config(text=f"Distancia Total: {estado.get('distancia', 0)} m")
-
+        
         # --- ACTUALIZAR MÉTRICA DE ALTURA ---
         self.lbl_altura.config(text=f"Última altura recogida: Nivel {estado.get('ultima_altura', 0)}")
 
@@ -636,7 +518,7 @@ class Ventana(tk.Frame):
             detalle = ", ".join(f"{i['producto_id']}({i['cantidad']})" for i in items) or "Vacío"
 
             esta_recolectando = picker.get("recolectando", False)
-
+            
             if esta_recolectando:
                 estado_texto = "📦 ¡RECOLECTANDO!"
             else:
@@ -657,7 +539,7 @@ class Ventana(tk.Frame):
                 primer_valor = list(pedidos.values())[0]
                 if isinstance(primer_valor, dict):
                     es_anidado = True
-
+            
             # --- NUEVO: Helper para buscar la altura ---
             def obtener_altura(pid):
                 try:
