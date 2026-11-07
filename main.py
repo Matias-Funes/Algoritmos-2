@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 from pathlib import Path
 from typing import Any, Callable
 
@@ -639,6 +640,26 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
         inventario.agregar_producto(producto)
     pedidos = _crear_pedidos(pedidos_raw)
     pickers = _crear_pickers(pickers_raw)
+
+   # ASIGNAR POSICIONES ALEATORIAS EN PASILLOS
+    # (Asegurate de que el warehouse ya se cargó antes de esta línea)
+    celdas_transitables = warehouse.celdas_transitables()
+    if celdas_transitables:
+        celdas_disponibles = list(celdas_transitables)
+        random.shuffle(celdas_disponibles)
+
+        for picker in pickers:
+            if not celdas_disponibles:
+                celdas_disponibles = list(celdas_transitables)
+                random.shuffle(celdas_disponibles)
+
+            celda_aleatoria = celdas_disponibles.pop()
+            nueva_pos = (celda_aleatoria.x, celda_aleatoria.y)
+
+            # Sobreescribimos la posición del JSON con la nueva aleatoria
+            picker.posicion_inicial = nueva_pos
+            picker.posicion_actual = nueva_pos
+
     _validar_stock_pedidos(pedidos, inventario)
 
     print("3. Construyendo grafo de circulación")

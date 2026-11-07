@@ -29,6 +29,7 @@ class Ventana(tk.Frame):
         self.simulacion = None
         self.on_volver = on_volver
         self.en_ejecucion = False
+        self.mostrar_grilla = True
         self.root = self.winfo_toplevel()
 
         if master is None:
@@ -63,11 +64,17 @@ class Ventana(tk.Frame):
         tk.Button(frame_pasos, text="⏮ Atrás", command=self.btn_paso_atras).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 1))
         tk.Button(frame_pasos, text="⏭ Adelante", command=self.btn_paso).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(1, 2))
 
-        # Fila 2: Guardar y Comparar
-        tk.Button(frame_btn, text="💾 Guardar Partida", command=self.btn_guardar_partida).grid(
-            row=2, column=0, columnspan=2, sticky="ew", pady=2, padx=2
-        )
+        # Fila 2: Guardar (Izquierda) y Mostrar Grilla (Derecha)
+        tk.Button(
+            frame_btn, text="💾 Guardar", command=self.btn_guardar_partida
+        ).grid(row=2, column=0, sticky="ew", pady=2, padx=(2, 1))
 
+        self.btn_grilla = tk.Button(
+            frame_btn, text="👁 Grilla", command=self.btn_toggle_grilla
+        )
+        self.btn_grilla.grid(row=2, column=1, sticky="ew", pady=2, padx=(1, 2))
+
+        # Fila 3: Comparar Estrategias
         tk.Button(
             frame_btn, text="📊 Comparar Estrategias", command=self.btn_comparar_estrategias,
             bg="#e0f2fe", font=("Arial", 9, "bold")
@@ -160,6 +167,17 @@ class Ventana(tk.Frame):
 
         # --- Por defecto ---
         return "📦"
+
+    def btn_toggle_grilla(self):
+        self.mostrar_grilla = not self.mostrar_grilla
+
+        if self.mostrar_grilla:
+            self.btn_grilla.config(text="👁 Ocultar Grilla")
+        else:
+            self.btn_grilla.config(text="👁 Mostrar Grilla")
+
+        # Forzamos un redibujado para aplicar el cambio
+        self.actualizar_desde_simulacion()
 
     def set_simulacion(self, sim):
         self.simulacion = sim
@@ -455,7 +473,16 @@ class Ventana(tk.Frame):
                 elif cell.tipo == PUERTA: color = "#f59e0b"
                 elif cell.tipo == "VACIA": color = "#cbd5e1"
 
-                self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="#e2e8f0")
+                # 1. Dibujamos el fondo de color
+                if cell.tipo == RACK:
+                    # Si es un rack, forzamos que siempre tenga borde (grilla)
+                    outline_color = "#e2e8f0"
+                else:
+                    # Si es otro tipo de celda, respetamos el botón de ocultar/mostrar
+                    outline_color = "#e2e8f0" if self.mostrar_grilla else ""
+
+                self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline=outline_color)
+
                 cx, cy = self._obtener_centro(x, y)
 
                 # 3. Dibujamos los iconos
@@ -477,10 +504,10 @@ class Ventana(tk.Frame):
                             self.canvas.create_text(cx, cy - self.tamano_celda * 0.3, text=emojis[0], font=("Noto Color Emoji", tam))
                             self.canvas.create_text(cx, cy, text=emojis[1], font=("Noto Color Emoji", tam))
                             self.canvas.create_text(cx, cy + self.tamano_celda * 0.3, text=emojis[2], font=("Noto Color Emoji", tam))
-                    else:
-                        # Rack vacío
-                        tam = int(self.tamano_celda * 0.8)
-                        self.canvas.create_text(cx, cy, text="📚", font=("Noto Color Emoji", tam))
+                    # else:
+                    #     # Rack vacío
+                    #     tam = int(self.tamano_celda * 0.8)
+                    #     self.canvas.create_text(cx, cy, text="📚", font=("Noto Color Emoji", tam))
 
                 elif cell.tipo == PUERTA:
                     tam = int(self.tamano_celda * 0.8)
@@ -541,13 +568,19 @@ class Ventana(tk.Frame):
         tamano_emoji = int(self.tamano_celda * 0.9)
         self.canvas.create_text(cx, cy, text=emoji, font=("Noto Color Emoji", tamano_emoji))
 
-        # El detalle debajo del picker (ID | Wave | Peso)
+        # --- TEXTOS (ARRIBA Y ABAJO) ---
+        radio = self.tamano_celda * 0.35
+
         wave = p_data.get('wave_actual', '?')
         cap = p_data.get('capacidad_carga_kg', 0)
-        detalle = f"{p_data['id']} | W{wave} | {carga:.0f}/{cap:.0f}kg"
 
-        radio = self.tamano_celda * 0.35
-        self.canvas.create_text(cx, cy + radio + 10, text=detalle, fill=color, font=("Arial", 7, "bold"))
+        # Texto arriba: ID y Wave
+        texto_arriba = f"{p_data['id']} | W{wave}"
+        self.canvas.create_text(cx, cy - radio - 10, text=texto_arriba, fill=color, font=("Arial", 7, "bold"))
+
+        # Texto abajo: Peso
+        texto_abajo = f"{carga:.0f}/{cap:.0f}kg"
+        self.canvas.create_text(cx, cy + radio + 10, text=texto_abajo, fill=color, font=("Arial", 7, "bold"))
 
     def actualizar_desde_simulacion(self):
         if not self.simulacion:
