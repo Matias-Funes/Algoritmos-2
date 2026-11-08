@@ -58,8 +58,8 @@ class Ventana(tk.Frame):
         tk.Button(frame_btn, text="🔄 Reiniciar", command=self.btn_reset, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
         tk.Button(frame_btn, text="⏮ Atrás", command=self.btn_paso_atras, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
         tk.Button(frame_btn, text="⏭ Adelante", command=self.btn_paso, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
-        tk.Button(frame_btn, text="💾 Guardar", command=self.btn_guardar_partida, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
-        tk.Button(frame_btn, text="📊 Comparar", command=self.btn_comparar_estrategias, bg="#e0f2fe", relief=tk.FLAT, padx=10, pady=4).pack(side=tk.LEFT, padx=2)
+        tk.Button(frame_btn, text="💾 Guardar Partida", command=self.btn_guardar_partida, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
+        tk.Button(frame_btn, text="📊 Comparar Estrategias", command=self.btn_comparar_estrategias, bg="#e0f2fe", relief=tk.FLAT, padx=10, pady=4).pack(side=tk.LEFT, padx=2)
 
         # Selector de Velocidad (Derecha)
         frame_velocidad = tk.Frame(self.top_bar, bg="#ffffff")
