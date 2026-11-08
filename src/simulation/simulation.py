@@ -1074,7 +1074,14 @@ class Simulation:
                 }
                 for picker in self.pickers
             ],
-            "rutas": [list(self._rutas[picker.id]) for picker in self.pickers],
+            "rutas": [
+                list(
+                    (self._tramos_dinamicos[picker.id] if self._modo_dinamico else self._rutas[picker.id])[
+                        max(0, self._indices_ruta[picker.id] - 1):
+                    ]
+                )
+                for picker in self.pickers
+            ],
             "productos_recogidos": sum(
                 item["cantidad"] for item in self.productos_recogidos
             ),

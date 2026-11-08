@@ -235,6 +235,27 @@ class TestViajesDinamicos(unittest.TestCase):
         # La posición debería ser distinta a la de adelante
         self.assertNotEqual(sim.pickers[0].posicion_actual, posicion_adelantada)
 
+    def test_ruta_pendiente_se_recorta_al_avanzar(self):
+        simulacion, picker, producto = self.crear_simulacion()
+
+        estado_inicial = simulacion.get_estado()
+        ruta_inicial = estado_inicial["rutas"][0]
+        self.assertGreater(
+            len(ruta_inicial), 1, "La ruta inicial debe tener varios pasos"
+        )
+
+        # Avanzamos un paso
+        simulacion.avanzar_paso()
+
+        estado_paso_1 = simulacion.get_estado()
+        ruta_paso_1 = estado_paso_1["rutas"][0]
+
+        # La nueva ruta debe tener un paso menos que la anterior
+        self.assertEqual(len(ruta_paso_1), len(ruta_inicial) - 1)
+
+        # La nueva ruta debe empezar en la posición actual del picker
+        self.assertEqual(ruta_paso_1[0], tuple(picker.posicion_actual))
+
 
 if __name__ == "__main__":
     unittest.main()
