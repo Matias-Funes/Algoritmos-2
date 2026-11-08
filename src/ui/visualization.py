@@ -60,6 +60,22 @@ class Ventana(tk.Frame):
         tk.Button(frame_btn, text="⏭ Adelante", command=self.btn_paso, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
         tk.Button(frame_btn, text="💾 Guardar Partida", command=self.btn_guardar_partida, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
         tk.Button(frame_btn, text="📊 Comparar Estrategias", command=self.btn_comparar_estrategias, bg="#e0f2fe", relief=tk.FLAT, padx=10, pady=4).pack(side=tk.LEFT, padx=2)
+        # --- NUEVO: Toggle para mostrar/ocultar etiquetas ---
+        frame_etiquetas = tk.Frame(self.top_bar, bg="#ffffff")
+        frame_etiquetas.pack(side=tk.RIGHT, padx=15)
+
+        self.mostrar_etiquetas = tk.BooleanVar(value=True)
+        chk_etiquetas = tk.Checkbutton(
+            frame_etiquetas,
+            text="Mostrar etiquetas",
+            variable=self.mostrar_etiquetas,
+            command=self.toggle_etiquetas,
+            bg="#ffffff",
+            font=("Arial", 9, "bold"),
+            activebackground="#ffffff"
+        )
+        chk_etiquetas.pack()
+        # -----------------------------------------------------
 
         # Selector de Velocidad (Derecha)
         frame_velocidad = tk.Frame(self.top_bar, bg="#ffffff")
@@ -182,6 +198,10 @@ class Ventana(tk.Frame):
         # Llamamos al método que creamos en main.py
         if hasattr(self.simulacion, "actualizar_velocidad"):
             self.simulacion.actualizar_velocidad(nuevo_intervalo)
+
+    def toggle_etiquetas(self):
+        if self.simulacion:
+            self.actualizar_desde_simulacion()
 
     def btn_paso(self):
         if self.simulacion:
@@ -399,22 +419,40 @@ class Ventana(tk.Frame):
         if p_data.get("recolectando", False):
             color = "#10b981"
 
+        # 1. Dibujamos el círculo
         self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill=color, outline="#1e293b", width=1)
+
+        # 2. Número en el centro del círculo
         inicial = str(p_data['id'])[-1]
         font_size = max(6, int(self.tamano_celda * 0.4))
         self.canvas.create_text(cx, cy, text=inicial, fill="white", font=("Arial", font_size, "bold"))
 
-        # --- RESOLUCIÓN: Mantenemos la mejora de tu compañero ---
-        wave_str = p_data.get('wave_actual', '-')
-        if wave_str == "-":
-            wave_str = "Sin wave"
+        # 3. ETIQUETAS (Solo si el toggle está activo)
+        if self.mostrar_etiquetas.get():
+            wave_str = p_data.get('wave_actual', '-')
+            if wave_str == "-":
+                wave_str = "Sin wave"
 
-        carga = p_data.get('carga_actual_kg', 0)
-        cap = p_data.get('capacidad_carga_kg', 0)
-        detalle = f"{p_data['id']} | {wave_str} | {carga:.0f}/{cap:.0f}kg"
+            carga = p_data.get('carga_actual_kg', 0)
+            cap = p_data.get('capacidad_carga_kg', 0)
 
-        font_detalle = max(6, int(self.tamano_celda * 0.35))
-        self.canvas.create_text(cx, cy + radio + (font_detalle/2), text=detalle, fill=color, font=("Arial", font_detalle, "bold"))
+            # ID ARRIBA
+            font_id = max(9, int(self.tamano_celda * 0.45))
+            self.canvas.create_text(
+                cx, cy - radio - 2,
+                text=p_data['id'], fill=color,
+                font=("Arial", font_id, "bold"), anchor=tk.S
+            )
+
+            # PESO Y WAVE ABAJO
+            texto_detalle = f"{carga:.0f}/{cap:.0f}kg\n{wave_str}"
+            font_detalle = max(9, int(self.tamano_celda * 0.42))
+            self.canvas.create_text(
+                cx, cy + radio + 2,
+                text=texto_detalle, fill=color,
+                font=("Arial", font_detalle, "bold"),
+                justify=tk.CENTER, anchor=tk.N
+            )
 
     def actualizar_desde_simulacion(self):
         if not self.simulacion: return
