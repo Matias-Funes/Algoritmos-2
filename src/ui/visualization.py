@@ -1,4 +1,5 @@
 # src/ui/visualization.py
+import re
 import sys
 import tkinter as tk
 from pathlib import Path
@@ -38,6 +39,7 @@ class Ventana(tk.Frame):
         self.offset_y = 0
         self._geometria_dibujada = None
         self._stock_por_celda = {}
+        self._stock_inicial_vista = {}
         self._productos_recogidos_stock = None
         self._rutas_dibujadas = {}
         self._items_pickers = {}
@@ -84,6 +86,7 @@ class Ventana(tk.Frame):
         tk.Button(frame_btn, text="⏭ Adelante", command=self.btn_paso, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
         tk.Button(frame_btn, text="💾 Guardar Partida", command=self.btn_guardar_partida, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
         tk.Button(frame_btn, text="📊 Comparar Estrategias", command=self.btn_comparar_estrategias, bg="#e0f2fe", relief=tk.FLAT, padx=10, pady=4).pack(side=tk.LEFT, padx=2)
+        
         # --- NUEVO: Toggle para mostrar/ocultar etiquetas ---
         frame_etiquetas = tk.Frame(self.top_bar, bg="#ffffff")
         frame_etiquetas.pack(side=tk.RIGHT, padx=15)
@@ -302,12 +305,11 @@ class Ventana(tk.Frame):
             "Rápido (100ms)": 100,
             "Turbo (20ms)": 20,
             "Hipervelocidad (5ms)": 5,
-            "Instántaneo (0ms)": 0
+            "Instantáneo (0ms)": 0
         }
 
         nuevo_intervalo = velocidades.get(seleccion, 250)
 
-        # Llamamos al método que creamos en main.py
         if hasattr(self.simulacion, "actualizar_velocidad"):
             self.simulacion.actualizar_velocidad(nuevo_intervalo)
 
@@ -464,10 +466,17 @@ class Ventana(tk.Frame):
         if not self.simulacion: return stock_map
         inventario = getattr(self.simulacion, "inventario", None)
         if not inventario: return stock_map
+        inicial = getattr(self.simulacion, "_stock_inicial", None)
+        if not inicial:
+            inicial = self._stock_inicial_vista
         try:
             for prod in inventario.todos_los_productos():
+                cantidad = prod.cantidad_disponible
+                base = inicial.setdefault(prod.producto_id, cantidad)
+                if cantidad <= 0 or cantidad < base:
+                    continue
                 x, y = prod.ubicacion[0], prod.ubicacion[1]
-                stock_map[(x, y)] = stock_map.get((x, y), 0) + prod.cantidad_disponible
+                stock_map[(x, y)] = stock_map.get((x, y), 0) + cantidad
         except AttributeError:
             pass
         return stock_map
@@ -545,7 +554,7 @@ class Ventana(tk.Frame):
         datos = self._rutas_dibujadas.get(picker_id)
         if datos is None:
             datos = {"ruta": (), "items": [], "color": color}
-            self._rutas_dibujadas[picker_id] = datos
+        self._rutas_dibujadas[picker_id] = datos
 
         ruta_anterior = datos["ruta"]
         items = datos["items"]
@@ -629,8 +638,12 @@ class Ventana(tk.Frame):
         if p_data.get("recolectando", False):
             color = "#10b981"
 
-        inicial = str(p_data['id'])[-1]
-        font_size = max(6, int(self.tamano_celda * 0.4))
+        # Número completo del picker (PK_04 -> "4", PK_12 -> "12")
+        coincidencia = re.search(r"\d+", str(p_data["id"]))
+        inicial = str(int(coincidencia.group())) if coincidencia else str(p_data["id"])[-1]
+        # Con 2+ dígitos se reduce la fuente para que quepa en el círculo
+        factor_fuente = 0.4 if len(inicial) == 1 else 0.3
+        font_size = max(6, int(self.tamano_celda * factor_fuente))
         items = self._items_pickers.get(p_data["id"])
         if items is None:
             circulo = self.canvas.create_oval(
@@ -709,8 +722,6 @@ class Ventana(tk.Frame):
             self.dibujar_recorrido(
                 p["id"], rutas[i] if i < len(rutas) else [], color=color
             )
-
-            # --- RESOLUCIÓN: Tu lógica de gris, eliminando la duplicación ---
             color_picker = color if p.get("activo", True) else "#94a3b8"
             self.dibujar_picker(p['x'], p['y'], p, color=color_picker)
 
@@ -731,7 +742,7 @@ class Ventana(tk.Frame):
                     widget.destroy()
                 del self.lbl_carga_pickers[picker_id]
 
-        # --- ESTADO INDIVIDUAL DE LOS PICKERS ---
+        # ESTADO INDIVIDUAL DE LOS PICKERS
         for picker in pickers_estado:
             picker_id = picker["id"]
             if picker_id not in self.lbl_carga_pickers:
@@ -747,7 +758,6 @@ class Ventana(tk.Frame):
             items = picker.get("items_transportados", [])
             detalle = ", ".join(f"{i['producto_id']}({i['cantidad']})" for i in items) or "Vacío"
 
-            # --- RESOLUCIÓN: Mantenemos tu texto de Terminado ---
             if not picker.get("activo", True):
                 estado_texto = "✅ Terminado (en espera)"
             elif picker.get("recolectando", False):
@@ -755,7 +765,6 @@ class Ventana(tk.Frame):
             else:
                 estado_texto = "🚶 En movimiento"
 
-            # --- RESOLUCIÓN: Combinamos la wave de tu compañero con tu progreso ---
             wave_str = picker.get("wave_actual", "-")
             if wave_str == "-":
                 wave_str = "Sin wave"
