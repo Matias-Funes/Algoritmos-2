@@ -25,14 +25,14 @@ class Ventana(tk.Frame):
         self.on_volver = on_volver
         self.en_ejecucion = False
         self.root = self.winfo_toplevel()
-        
+
         # Variables para el centrado dinámico del mapa
         self.offset_x = 0
         self.offset_y = 0
 
         if master is None:
             self.root.title("Wave Picking - Simulador")
-            self.root.state('zoomed') 
+            self.root.state('zoomed')
             self.pack(fill=tk.BOTH, expand=True)
 
         # ==========================================
@@ -52,13 +52,13 @@ class Ventana(tk.Frame):
 
         # 1. Controles
         tk.Label(self.panel, text="Controles", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(0, 5))
-        
+
         frame_btn = tk.Frame(self.panel, bg="#f8fafc")
         frame_btn.pack(fill=tk.X)
 
         self.btn_play_pause = tk.Button(frame_btn, text="▶ Iniciar", command=self.btn_toggle_play_pause)
         self.btn_play_pause.grid(row=0, column=0, sticky="ew", pady=3, padx=(0, 3))
-        
+
         tk.Button(frame_btn, text="🔄 Reiniciar", command=self.btn_reset).grid(row=0, column=1, sticky="ew", pady=3, padx=(3, 0))
 
         frame_pasos = tk.Frame(frame_btn, bg="#f8fafc")
@@ -118,12 +118,12 @@ class Ventana(tk.Frame):
 
         escala_x = ancho_disp / self.warehouse.ancho_x
         escala_y = alto_disp / self.warehouse.largo_y
-        
+
         self.tamano_celda = min(escala_x, escala_y)
 
         ancho_real_mapa = self.warehouse.ancho_x * self.tamano_celda
         alto_real_mapa = self.warehouse.largo_y * self.tamano_celda
-        
+
         self.offset_x = (ancho_disp - ancho_real_mapa) / 2
         self.offset_y = (alto_disp - alto_real_mapa) / 2
 
@@ -151,7 +151,7 @@ class Ventana(tk.Frame):
 
     def btn_paso(self):
         if self.simulacion:
-            self.simulacion.pausar() 
+            self.simulacion.pausar()
             self.en_ejecucion = False
             self.btn_play_pause.config(text="▶ Iniciar")
             self.simulacion.avanzar_paso()
@@ -313,7 +313,7 @@ class Ventana(tk.Frame):
         for y in range(self.warehouse.largo_y):
             for x in range(self.warehouse.ancho_x):
                 cell = self.warehouse.grid[y][x]
-                
+
                 x1 = self.offset_x + x * self.tamano_celda
                 y1 = self.offset_y + (self.warehouse.largo_y - 1 - y) * self.tamano_celda
                 x2 = x1 + self.tamano_celda
@@ -348,8 +348,8 @@ class Ventana(tk.Frame):
         x1, y1 = cx - tam, cy - tam
         x2, y2 = cx + tam, cy + tam
         self.canvas.create_rectangle(x1, y1, x2, y2, fill="#d97706", outline="#190b03", width=1)
-        self.canvas.create_line(x1, cy, x2, cy, fill="#fde68a", width=1) 
-        self.canvas.create_line(cx, y1, cx, y2, fill="#fde68a", width=1) 
+        self.canvas.create_line(x1, cy, x2, cy, fill="#fde68a", width=1)
+        self.canvas.create_line(cx, y1, cx, y2, fill="#fde68a", width=1)
 
     def dibujar_recorrido(self, ruta, color="#0ea5e9"):
         if not ruta or len(ruta) < 2: return
@@ -363,15 +363,15 @@ class Ventana(tk.Frame):
     def dibujar_picker(self, x, y, p_data, color="#ef4444"):
         cx, cy = self._obtener_centro(x, y)
         radio = self.tamano_celda * 0.35
-        
+
         if p_data.get("recolectando", False):
             color = "#10b981"
-            
+
         self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill=color, outline="#1e293b", width=1)
         inicial = str(p_data['id'])[-1]
         font_size = max(6, int(self.tamano_celda * 0.4))
         self.canvas.create_text(cx, cy, text=inicial, fill="white", font=("Arial", font_size, "bold"))
-        
+
         wave = p_data.get('wave_actual', '?')
         carga = p_data.get('carga_actual_kg', 0)
         cap = p_data.get('capacidad_carga_kg', 0)
@@ -382,10 +382,10 @@ class Ventana(tk.Frame):
     def actualizar_desde_simulacion(self):
         if not self.simulacion: return
         self._recalcular_dimensiones()
-        
+
         estado = self.simulacion.get_estado()
         self.canvas.delete("all")
-        
+
         stock_map = self._obtener_stock_por_celda()
         self.dibujar_warehouse(stock_map)
 
@@ -398,6 +398,9 @@ class Ventana(tk.Frame):
                 self.dibujar_recorrido(rutas[i], color=color)
             if p.get("activo", True):
                 self.dibujar_picker(p['x'], p['y'], p, color=color)
+            # Dibujamos al picker SIEMPRE. Si no está activo, lo pintamos de gris
+            color_picker = color if p.get("activo", True) else "#94a3b8"
+            self.dibujar_picker(p['x'], p['y'], p, color=color_picker)
 
         self.lbl_wave.config(text=f"Wave: {estado.get('wave_actual', 0)} / {estado.get('waves_totales', 0)}")
         self.lbl_paso.config(text=f"Paso actual: {estado.get('paso_actual', 0)}")
@@ -423,15 +426,22 @@ class Ventana(tk.Frame):
             cantidad_objetivo = picker.get("productos_objetivo", 0)
             items = picker.get("items_transportados", [])
             detalle = ", ".join(f"{i['producto_id']}({i['cantidad']})" for i in items) or "Vacío"
-            estado_texto = "📦 ¡RECOLECTANDO!" if picker.get("recolectando", False) else "🚶 En movimiento"
-            
+
+            if not picker.get("activo", True):
+                estado_texto = "✅ Terminado (en espera)"
+            elif picker.get("recolectando", False):
+                estado_texto = "📦 ¡RECOLECTANDO!"
+            else:
+                estado_texto = "🚶 En movimiento"
+
             texto = f"• {picker_id}: {cantidad_actual}/{cantidad_objetivo} items\n  {estado_texto}\n  {detalle}"
+
             self.lbl_carga_pickers[picker_id][0].config(text=texto)
 
         self.txt_pedidos.config(state=tk.NORMAL)
         self.txt_pedidos.delete(1.0, tk.END)
         pedidos = estado.get('pedidos_actuales', {})
-        
+
         if not pedidos:
             self.txt_pedidos.insert(tk.END, "No hay pedidos pendientes.\n¡Wave completada!")
         else:
