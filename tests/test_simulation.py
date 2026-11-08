@@ -1,12 +1,13 @@
 import unittest
 
-from main import _crear_waves
+from main import _SimulationTk, _crear_waves
 from src.algorithms.pathfinding import CacheDistancias
 from src.core.graph_builder import construir_grafo
 from src.core.inventory import GestorInventario, Producto
 from src.core.order import Orden
 from src.core.picker import Picker
 from src.core.warehouse import Warehouse
+from src.core.wave import Wave
 from src.simulation.simulation import Simulation
 
 
@@ -62,11 +63,107 @@ class TestViajesDinamicos(unittest.TestCase):
         estado = simulacion.get_estado()
 
         self.assertEqual(estado["productos_recogidos"], 5)
+        self.assertEqual(
+            estado["pickers"][0]["productos_recogidos"], 5
+        )
         self.assertEqual(estado["productos_despachados"], 5)
         self.assertEqual(len(estado["descargas"]), 3)
         self.assertEqual(producto.cantidad_disponible, 0)
         self.assertEqual(picker.carga_actual_kg, 0)
         self.assertEqual(tuple(picker.posicion_actual), (0, 0))
+
+    def test_puntos_de_descarga_preservan_el_reingreso_a_futuras_waves(self):
+        from src.core.graph_builder import Graph
+
+        grafo = Graph()
+        nodos = [(0, 0), (1, 0), (2, 0), (3, 0)]
+        for nodo in nodos:
+            grafo.add_node(nodo)
+        grafo.add_edge((0, 0), (1, 0))
+        grafo.add_edge((1, 0), (2, 0))
+        grafo.add_edge((2, 0), (0, 0))
+        grafo.add_edge((1, 0), (3, 0))
+        picker = Picker("PK_01", (0, 0), 1.0)
+
+        simulacion = Simulation(
+            warehouse=None,
+            pickers=[picker],
+            productos=[],
+            asignaciones={picker.id: []},
+            cache_distancias=CacheDistancias(grafo),
+            puntos_despacho={
+                "SEGURA": [(2, 0)],
+                "SIN_RETORNO": [(3, 0)],
+            },
+            pickers_con_trabajo_posterior={picker.id},
+        )
+
+        self.assertEqual(
+            simulacion._puntos_despacho_reingreso[picker.id],
+            {(2, 0)},
+        )
+        simulacion._estado_picker[picker.id] = "activo"
+        simulacion.pickers[0].carga_actual_kg = 1.0
+        self.assertTrue(
+            simulacion._planificar_descarga_dinamica(simulacion.pickers[0])
+        )
+        self.assertEqual(
+            simulacion._objetivos_dinamicos[picker.id]["punto"],
+            (2, 0),
+        )
+
+    def test_progreso_acumulado_por_picker_y_turnos_en_la_flota(self):
+        warehouse = Warehouse(8, 6)
+        warehouse.rellenar_pasillos_implicitos()
+        producto = Producto("P001", "Producto", "R1", (6, 4, 1), 2, 1.0)
+        picker = Picker("PK_01", (0, 0), 1.0)
+        inventario = GestorInventario()
+        inventario.agregar_producto(producto)
+        pedidos = [
+            Orden(f"PED_{i}", 1, [("P001", 1)])
+            for i in range(2)
+        ]
+        waves = []
+        fases = []
+        for indice, pedido in enumerate(pedidos, start=1):
+            wave = Wave(f"WAVE_{indice:03d}", 1, 1, 10.0)
+            wave.agregar_pedido(pedido, inventario)
+            waves.append(wave)
+            fases.append(
+                {
+                    "asignaciones": {picker.id: [pedido]},
+                    "waves_ids": {picker.id: wave.id},
+                }
+            )
+
+        grafo = construir_grafo(warehouse)
+        simulacion = _SimulationTk(
+            warehouse=warehouse,
+            pickers=[picker],
+            productos=[producto],
+            fases=fases,
+            cache_distancias=CacheDistancias(grafo),
+            puntos_despacho={"ZONA_A": [(0, 0)]},
+            waves=waves,
+        )
+        for _ in range(1000):
+            if not simulacion.avanzar_paso():
+                break
+        else:
+            self.fail("La simulación no terminó en el límite de pasos.")
+
+        estado = simulacion.get_estado()
+        estado_picker = estado["pickers"][0]
+        self.assertEqual(estado["productos_recogidos"], 2)
+        self.assertEqual(estado["productos_recogidos_wave_actual"], 1)
+        self.assertEqual(estado["turno_actual"], 2)
+        self.assertEqual(estado["turnos_totales"], 2)
+        self.assertEqual(estado["waves_totales"], 2)
+        self.assertEqual(estado_picker["productos_recogidos"], 2)
+        self.assertEqual(estado_picker["productos_objetivo"], 2)
+        self.assertEqual(estado_picker["productos_transportados"], 0)
+        self.assertEqual(estado_picker["wave_actual"], "-")
+        self.assertFalse(estado_picker["activo"])
 
     def test_stock_insuficiente_se_registra_y_se_entrega_lo_disponible(self):
         simulacion, picker, producto = self.crear_simulacion(stock=2, cantidad=5)
