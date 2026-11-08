@@ -44,6 +44,10 @@ class Ventana(tk.Frame):
         self.tamano_celda = tamano_celda
         self._offset_x = 0.0
         self._offset_y = 0.0
+        self._fondo_mapa_dibujado = False
+        self._redibujar_mapa_id = None
+        self._rutas_dibujadas = {}
+        self._stock_dibujado = None
         self.simulacion = None
         self.on_volver = on_volver
         self.on_cerrar = on_cerrar
@@ -350,8 +354,23 @@ class Ventana(tk.Frame):
         self._offset_x = (evento.width - ancho_mapa * self.tamano_celda) / 2
         self._offset_y = (evento.height - alto_mapa * self.tamano_celda) / 2
 
+        if self._redibujar_mapa_id is not None:
+            self.after_cancel(self._redibujar_mapa_id)
+        self._redibujar_mapa_id = self.after(
+            40,
+            self._redibujar_mapa_redimensionado,
+        )
+
+    def _redibujar_mapa_redimensionado(self):
+        self._redibujar_mapa_id = None
+        self.canvas.delete("all")
+        self._fondo_mapa_dibujado = False
+        self._rutas_dibujadas.clear()
+        self._stock_dibujado = None
         if self.simulacion is not None:
             self.actualizar_desde_simulacion()
+        else:
+            self.dibujar_warehouse()
 
     def _actualizar_region_scroll_pickers(self, _evento=None):
         region = self.canvas_pickers.bbox("all")
@@ -653,9 +672,6 @@ class Ventana(tk.Frame):
         return stock_map
 
     def dibujar_warehouse(self, stock_map=None):
-        if stock_map is None:
-            stock_map = {}
-
         for y in range(self.warehouse.largo_y):
             for x in range(self.warehouse.ancho_x):
                 cell = self.warehouse.grid[y][x]
@@ -677,15 +693,15 @@ class Ventana(tk.Frame):
                 elif cell.tipo == "VACIA":
                     color = "#cbd5e1"
 
-                self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="#e2e8f0")
-
-                # --- DIBUJAR EL ÍCONO DEL PAQUETE EN LOS RACKS ---
-                if cell.tipo == RACK:
-                    stock = stock_map.get((x, y), 0)
-                    if stock > 0:
-                        cx, cy = self._obtener_centro(x, y)
-                        self._dibujar_icono_paquete(cx, cy)
-                # -------------------------------------------------
+                self.canvas.create_rectangle(
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    fill=color,
+                    outline="#e2e8f0",
+                    tags=("warehouse",),
+                )
 
                 if cell.tipo == PASILLO and cell.sentido != AMBOS:
                     cx, cy = self._obtener_centro(x, y)
@@ -698,7 +714,30 @@ class Ventana(tk.Frame):
                         flecha = "→"
                     elif cell.sentido == O:
                         flecha = "←"
-                    self.canvas.create_text(cx, cy, text=flecha, fill="#64748b", font=("Arial", 10, "bold"))
+                    self.canvas.create_text(
+                        cx,
+                        cy,
+                        text=flecha,
+                        fill="#64748b",
+                        font=("Arial", 10, "bold"),
+                        tags=("warehouse",),
+                    )
+
+        self._fondo_mapa_dibujado = True
+        if stock_map is not None:
+            self._dibujar_stock(stock_map)
+
+    def _dibujar_stock(self, stock_map):
+        for (x, y), cantidad in stock_map.items():
+            if (
+                cantidad <= 0
+                or not (0 <= x < self.warehouse.ancho_x)
+                or not (0 <= y < self.warehouse.largo_y)
+                or self.warehouse.grid[y][x].tipo != RACK
+            ):
+                continue
+            cx, cy = self._obtener_centro(x, y)
+            self._dibujar_icono_paquete(cx, cy)
 
     def _dibujar_icono_paquete(self, cx, cy):
         """Dibuja una caja de cartón pequeña en el centro de la celda."""
@@ -708,23 +747,34 @@ class Ventana(tk.Frame):
         
         self.canvas.create_rectangle(
             x1, y1, x2, y2, 
-            fill="#d97706", outline="#190b03", width=1
+            fill="#d97706", outline="#190b03", width=1, tags=("stock",)
         )
-        self.canvas.create_line(x1, cy, x2, cy, fill="#fde68a", width=1) 
-        self.canvas.create_line(cx, y1, cx, y2, fill="#fde68a", width=1) 
+        self.canvas.create_line(
+            x1, cy, x2, cy, fill="#fde68a", width=1, tags=("stock",)
+        )
+        self.canvas.create_line(
+            cx, y1, cx, y2, fill="#fde68a", width=1, tags=("stock",)
+        )
         self.canvas.create_polygon(
             x1, y1, x1 + tam * 0.5, y1, x1, y1 + tam * 0.5,
-            fill="#fef08a", outline=""
+            fill="#fef08a", outline="", tags=("stock",)
         )
 
-    def dibujar_recorrido(self, ruta, color="#0ea5e9"):
+    def dibujar_recorrido(self, ruta, color="#0ea5e9", tag="route"):
         if not ruta or len(ruta) < 2:
             return
         puntos_px = []
         for (x, y) in ruta:
             cx, cy = self._obtener_centro(x, y)
             puntos_px.extend([cx, cy])
-        self.canvas.create_line(puntos_px, fill=color, width=2, dash=(4, 2), arrow=tk.LAST)
+        self.canvas.create_line(
+            puntos_px,
+            fill=color,
+            width=2,
+            dash=(4, 2),
+            arrow=tk.LAST,
+            tags=("routes", tag),
+        )
 
     def dibujar_picker(self, x, y, p_data, color="#ef4444"):
         cx, cy = self._obtener_centro(x, y)
@@ -737,29 +787,55 @@ class Ventana(tk.Frame):
             color = "#10b981" # Verde brillante
         # --------------------------------------------
 
-        self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill=color, outline="#1e293b", width=2)
+        self.canvas.create_oval(
+            cx - radio,
+            cy - radio,
+            cx + radio,
+            cy + radio,
+            fill=color,
+            outline="#1e293b",
+            width=2,
+            tags=("picker",),
+        )
 
         inicial = str(p_data['id'])[-1]
-        self.canvas.create_text(cx, cy, text=inicial, fill="white", font=("Arial", 8, "bold"))
+        self.canvas.create_text(
+            cx,
+            cy,
+            text=inicial,
+            fill="white",
+            font=("Arial", 8, "bold"),
+            tags=("picker",),
+        )
 
         wave = p_data.get('wave_actual', '?')
         carga = p_data.get('carga_actual_kg', 0)
         cap = p_data.get('capacidad_carga_kg', 0)
         detalle = f"{p_data['id']} | W{wave} | {carga:.0f}/{cap:.0f}kg"
 
-        self.canvas.create_text(cx, cy + radio + 10, text=detalle, fill=color, font=("Arial", 7, "bold"))
+        self.canvas.create_text(
+            cx,
+            cy + radio + 10,
+            text=detalle,
+            fill=color,
+            font=("Arial", 7, "bold"),
+            tags=("picker",),
+        )
 
     def actualizar_desde_simulacion(self):
         if not self.simulacion:
             return
 
         estado = self.simulacion.get_estado()
-        self.canvas.delete("all")
-        
-        # --- OBTENER STOCK Y PASARLO AL DIBUJO ---
+        if not self._fondo_mapa_dibujado:
+            self.dibujar_warehouse()
+
+        self.canvas.delete("picker")
         stock_map = self._obtener_stock_por_celda()
-        self.dibujar_warehouse(stock_map)
-        # -----------------------------------------
+        if stock_map != self._stock_dibujado:
+            self.canvas.delete("stock")
+            self._dibujar_stock(stock_map)
+            self._stock_dibujado = stock_map
 
         rutas = estado.get('rutas', [])
         pickers_estado = estado.get('pickers', [])
@@ -768,7 +844,16 @@ class Ventana(tk.Frame):
             color = COLORES_PICKERS[i % len(COLORES_PICKERS)]
 
             if i < len(rutas):
-                self.dibujar_recorrido(rutas[i], color=color)
+                firma_ruta = tuple(tuple(punto) for punto in rutas[i])
+                tag_ruta = f"route_{i}"
+                if self._rutas_dibujadas.get(i) != firma_ruta:
+                    self.canvas.delete(tag_ruta)
+                    self.dibujar_recorrido(
+                        rutas[i],
+                        color=color,
+                        tag=tag_ruta,
+                    )
+                    self._rutas_dibujadas[i] = firma_ruta
 
             if p.get("activo", True):
                 self.dibujar_picker(p['x'], p['y'], p, color=color)
