@@ -89,26 +89,9 @@ class VistaMenu(tk.Frame):
             font=("Arial", 10, "bold"),
         ).grid(row=3, column=1, sticky="ew", pady=(24, 8))
 
-        # --- Fila 4: Selector de Modo de Waves ---
-        frame_modo = tk.Frame(contenedor, bg=CREMA_PRINCIPAL)
-        frame_modo.grid(row=4, column=1, sticky="ew", pady=(0, 10))
-
-        tk.Label(
-            frame_modo, text="Modo de waves:", bg=CREMA_PRINCIPAL, font=FUENTE
-        ).pack(side=tk.LEFT)
-
-        self.combo_modo_waves = ttk.Combobox(
-            frame_modo,
-            state="readonly",
-            values=["Wave Global (Flota)", "Wave por Picker"],
-            width=20,
-        )
-        self.combo_modo_waves.current(0)  # 0 = Wave Global por defecto
-        self.combo_modo_waves.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(5, 0))
-
-        # --- Fila 4.5: Selector de Estrategia ---
+        # --- Fila 4: Selector de Estrategia ---
         frame_estrategia = tk.Frame(contenedor, bg=CREMA_PRINCIPAL)
-        frame_estrategia.grid(row=5, column=1, sticky="ew", pady=(0, 10))
+        frame_estrategia.grid(row=4, column=1, sticky="ew", pady=(0, 10))
 
         tk.Label(
             frame_estrategia,
@@ -133,7 +116,7 @@ class VistaMenu(tk.Frame):
             on_cargar_partida,
             width=24,
             primario=False,
-        ).grid(row=6, column=1, sticky="ew", pady=(0, 8))
+        ).grid(row=5, column=1, sticky="ew", pady=(0, 8))
 
         # --- Fila 6: Aviso en línea ---
         self.lbl_aviso = tk.Label(

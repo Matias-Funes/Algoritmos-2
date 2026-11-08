@@ -166,14 +166,12 @@ class Controlador:
         self.menu.set_archivo_json(Path(self.ruta_json).name)
 
         # Leemos el modo elegido en el menú (1 = Global, 0 = Por Picker)
-        modo_elegido = self.menu.combo_modo_waves.get()
         estrategia_elegida = self.menu.combo_estrategia.get()
 
         try:
             # Le pasamos el modo a la función constructora
             self.warehouse, self.simulacion = self.constructor_simulacion(
                 Path(self.ruta_json),
-                modo_waves=modo_elegido,
                 estrategia_recorrido=estrategia_elegida,
             )
         except (
