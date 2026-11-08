@@ -19,6 +19,10 @@ if __package__ in (None, ""):
 from src.core.inventory import Producto
 from src.core.picker import Picker
 
+# Un picker bloqueado esta cantidad de ticks, y cuyos bloqueadores tambien estan
+# parados, se considera atascado y alguien del grupo cede el paso.
+TICKS_ATASCO = 3
+
 
 class Simulation:
     def __init__(
@@ -626,6 +630,118 @@ class Simulation:
         self._establecer_tramo(picker, camino, objetivo)
         return True
 
+    def _ceder_paso(self, picker: Any) -> bool:
+        """Intenta destrabar a `picker`: primero busca otra ruta evitando a los
+        demás y, si no hay, se corre a una celda vecina libre para dejar pasar."""
+        if self._replanificar_picker_bloqueado(picker):
+            return True
+        grafo = getattr(self._cache_distancias, "_grafo", None)
+        if grafo is None:
+            return False
+
+        posicion = tuple(picker.posicion_actual)
+        ocupadas: set[tuple[int, int]] = set()
+        siguientes: set[tuple[int, int]] = set()
+        for otro in self.pickers:
+            if (
+                otro.id == picker.id
+                or self._estado_picker[otro.id] == "terminado"
+            ):
+                continue
+            ocupadas.add(tuple(otro.posicion_actual))
+            tramo = self._tramos_dinamicos[otro.id]
+            indice = self._indices_ruta[otro.id]
+            if indice < len(tramo):
+                siguientes.add(tramo[indice])
+
+        tramo_propio = self._tramos_dinamicos[picker.id]
+        indice_propio = self._indices_ruta[picker.id]
+        celda_bloqueada = (
+            tramo_propio[indice_propio]
+            if indice_propio < len(tramo_propio)
+            else None
+        )
+        libres = [
+            vecino
+            for vecino in grafo.get_neighbors(posicion)
+            if vecino not in ocupadas and vecino != celda_bloqueada
+        ]
+        if not libres:
+            return False
+        preferidas = [vecino for vecino in libres if vecino not in siguientes]
+        destino = min(preferidas or libres)
+        self._rutas[picker.id] = [posicion]
+        self._establecer_tramo(picker, [posicion, destino], {"tipo": "ceder"})
+        return True
+
+    def _resolver_atascos(
+        self,
+        bloqueos_por_picker: dict[str, set[str]],
+        aceptados: set[str],
+        propuestas: dict[str, tuple[int, int]],
+    ) -> None:
+        """Detecta grupos de pickers que se bloquean entre sí (cruces de frente,
+        pickers esperando un punto de despacho ocupado, etc.) y hace que uno
+        del grupo, el de menor prioridad, cede el paso."""
+        activos = {
+            picker.id: picker
+            for picker in self.pickers
+            if self._estado_picker[picker.id] != "terminado"
+        }
+
+        def parado(picker_id: str) -> bool:
+            picker = activos.get(picker_id)
+            return (
+                picker is not None
+                and picker_id not in aceptados
+                and getattr(picker, "tiempo_recoleccion", 0) <= 0
+            )
+
+        def parado_firme(picker_id: str) -> bool:
+            return parado(picker_id) and (
+                picker_id not in propuestas
+                or self._ticks_bloqueado.get(picker_id, 0) >= 2
+            )
+
+        padre: dict[str, str] = {}
+
+        def raiz(picker_id: str) -> str:
+            padre.setdefault(picker_id, picker_id)
+            while padre[picker_id] != picker_id:
+                padre[picker_id] = padre[padre[picker_id]]
+                picker_id = padre[picker_id]
+            return picker_id
+
+        hay_atasco = False
+        for picker_id, bloqueadores in bloqueos_por_picker.items():
+            if (
+                not parado(picker_id)
+                or self._ticks_bloqueado.get(picker_id, 0) < TICKS_ATASCO
+                or not bloqueadores
+                or not all(parado_firme(b) for b in bloqueadores)
+            ):
+                continue
+            hay_atasco = True
+            for bloqueador in bloqueadores:
+                padre[raiz(picker_id)] = raiz(bloqueador)
+        if not hay_atasco:
+            return
+
+        grupos: dict[str, list[str]] = {}
+        for picker_id in list(padre):
+            grupos.setdefault(raiz(picker_id), []).append(picker_id)
+        for miembros in grupos.values():
+            if len(miembros) < 2:
+                continue
+            # Cede primero el de menor prioridad; a igualdad, el de id mayor.
+            candidatos = sorted(
+                (activos[m] for m in miembros if m in activos),
+                key=lambda p: (p.prioridad, -self._orden_id_picker(p.id)[1]),
+            )
+            for picker in candidatos:
+                if self._ceder_paso(picker):
+                    self._ticks_bloqueado[picker.id] = 0
+                    break
 
     def _planificar_descarga_dinamica(self, picker: Any) -> bool:
         if not self._puntos_despacho:
@@ -1120,6 +1236,8 @@ class Simulation:
                     and es_picker_mayor
                 ):
                     self._replanificar_picker_bloqueado(picker)
+
+            self._resolver_atascos(bloqueos_por_picker, aceptados, propuestas)
 
             if aceptados:
                 self._ticks_sin_movimiento = 0
