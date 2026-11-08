@@ -118,7 +118,7 @@ def crear_boton(parent, texto, comando, primario=True, **opciones):
     else:
         bg = GRIS_CREMA
         fg = NEGRO_AZULADO
-        activo = AZUL_CLARO_GRISACEO
+        activo = GRIS_VERDOSO
 
     config = dict(
         text=texto,
