@@ -32,9 +32,11 @@ class Simulation:
         asignaciones: dict[str, Any] | None = None,
         cache_distancias: Any = None,
         puntos_despacho: dict[str, list[tuple[int, int]]] | None = None,
-        estrategia_recorrido: str = "Vecino más cercano (B)"
+        estrategia_recorrido: str = "Vecino más cercano (B)",
+        es_ultima_fase: bool = False,
     ) -> None:
         self.estrategia_recorrido = estrategia_recorrido
+        self.es_ultima_fase = es_ultima_fase
         self.warehouse = warehouse
         self.pickers = [
             self._crear_picker(picker) for picker in pickers
@@ -647,14 +649,35 @@ class Simulation:
         busqueda = self._calcular_distancias_con_picker(
             picker, destinos=destinos
         )
+
         hay_punto_alcanzable = False
         puntos_ocupados = 0
         origen = tuple(picker.posicion_actual)
+
+        # --- NUEVO: Evaluar si es el final absoluto de la simulación ---
+        tiene_mas_tareas = any(
+            self._cantidad_pendiente(picker, pid) > 0
+            for pid in self._productos
+        )
+        es_viaje_final_absoluto = self.es_ultima_fase and not tiene_mas_tareas
+        # ---------------------------------------------------------------
+
         for zona_id, puntos in self._puntos_despacho.items():
             for punto in puntos:
                 if punto in ocupadas:
                     puntos_ocupados += 1
                     continue
+
+                # --- NUEVO: Filtro de Callejón Sin Salida ---
+                if not es_viaje_final_absoluto:
+                    grafo = getattr(self._cache_distancias, "_grafo", None)
+                    if grafo:
+                        # Si el punto tiene 1 o 0 vecinos, es un callejón
+                        if len(grafo.get_neighbors(punto)) <= 1:
+                            puntos_ocupados += 1 # Lo contamos como no disponible
+                            continue
+                # ---------------------------------------------
+
                 ruta = self._camino_desde_busqueda(
                     picker, punto, busqueda
                 )
@@ -677,10 +700,7 @@ class Simulation:
             if cantidad_puntos and puntos_ocupados == cantidad_puntos:
                 return False
             if not hay_punto_alcanzable:
-                raise ValueError(
-                    f"No hay una ruta desde {origen} hasta una zona de "
-                    f"despacho para el picker {picker.id}."
-                )
+                return False # Retornamos False en lugar de lanzar error si todo es callejón
             return False
 
         _, zona_id, punto, camino = min(
