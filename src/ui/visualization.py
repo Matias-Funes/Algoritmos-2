@@ -26,7 +26,6 @@ class Ventana(tk.Frame):
         self.en_ejecucion = False
         self.root = self.winfo_toplevel()
 
-        # Variables para el centrado dinámico del mapa
         self.offset_x = 0
         self.offset_y = 0
 
@@ -36,67 +35,60 @@ class Ventana(tk.Frame):
             self.pack(fill=tk.BOTH, expand=True)
 
         # ==========================================
-        # PANEL IZQUIERDO (Controles y Métricas - SIN SCROLL)
+        # 1. BARRA SUPERIOR (Controles y Velocidad)
         # ==========================================
-        self.panel = tk.Frame(self, width=370, bg="#f8fafc", padx=10, pady=10)
-        self.panel.pack(side=tk.LEFT, fill=tk.Y)
-        self.panel.pack_propagate(False)
+        self.top_bar = tk.Frame(self, bg="#ffffff", padx=10, pady=10, highlightthickness=1, highlightbackground="#cbd5e1")
+        self.top_bar.pack(side=tk.TOP, fill=tk.X)
 
-        # 0. BOTÓN VOLVER AL MENÚ (Arriba para que siempre se vea)
-        self.btn_volver = tk.Button(self.panel, text="← Volver al menú", command=self.btn_volver_menu, font=("Arial", 10, "bold"))
-        self.btn_volver.pack(fill=tk.X, pady=(0, 15))
+        # Botón Volver (Izquierda)
+        self.btn_volver = tk.Button(self.top_bar, text="← Volver al menú", command=self.btn_volver_menu, font=("Arial", 10, "bold"), relief=tk.FLAT, bg="#f1f5f9", padx=10)
+        self.btn_volver.pack(side=tk.LEFT, padx=(0, 20))
         self._estilo_volver_original = {
             "bg": self.btn_volver.cget("bg"), "fg": self.btn_volver.cget("fg"),
             "activebackground": self.btn_volver.cget("activebackground"),
         }
 
-        # 1. Controles
-        tk.Label(self.panel, text="Controles", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(0, 5))
+        # Controles de Simulación (Centro-Izquierda)
+        frame_btn = tk.Frame(self.top_bar, bg="#ffffff")
+        frame_btn.pack(side=tk.LEFT)
 
-        frame_btn = tk.Frame(self.panel, bg="#f8fafc")
-        frame_btn.pack(fill=tk.X)
+        self.btn_play_pause = tk.Button(frame_btn, text="▶ Iniciar", command=self.btn_toggle_play_pause, font=("Arial", 9, "bold"), bg="#e0f2fe", relief=tk.FLAT, padx=10, pady=4)
+        self.btn_play_pause.pack(side=tk.LEFT, padx=2)
 
-        self.btn_play_pause = tk.Button(frame_btn, text="▶ Iniciar", command=self.btn_toggle_play_pause)
-        self.btn_play_pause.grid(row=0, column=0, sticky="ew", pady=3, padx=(0, 3))
+        tk.Button(frame_btn, text="🔄 Reiniciar", command=self.btn_reset, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
+        tk.Button(frame_btn, text="⏮ Atrás", command=self.btn_paso_atras, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
+        tk.Button(frame_btn, text="⏭ Adelante", command=self.btn_paso, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
+        tk.Button(frame_btn, text="💾 Guardar", command=self.btn_guardar_partida, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
+        tk.Button(frame_btn, text="📊 Comparar", command=self.btn_comparar_estrategias, bg="#e0f2fe", relief=tk.FLAT, padx=10, pady=4).pack(side=tk.LEFT, padx=2)
 
-        tk.Button(frame_btn, text="🔄 Reiniciar", command=self.btn_reset).grid(row=0, column=1, sticky="ew", pady=3, padx=(3, 0))
+        # Selector de Velocidad (Derecha)
+        frame_velocidad = tk.Frame(self.top_bar, bg="#ffffff")
+        frame_velocidad.pack(side=tk.RIGHT)
 
-        frame_pasos = tk.Frame(frame_btn, bg="#f8fafc")
-        frame_pasos.grid(row=1, column=0, columnspan=2, sticky="ew", pady=3)
-        tk.Button(frame_pasos, text="⏮ Atrás", command=self.btn_paso_atras).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 3))
-        tk.Button(frame_pasos, text="⏭ Adelante", command=self.btn_paso).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(3, 0))
-
-        tk.Button(frame_btn, text="💾 Guardar Partida", command=self.btn_guardar_partida).grid(row=2, column=0, columnspan=2, sticky="ew", pady=3)
-        tk.Button(frame_btn, text="📊 Comparar Estrategias", command=self.btn_comparar_estrategias, bg="#e0f2fe", font=("Arial", 9, "bold")).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 3))
-
-        frame_btn.columnconfigure(0, weight=1)
-        frame_btn.columnconfigure(1, weight=1)
-
-        # --- NUEVO: SELECTOR DE VELOCIDAD ---
-        frame_velocidad = tk.Frame(self.panel, bg="#f8fafc")
-        frame_velocidad.pack(fill=tk.X, pady=(10, 5))
-        tk.Label(frame_velocidad, text="Velocidad:", bg="#f8fafc", font=("Arial", 10)).pack(side=tk.LEFT)
-
+        tk.Label(frame_velocidad, text="Velocidad:", bg="#ffffff", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 5))
         self.combo_velocidad = ttk.Combobox(
             frame_velocidad,
-            values=[
-                "Lento (500ms)",
-                "Normal (250ms)",
-                "Rápido (100ms)",
-                "Turbo (20ms)",
-                "Hipervelocidad (5ms)",
-                "Instántaneo (0ms)"
-            ],
+            values=["Lento (500ms)", "Normal (250ms)", "Rápido (100ms)", "Turbo (20ms)", "Hipervelocidad (5ms)", "Máxima Velocidad (0ms)"],
             state="readonly",
-            width=15
+            width=20
         )
-        self.combo_velocidad.current(1) # Por defecto: Normal
-        self.combo_velocidad.pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=(5, 0))
+        self.combo_velocidad.current(1)
+        self.combo_velocidad.pack(side=tk.LEFT)
         self.combo_velocidad.bind("<<ComboboxSelected>>", self.cambiar_velocidad)
-        # ------------------------------------
 
-        # 2. Métricas Globales
-        tk.Label(self.panel, text="Métricas Globales", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
+        # ==========================================
+        # 2. ÁREA PRINCIPAL (Panel Izquierdo y Mapa)
+        # ==========================================
+        self.main_area = tk.Frame(self, bg="#e2e8f0")
+        self.main_area.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # Panel Izquierdo (Métricas y Pedidos)
+        self.panel = tk.Frame(self.main_area, width=370, bg="#f8fafc", padx=15, pady=10)
+        self.panel.pack(side=tk.LEFT, fill=tk.Y)
+        self.panel.pack_propagate(False)
+
+        # 1. Métricas Globales
+        tk.Label(self.panel, text="Métricas Globales", font=("Arial", 12, "bold"), bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(5, 5))
         self.lbl_wave = tk.Label(self.panel, text="Wave: 0 / 0", font=("Arial", 10), bg="#f8fafc")
         self.lbl_wave.pack(anchor="w")
         self.lbl_paso = tk.Label(self.panel, text="Paso actual: 0", font=("Arial", 10), bg="#f8fafc")
@@ -110,21 +102,19 @@ class Ventana(tk.Frame):
         self.lbl_altura = tk.Label(self.panel, text="Última altura recogida: Nivel 0", font=("Arial", 10), bg="#f8fafc")
         self.lbl_altura.pack(anchor="w")
 
-        # 3. Panel de Pickers
-        tk.Label(self.panel, text="Estado Pickers", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
+        # 2. Panel de Pickers
+        tk.Label(self.panel, text="Estado Pickers", font=("Arial", 12, "bold"), bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(20, 5))
         self.frame_carga_pickers = tk.Frame(self.panel, bg="#f8fafc")
         self.frame_carga_pickers.pack(fill=tk.X)
         self.lbl_carga_pickers = {}
 
-        # 4. Pedidos de la Wave
-        tk.Label(self.panel, text="Pedidos en Wave", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
-        self.txt_pedidos = tk.Text(self.panel, height=5, width=38, font=("Arial", 9), bg="#ffffff", state=tk.DISABLED)
-        self.txt_pedidos.pack(fill=tk.X)
+        # 3. Pedidos de la Wave
+        tk.Label(self.panel, text="Pedidos en Wave", font=("Arial", 12, "bold"), bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(20, 5))
+        self.txt_pedidos = tk.Text(self.panel, height=8, width=38, font=("Arial", 9), bg="#ffffff", state=tk.DISABLED, relief=tk.FLAT, padx=5, pady=5, highlightthickness=1, highlightbackground="#cbd5e1")
+        self.txt_pedidos.pack(fill=tk.BOTH, expand=True)
 
-        # ==========================================
-        # PANEL DERECHO (Mapa Adaptable sin Scroll)
-        # ==========================================
-        self.frame_mapa = tk.Frame(self, bg="#e2e8f0")
+        # Área del Mapa (Derecha)
+        self.frame_mapa = tk.Frame(self.main_area, bg="#e2e8f0")
         self.frame_mapa.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         self.canvas = tk.Canvas(self.frame_mapa, bg="#e2e8f0", highlightthickness=0)
@@ -321,7 +311,7 @@ class Ventana(tk.Frame):
 
     def _actualizar_boton_volver(self, estado):
         if self._simulacion_terminada(estado):
-            self.btn_volver.config(text="✔ Simulación terminada: Volver al menú", bg=COLOR_VOLVER_TERMINADA, fg="white", activebackground=COLOR_VOLVER_TERMINADA)
+            self.btn_volver.config(text="✔ Simulación terminada: Volver", bg=COLOR_VOLVER_TERMINADA, fg="white", activebackground=COLOR_VOLVER_TERMINADA)
         else:
             self.btn_volver.config(text="← Volver al menú", **self._estilo_volver_original)
 
