@@ -273,6 +273,7 @@ class _SimulationTk:
         self._en_ejecucion = False
         self._fase_completada = False
         self._productos_recogidos_acumulados = 0
+        self._productos_despachados_acumulados = 0
         self._distancia_acumulada = 0
         self._faltantes_acumulados: list[dict[str, Any]] = []
         self._descargas_acumuladas: list[dict[str, Any]] = []
@@ -358,10 +359,13 @@ class _SimulationTk:
         if not self._fase_completada:
             estado["faltantes"].extend(faltantes_actuales)
             estado["descargas"].extend(descargas_actuales)
-        estado["productos_despachados"] = sum(
-            item["cantidad"]
-            for descarga in estado["descargas"]
-            for item in descarga["items"]
+        estado["productos_despachados"] = (
+            self._productos_despachados_acumulados
+            + (
+                0
+                if self._fase_completada
+                else estado["productos_despachados"]
+            )
         )
         estado_pickers = {picker["id"]: picker for picker in estado["pickers"]}
 
@@ -412,6 +416,9 @@ class _SimulationTk:
 
         estado_fase = self._simulacion_actual.get_estado()
         self._productos_recogidos_acumulados += estado_fase["productos_recogidos"]
+        self._productos_despachados_acumulados += estado_fase[
+            "productos_despachados"
+        ]
         self._distancia_acumulada += estado_fase["distancia"]
         self._faltantes_acumulados.extend(estado_fase["faltantes"])
         self._descargas_acumuladas.extend(estado_fase["descargas"])
@@ -467,6 +474,7 @@ class _SimulationTk:
         self.fase_actual = 0
         self._fase_completada = False
         self._productos_recogidos_acumulados = 0
+        self._productos_despachados_acumulados = 0
         self._distancia_acumulada = 0
         self._faltantes_acumulados.clear()
         self._descargas_acumuladas.clear()
@@ -546,6 +554,11 @@ class _SimulationTk:
         self._productos_recogidos_acumulados = snapshot["productos_recogidos_acumulados"]
         self._faltantes_acumulados = snapshot["faltantes_acumulados"]
         self._descargas_acumuladas = snapshot["descargas_acumuladas"]
+        self._productos_despachados_acumulados = sum(
+            item["cantidad"]
+            for descarga in self._descargas_acumuladas
+            for item in descarga["items"]
+        )
 
         for prod in self.productos:
             if prod.producto_id in snapshot["stock_productos"]:
@@ -567,6 +580,15 @@ class _SimulationTk:
         self._simulacion_actual.productos_recogidos = snapshot.get("recogidos_fase_actual", [])
         self._simulacion_actual.productos_faltantes = snapshot.get("faltantes_fase_actual", [])
         self._simulacion_actual.descargas = snapshot.get("descargas_fase_actual", [])
+        self._simulacion_actual._cantidad_productos_recogidos = sum(
+            item["cantidad"]
+            for item in self._simulacion_actual.productos_recogidos
+        )
+        self._simulacion_actual._cantidad_productos_despachados = sum(
+            item["cantidad"]
+            for descarga in self._simulacion_actual.descargas
+            for item in descarga["items"]
+        )
 
         # Descontamos la demanda de lo ya recogido
         picker_por_id = {p.id: p for p in self._simulacion_actual.pickers}
