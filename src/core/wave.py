@@ -46,6 +46,10 @@ class Wave:
         self.capacidad_max_pedidos = capacidad_max_pedidos
         self.capacidad_max_productos = capacidad_max_productos
         self.peso_max_kg = float(peso_max_kg)
+
+
+
+        
         #esto lo puse por si queres guardar el recorrido desde una wave y que se puedan guardar dos recorridos segun dos estrategias distintas, A y B, que se pueden usar para comparar cual es mejor
         self.recorrido_A: list[int] | None = None
         self.recorrido_B: list[int] | None = None

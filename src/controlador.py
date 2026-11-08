@@ -86,6 +86,7 @@ class Controlador:
             on_config_manual=self.abrir_configuracion,
             on_iniciar=self.iniciar_simulacion,
             on_cargar_partida=self.cargar_partida,
+            on_cerrar=self.cerrar_aplicacion,
         )
         menu.set_archivo_json(Path(self.ruta_json).name if self.ruta_json else None)
         menu.set_config_manual(self.config_manual is not None)
@@ -106,11 +107,21 @@ class Controlador:
         self._mostrar(vista, (1100, 620), (950, 500))
 
     def mostrar_simulacion(self):
+        ancho_pantalla = self.root.winfo_screenwidth()
+        alto_pantalla = self.root.winfo_screenheight()
+        ancho_disponible = max(1, int(ancho_pantalla * 0.95) - 320)
+        alto_disponible = max(1, int(alto_pantalla * 0.85) - 60)
+        tamano_celda = min(
+            px(self.tamano_celda),
+            ancho_disponible // max(1, self.warehouse.ancho_x),
+            alto_disponible // max(1, self.warehouse.largo_y),
+        )
         ventana = Ventana(
             self.warehouse,
-            tamano_celda=px(self.tamano_celda),
+            tamano_celda=max(1, tamano_celda),
             master=self.root,
             on_volver=self.mostrar_menu,
+            on_cerrar=self.cerrar_aplicacion,
         )
         # Si la simulación necesita la ventana para programar sus pasos (after), se la vincula.
         vincular = getattr(self.simulacion, "vincular_interfaz", None)
@@ -119,6 +130,13 @@ class Controlador:
         ventana.set_simulacion(self.simulacion)
         self._mostrar(ventana)  # tamaño automático según el warehouse
         ventana.actualizar_desde_simulacion()
+
+    def cerrar_aplicacion(self):
+        """Detiene callbacks de simulación y cierra la ventana principal."""
+        pausar = getattr(self.simulacion, "pausar", None)
+        if pausar is not None:
+            pausar()
+        self.root.destroy()
 
     # --- Menú ---
     def cargar_json(self):

@@ -25,7 +25,8 @@ class VistaMenu(tk.Frame):
     """Menú principal: cargar JSON, configuración manual e iniciar simulación."""
 
     def __init__(
-        self, master, on_cargar_json, on_config_manual, on_iniciar, on_cargar_partida
+        self, master, on_cargar_json, on_config_manual, on_iniciar,
+        on_cargar_partida, on_cerrar=None
     ):
         super().__init__(master, bg=CREMA_PRINCIPAL)
 
@@ -146,6 +147,17 @@ class VistaMenu(tk.Frame):
             justify=tk.CENTER,
         )
         self.lbl_aviso.grid(row=6, column=0, columnspan=2, pady=(10, 0))
+
+        crear_boton(
+            contenedor,
+            "✕ Cerrar aplicación",
+            on_cerrar or self.winfo_toplevel().destroy,
+            primario=False,
+            bg="#b94747",
+            fg=BLANCO,
+            activebackground="#9e3737",
+            activeforeground=BLANCO,
+        ).grid(row=7, column=1, sticky="ew", pady=(12, 0))
 
     # --- API para el controlador ---
     def set_archivo_json(self, nombre=None):
