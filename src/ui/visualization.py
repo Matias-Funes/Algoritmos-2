@@ -50,6 +50,7 @@ class Ventana(tk.Frame):
         self._productos_recogidos_stock = None
         self._rutas_dibujadas = {}
         self._items_pickers = {}
+        self._firma_pedidos_mostrada = None
 
         if master is None:
             self.root.title("Wave Picking - Simulador")
@@ -336,6 +337,7 @@ class Ventana(tk.Frame):
 
     def set_simulacion(self, sim):
         self.simulacion = sim
+        self._firma_pedidos_mostrada = None
 
     def btn_toggle_play_pause(self):
         if not self.simulacion: return
@@ -359,7 +361,7 @@ class Ventana(tk.Frame):
             "Rápido (100ms)": 100,
             "Turbo (20ms)": 20,
             "Hipervelocidad (5ms)": 5,
-            "Instántaneo (0ms)": 0
+            "Máxima Velocidad (0ms)": 0,
         }
 
         nuevo_intervalo = velocidades.get(seleccion, 250)
@@ -884,16 +886,44 @@ class Ventana(tk.Frame):
             )
             lbl_detalle.config(text=f"{estado_texto}\n{detalle}")
 
-        self.txt_pedidos.config(state=tk.NORMAL)
-        self.txt_pedidos.delete(1.0, tk.END)
         pedidos = estado.get('pedidos_actuales', {})
+        self._actualizar_lista_pedidos(pedidos, colores_por_picker)
 
+        self._actualizar_boton_volver(estado)
+
+        if estado.get('terminada', False):
+            self.en_ejecucion = False
+            self.btn_play_pause.config(text="▶ Iniciar")
+
+    def _actualizar_lista_pedidos(self, pedidos, colores_por_picker):
+        if isinstance(pedidos, dict) and pedidos and isinstance(
+            next(iter(pedidos.values())), dict
+        ):
+            contenido_pedidos = tuple(
+                (picker_id, tuple(demanda.items()))
+                for picker_id, demanda in pedidos.items()
+            )
+        elif isinstance(pedidos, dict):
+            contenido_pedidos = tuple(pedidos.items())
+        else:
+            contenido_pedidos = tuple(pedidos)
+        firma = (contenido_pedidos, tuple(colores_por_picker.items()))
+        if firma == self._firma_pedidos_mostrada:
+            return
+
+        self._firma_pedidos_mostrada = firma
+        self.txt_pedidos.config(state=tk.NORMAL)
+        self.txt_pedidos.delete("1.0", tk.END)
         if not pedidos:
             self.txt_pedidos.insert(tk.END, "No hay pedidos pendientes.\n¡Wave completada!")
         else:
             es_anidado = bool(pedidos) and isinstance(list(pedidos.values())[0], dict)
             tags_por_picker = {
                 picker_id: f"picker_id_{indice}"
+                for indice, picker_id in enumerate(colores_por_picker)
+            }
+            numero_por_picker = {
+                picker_id: indice + 1
                 for indice, picker_id in enumerate(colores_por_picker)
             }
 
@@ -915,24 +945,26 @@ class Ventana(tk.Frame):
                             foreground=colores_por_picker[picker_id],
                             font=FUENTE_NEGRITA,
                         )
-                        self.txt_pedidos.insert(tk.END, "Picker ")
+                        if self.txt_pedidos.index("end-1c") != "1.0":
+                            self.txt_pedidos.insert(tk.END, "\n")
                         inicio_id = self.txt_pedidos.index("end-1c")
-                        self.txt_pedidos.insert(tk.END, picker_id)
+                        self.txt_pedidos.insert(
+                            tk.END, f"Picker {numero_por_picker[picker_id]}"
+                        )
                         fin_id = self.txt_pedidos.index("end-1c")
                         self.txt_pedidos.tag_add(tag_picker, inicio_id, fin_id)
-                        self.txt_pedidos.insert(tk.END, ":\n")
+                        self.txt_pedidos.insert(tk.END, "\n")
                         for prod_id, cant in demanda.items():
-                            self.txt_pedidos.insert(tk.END, f"  - {prod_id}: {cant} u, alt ({obtener_altura(prod_id)})\n")
+                            altura = obtener_altura(prod_id)
+                            self.txt_pedidos.insert(
+                                tk.END,
+                                f"   • {prod_id}   |   {cant} u   |   Nivel {altura}\n",
+                            )
             else:
                 for prod_id, cant in pedidos.items():
                     self.txt_pedidos.insert(tk.END, f"- {prod_id}: {cant} u, alt ({obtener_altura(prod_id)})\n")
 
         self.txt_pedidos.config(state=tk.DISABLED)
-        self._actualizar_boton_volver(estado)
-
-        if estado.get('terminada', False):
-            self.en_ejecucion = False
-            self.btn_play_pause.config(text="▶ Iniciar")
 
     def iniciar(self):
         self.mainloop()
