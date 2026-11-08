@@ -72,6 +72,29 @@ class Ventana(tk.Frame):
         frame_btn.columnconfigure(0, weight=1)
         frame_btn.columnconfigure(1, weight=1)
 
+        # --- NUEVO: SELECTOR DE VELOCIDAD ---
+        frame_velocidad = tk.Frame(self.panel, bg="#f8fafc")
+        frame_velocidad.pack(fill=tk.X, pady=(10, 5))
+        tk.Label(frame_velocidad, text="Velocidad:", bg="#f8fafc", font=("Arial", 10)).pack(side=tk.LEFT)
+
+        self.combo_velocidad = ttk.Combobox(
+            frame_velocidad,
+            values=[
+                "Lento (500ms)",
+                "Normal (250ms)",
+                "Rápido (100ms)",
+                "Turbo (20ms)",
+                "Hipervelocidad (5ms)",
+                "Instántaneo (0ms)"
+            ],
+            state="readonly",
+            width=15
+        )
+        self.combo_velocidad.current(1) # Por defecto: Normal
+        self.combo_velocidad.pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=(5, 0))
+        self.combo_velocidad.bind("<<ComboboxSelected>>", self.cambiar_velocidad)
+        # ------------------------------------
+
         # 2. Métricas Globales
         tk.Label(self.panel, text="Métricas Globales", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
         self.lbl_wave = tk.Label(self.panel, text="Wave: 0 / 0", font=("Arial", 10), bg="#f8fafc")
@@ -147,6 +170,26 @@ class Ventana(tk.Frame):
             self.simulacion.iniciar()
             self.en_ejecucion = True
             self.btn_play_pause.config(text="⏸ Pausar")
+
+    def cambiar_velocidad(self, event=None):
+        if not self.simulacion:
+            return
+
+        seleccion = self.combo_velocidad.get()
+        velocidades = {
+            "Lento (500ms)": 500,
+            "Normal (250ms)": 250,
+            "Rápido (100ms)": 100,
+            "Turbo (20ms)": 20,
+            "Hipervelocidad (5ms)": 5,
+            "Instántaneo (0ms)": 0
+        }
+
+        nuevo_intervalo = velocidades.get(seleccion, 250)
+
+        # Llamamos al método que creamos en main.py
+        if hasattr(self.simulacion, "actualizar_velocidad"):
+            self.simulacion.actualizar_velocidad(nuevo_intervalo)
 
     def btn_paso(self):
         if self.simulacion:
