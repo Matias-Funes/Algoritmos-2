@@ -113,7 +113,7 @@ def _crear_waves(
     """
     max_pedidos = configuracion.get("wave_max_pedidos", len(pedidos) or 1)
     max_productos = configuracion.get("wave_max_productos", 100)
-    
+
     if max_pedidos <= 0 or max_productos <= 0:
         raise ValueError("Los límites de wave deben ser enteros positivos.")
     if pedidos and not pickers:
@@ -121,7 +121,7 @@ def _crear_waves(
 
     # 1. Ordenar pedidos por prioridad (mayor a menor)
     pedidos_ordenados = sorted(pedidos, key=lambda p: -p.prioridad)
-    
+
     waves: list[Wave] = []
     pedidos_por_picker = {picker.id: [] for picker in pickers}
     waves_por_picker = {picker.id: [] for picker in pickers}
@@ -132,23 +132,23 @@ def _crear_waves(
     for pedido in pedidos_ordenados:
         peso_pedido = pedido.peso_total(inventario)
         asignado = False
-        
+
         # 2. Filtrar pickers que puedan transportar el pedido (capacidad individual)
         candidatos = [
-            p for p in pickers 
+            p for p in pickers
             if p.capacidad_carga_kg >= peso_pedido
         ]
-        
+
         if not candidatos:
             print(f"   Advertencia: El pedido {pedido.orden_id} pesa más que cualquier picker.")
             candidatos = pickers
-            
+
         # 3. Ordenar candidatos por menor carga acumulada (Balanceo de carga)
         candidatos_ordenados = sorted(
-            candidatos, 
+            candidatos,
             key=lambda p: carga_wave_actual[p.id]
         )
-        
+
         # 4. Intentar meter en la wave actual del picker
         for picker in candidatos_ordenados:
             wave = wave_actual[picker.id]
@@ -158,7 +158,7 @@ def _crear_waves(
                 carga_wave_actual[picker.id] += peso_pedido
                 asignado = True
                 break
-                
+
         # 5. Si no entró en ninguna wave actual, crear una nueva wave
         if not asignado:
             # Elegir al picker con menos carga actual
@@ -170,7 +170,7 @@ def _crear_waves(
                 peso_max_kg=picker_elegido.capacidad_carga_kg # ¡Límite correcto por picker!
             )
             siguiente_wave_id += 1
-            
+
             if nueva_wave.agregar_pedido(pedido, inventario):
                 wave_actual[picker_elegido.id] = nueva_wave
                 waves_por_picker[picker_elegido.id].append(nueva_wave)
@@ -178,7 +178,7 @@ def _crear_waves(
                 carga_wave_actual[picker_elegido.id] += peso_pedido
                 waves.append(nueva_wave)
                 asignado = True
-                
+
         if not asignado:
             raise ValueError(
                 f"El pedido {pedido.orden_id} excede los límites de "
@@ -274,7 +274,7 @@ class _SimulationTk:
         self._distancia_acumulada = 0
         self._faltantes_acumulados: list[dict[str, Any]] = []
         self._descargas_acumuladas: list[dict[str, Any]] = []
-        
+
         self._total_productos = sum(
             cantidad
             for fase in fases
@@ -482,7 +482,7 @@ class _SimulationTk:
     def retroceder_paso(self) -> bool:
         """Revierte el estado al paso anterior usando el historial."""
         if not self.historial_snapshots:
-            return False 
+            return False
 
         snapshot_anterior = self.historial_snapshots.pop()
         self.restaurar_snapshot(snapshot_anterior)
@@ -565,8 +565,7 @@ class _SimulationTk:
 
 
 def construir_simulacion(
-    ruta_escenario: Path, 
-    modo_waves: str = "Wave Global (Flota)", # Lo mantenemos por compatibilidad con el controlador
+    ruta_escenario: Path,
     estrategia_recorrido: str = "Vecino más cercano (B)"
 ) -> tuple[Any, _SimulationTk]:
     """Carga un escenario JSON y arma el warehouse y la simulación."""
@@ -609,7 +608,7 @@ def construir_simulacion(
     print(f"4. Generando waves (Algoritmo Greedy unificado para todos los pickers)")
     waves, _, waves_por_picker = _crear_waves(pedidos, pickers, inventario, configuracion)
     fases = _crear_fases_simulacion(pickers, waves_por_picker)
-    
+
     print(f"   Waves generadas: {len(waves)}")
 
     print("5. Preparando rutas dinámicas y zonas de despacho")
