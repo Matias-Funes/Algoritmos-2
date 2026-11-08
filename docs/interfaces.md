@@ -350,6 +350,14 @@ class Simulacion:
 `obtener_estado` devuelve un diccionario con `estado`, `paso`, `pickers`,
 `wave_actual` e `items_recogidos`.
 
+En la interfaz Tk, `turno_actual` y `turnos_totales` cuentan las fases
+sincronizadas; `waves_totales` informa la cantidad real de waves. Por picker,
+`productos_recogidos` es acumulado y `productos_objetivo` es el total asignado;
+`productos_transportados` representa solo la carga actual. Si un picker tiene
+trabajo en turnos posteriores, la descarga se planifica en un punto desde el
+que pueda volver a su zona inicial de trabajo. Los productos no recogidos se
+informan en `faltantes`, agrupados visualmente por producto y motivo.
+
 ### `src/ui/visualization.py`
 
 ```python

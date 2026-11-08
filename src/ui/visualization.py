@@ -174,13 +174,17 @@ class Ventana(tk.Frame):
 
         # 1. Métricas Globales
         tk.Label(self.panel, text="Métricas Globales", font=FUENTE_TITULO, bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(5, 5))
-        self.lbl_wave = tk.Label(self.panel, text="Wave: 0 / 0", font=FUENTE, bg="#f8fafc")
+        self.lbl_wave = tk.Label(
+            self.panel, text="Turno: 0 / 0 · Waves: 0", font=FUENTE, bg="#f8fafc"
+        )
         self.lbl_wave.pack(anchor="w")
         self.lbl_paso = tk.Label(self.panel, text="Paso actual: 0", font=FUENTE, bg="#f8fafc")
         self.lbl_paso.pack(anchor="w")
         self.lbl_productos = tk.Label(self.panel, text="Productos Recogidos: 0 / 0", font=FUENTE, bg="#f8fafc")
         self.lbl_productos.pack(anchor="w")
-        self.lbl_productos_wave = tk.Label(self.panel, text="Recogidos Wave Actual: 0", font=FUENTE, bg="#f8fafc")
+        self.lbl_productos_wave = tk.Label(
+            self.panel, text="Recogidos en turno: 0 / 0", font=FUENTE, bg="#f8fafc"
+        )
         self.lbl_productos_wave.pack(anchor="w")
         self.lbl_distancia = tk.Label(self.panel, text="Distancia Total: 0 m", font=FUENTE, bg="#f8fafc")
         self.lbl_distancia.pack(anchor="w")
@@ -792,12 +796,20 @@ class Ventana(tk.Frame):
             self.dibujar_picker(p['x'], p['y'], p, color=color_picker)
 
         # Métricas Globales
-        self.lbl_wave.config(text=f"Wave: {estado.get('wave_actual', 0)} / {estado.get('waves_totales', 0)}")
+        self.lbl_wave.config(
+            text=(
+                f"Turno: {estado.get('turno_actual', 0)} / "
+                f"{estado.get('turnos_totales', 0)} · "
+                f"Waves: {estado.get('waves_totales', 0)}"
+            )
+        )
         self.lbl_paso.config(text=f"Paso actual: {estado.get('paso_actual', 0)}")
         self.lbl_productos.config(text=f"Productos Recogidos: {estado.get('productos_recogidos', 0)} / {estado.get('total_productos', 0)}")
         rec_wave = estado.get('productos_recogidos_wave_actual', 0)
         tot_wave = estado.get('total_productos_wave_actual', 0)
-        self.lbl_productos_wave.config(text=f"Recogidos Wave Actual: {rec_wave} / {tot_wave}")
+        self.lbl_productos_wave.config(
+            text=f"Recogidos en turno: {rec_wave} / {tot_wave}"
+        )
         self.lbl_distancia.config(text=f"Distancia Total: {estado.get('distancia', 0)} m")
         self.lbl_altura.config(text=f"Última altura recogida: Nivel {estado.get('ultima_altura', 0)}")
 
@@ -863,7 +875,7 @@ class Ventana(tk.Frame):
                     lbl_detalle,
                 ]
 
-            cantidad_actual = picker.get("productos_transportados", 0)
+            cantidad_recogida = picker.get("productos_recogidos", 0)
             cantidad_objetivo = picker.get("productos_objetivo", 0)
             items = picker.get("items_transportados", [])
             detalle = ", ".join(f"{i['producto_id']}({i['cantidad']})" for i in items) or "Vacío"
@@ -887,12 +899,17 @@ class Ventana(tk.Frame):
             color_picker = colores_por_picker[picker_id]
             lbl_id.config(fg=color_picker)
             lbl_resumen.config(
-                text=f"{wave_str}  ·  {cantidad_actual}/{cantidad_objetivo} items"
+                text=(
+                    f"{wave_str}  ·  Recogidos "
+                    f"{cantidad_recogida}/{cantidad_objetivo} u"
+                )
             )
             lbl_detalle.config(text=f"{estado_texto}\n{detalle}")
 
         pedidos = estado.get('pedidos_actuales', {})
-        self._actualizar_lista_pedidos(pedidos, colores_por_picker)
+        self._actualizar_lista_pedidos(
+            pedidos, colores_por_picker, estado.get("faltantes", [])
+        )
 
         self._actualizar_boton_volver(estado)
 
@@ -900,7 +917,10 @@ class Ventana(tk.Frame):
             self.en_ejecucion = False
             self.btn_play_pause.config(text="▶ Iniciar")
 
-    def _actualizar_lista_pedidos(self, pedidos, colores_por_picker):
+    def _actualizar_lista_pedidos(
+        self, pedidos, colores_por_picker, faltantes=None
+    ):
+        faltantes = faltantes or []
         if isinstance(pedidos, dict) and pedidos and isinstance(
             next(iter(pedidos.values())), dict
         ):
@@ -912,17 +932,58 @@ class Ventana(tk.Frame):
             contenido_pedidos = tuple(pedidos.items())
         else:
             contenido_pedidos = tuple(pedidos)
-        firma = (contenido_pedidos, tuple(colores_por_picker.items()))
+        contenido_faltantes = tuple(
+            (
+                item["picker_id"],
+                item["producto_id"],
+                item["cantidad"],
+                item["motivo"],
+            )
+            for item in faltantes
+        )
+        firma = (
+            contenido_pedidos,
+            contenido_faltantes,
+            tuple(colores_por_picker.items()),
+        )
         if firma == self._firma_pedidos_mostrada:
             return
 
         self._firma_pedidos_mostrada = firma
         self.txt_pedidos.config(state=tk.NORMAL)
         self.txt_pedidos.delete("1.0", tk.END)
-        if not pedidos:
-            self.txt_pedidos.insert(tk.END, "No hay pedidos pendientes.\n¡Wave completada!")
+        es_anidado = bool(pedidos) and isinstance(
+            list(pedidos.values())[0], dict
+        )
+        hay_pedidos = (
+            any(pedidos.values()) if es_anidado else bool(pedidos)
+        )
+        if faltantes:
+            cantidades_faltantes = {}
+            for item in faltantes:
+                clave = (item["producto_id"], item["motivo"])
+                cantidades_faltantes[clave] = (
+                    cantidades_faltantes.get(clave, 0) + item["cantidad"]
+                )
+            total_faltantes = sum(cantidades_faltantes.values())
+            self.txt_pedidos.insert(
+                tk.END, f"Faltantes: {total_faltantes} unidades\n"
+            )
+            for (producto_id, motivo), cantidad in cantidades_faltantes.items():
+                self.txt_pedidos.insert(
+                    tk.END,
+                    f"- {producto_id}: {cantidad} u ({motivo})\n",
+                )
+            if hay_pedidos:
+                self.txt_pedidos.insert(tk.END, "\n")
+        if not hay_pedidos:
+            self.txt_pedidos.insert(
+                tk.END,
+                "No hay pedidos pendientes."
+                if faltantes
+                else "No hay pedidos pendientes.\n¡Turno completado!",
+            )
         else:
-            es_anidado = bool(pedidos) and isinstance(list(pedidos.values())[0], dict)
             tags_por_picker = {
                 picker_id: f"picker_id_{indice}"
                 for indice, picker_id in enumerate(colores_por_picker)
