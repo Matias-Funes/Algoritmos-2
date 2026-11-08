@@ -93,6 +93,8 @@ class Simulation:
         self.productos_recogidos: list[dict[str, Any]] = []
         self.productos_faltantes: list[dict[str, Any]] = []
         self.descargas: list[dict[str, Any]] = []
+        self._cantidad_productos_recogidos = 0
+        self._cantidad_productos_despachados = 0
         self.distancia = 0
         self.ultima_altura = 0  # <--- NUEVO: Variable para las métricas
         self._en_ejecucion = False
@@ -353,6 +355,7 @@ class Simulation:
                     "cantidad": cantidad,
                 }
             )
+            self._cantidad_productos_recogidos += cantidad
 
     def _recoger_en_posiciones_actuales(self) -> None:
         for picker in self.pickers:
@@ -442,21 +445,21 @@ class Simulation:
             dict[tuple[int, int], float],
             dict[tuple[int, int], tuple[int, int]],
         ] | None = None,
-    ) -> tuple[tuple[int, int], list[tuple[int, int]]] | None:
+    ) -> tuple[float, tuple[int, int]] | None:
         if busqueda is None:
             busqueda = self._calcular_distancias_con_picker(picker, origen)
-        mejor: tuple[float, tuple[int, int], list[tuple[int, int]]] | None = None
+        mejor: tuple[float, tuple[int, int]] | None = None
         for destino in destinos:
-            ruta = self._camino_desde_busqueda(picker, destino, busqueda)
-            if ruta is None:
+            if busqueda is None:
+                distancia = self._cache_distancias.distancia(origen, destino)
+            else:
+                distancia = busqueda[1].get(destino, float("inf"))
+            if distancia == float("inf"):
                 continue
-            distancia, camino = ruta
-            candidato = (distancia, destino, camino)
-            if mejor is None or candidato[:2] < mejor[:2]:
+            candidato = (distancia, destino)
+            if mejor is None or candidato < mejor:
                 mejor = candidato
-        if mejor is None:
-            return None
-        return mejor[1], mejor[2]
+        return mejor
 
     def _calcular_distancias_con_picker(
         self,
@@ -771,49 +774,66 @@ class Simulation:
             busqueda = self._calcular_distancias_con_picker(
                 picker, origen, destinos
             )
-            opciones = []
+            opciones: list[
+                tuple[float, str, tuple[int, int], bool]
+            ] = []
             for producto_id, puntos in productos_candidatos:
-                ruta = self._ruta_mas_cercana(
+                destino_cercano = self._ruta_mas_cercana(
                     picker, origen, puntos, busqueda
                 )
-                if ruta is None:
-                    puntos_alcanzables = [
+                usa_busqueda_dinamica = destino_cercano is not None
+                if destino_cercano is None:
+                    destinos_alcanzables = [
                         (self._cache_distancias.distancia(origen, punto), punto)
                         for punto in puntos
                     ]
-                    puntos_alcanzables = [
-                        (distancia, punto)
-                        for distancia, punto in puntos_alcanzables
-                        if distancia != float("inf")
+                    destinos_alcanzables = [
+                        opcion
+                        for opcion in destinos_alcanzables
+                        if opcion[0] != float("inf")
                     ]
-                    if not puntos_alcanzables:
+                    if not destinos_alcanzables:
                         inalcanzables.append(producto_id)
                         continue
-                    _, punto = min(puntos_alcanzables)
-                    camino = self._cache_distancias.camino(origen, punto)
-                    if not camino:
-                        inalcanzables.append(producto_id)
-                        continue
-                    ruta = punto, camino
-                punto, camino = ruta
-                distancia = len(camino) - 1
-                opciones.append((distancia, producto_id, camino))
+                    destino_cercano = min(destinos_alcanzables)
+                distancia, punto = destino_cercano
+                opciones.append(
+                    (
+                        distancia,
+                        producto_id,
+                        punto,
+                        usa_busqueda_dinamica,
+                    )
+                )
 
             if opciones:
                 if self.estrategia_recorrido == "Orden de pedidos (A)":
                     primer_producto = list(demanda.keys())[0]
                     elegido = None
-                    for dist, prod_id, camino in opciones:
+                    for opcion in opciones:
+                        _, prod_id, _, _ = opcion
                         if prod_id == primer_producto:
-                            elegido = (dist, prod_id, camino)
+                            elegido = opcion
                             break
 
                     if elegido is None:
-                        _, producto_id, camino = min(opciones, key=lambda opcion: (opcion[0], opcion[1]))
-                    else:
-                        _, producto_id, camino = elegido
+                        elegido = min(opciones, key=lambda opcion: opcion[:2])
                 else:
-                    _, producto_id, camino = min(opciones, key=lambda opcion: (opcion[0], opcion[1]))
+                    elegido = min(opciones, key=lambda opcion: opcion[:2])
+
+                _, producto_id, punto, usa_busqueda_dinamica = elegido
+                if usa_busqueda_dinamica:
+                    ruta_elegida = self._camino_desde_busqueda(
+                        picker, punto, busqueda
+                    )
+                else:
+                    ruta_elegida = self._camino_desde_busqueda(
+                        picker, punto, None
+                    )
+                if ruta_elegida is None:
+                    inalcanzables.append(producto_id)
+                    continue
+                _, camino = ruta_elegida
 
                 objetivo = {"tipo": "producto", "producto_id": producto_id}
 
@@ -881,6 +901,9 @@ class Simulation:
                 ],
             }
         )
+        self._cantidad_productos_despachados += sum(
+            cantidad for _, cantidad in items
+        )
 
     def _recoger_objetivo_dinamico(
         self,
@@ -932,6 +955,7 @@ class Simulation:
                 "cantidad": cantidad,
             }
         )
+        self._cantidad_productos_recogidos += cantidad
 
     def avanzar_paso(self) -> bool:
         propuestas: dict[str, tuple[int, int]] = {}
@@ -1176,9 +1200,7 @@ class Simulation:
                 )
                 for picker in self.pickers
             ],
-            "productos_recogidos": sum(
-                item["cantidad"] for item in self.productos_recogidos
-            ),
+            "productos_recogidos": self._cantidad_productos_recogidos,
             "total_productos": self._total_productos,
             "distancia": self.distancia,
 
@@ -1193,11 +1215,7 @@ class Simulation:
 
             "recolecciones": [dict(item) for item in self.productos_recogidos],
             "faltantes": [dict(item) for item in self.productos_faltantes],
-            "productos_despachados": sum(
-                item["cantidad"]
-                for descarga in self.descargas
-                for item in descarga["items"]
-            ),
+            "productos_despachados": self._cantidad_productos_despachados,
             "descargas": [
                 {**descarga, "items": [dict(item) for item in descarga["items"]]}
                 for descarga in self.descargas
@@ -1238,6 +1256,8 @@ class Simulation:
         self.productos_recogidos.clear()
         self.productos_faltantes.clear()
         self.descargas.clear()
+        self._cantidad_productos_recogidos = 0
+        self._cantidad_productos_despachados = 0
         self._en_ejecucion = False
         self._demanda_global = dict(self._demanda_global_inicial)
         self._demanda_por_picker = {

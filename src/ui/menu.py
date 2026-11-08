@@ -9,6 +9,7 @@ from src.ui.estilos import (
     BLANCO,
     CREMA_PRINCIPAL,
     FUENTE,
+    FUENTE_NEGRITA,
     GRIS_VERDOSO,
     NEGRO_AZULADO,
     ROJO,
@@ -45,14 +46,14 @@ class VistaMenu(tk.Frame):
         tk.Label(
             banner,
             text="Bienvenido",
-            font=("Arial", 32, "bold"),
+            font=("Segoe UI", 32, "bold"),
             fg=BLANCO,
             bg=AZUL_MARINO_OSCURO,
         ).pack()
         tk.Label(
             banner,
             text="Simulador de Wave Picking",
-            font=("Arial", 12),
+            font=("Segoe UI", 12),
             fg=GRIS_VERDOSO,
             bg=AZUL_MARINO_OSCURO,
         ).pack(pady=(4, 0))
@@ -93,7 +94,7 @@ class VistaMenu(tk.Frame):
             "Iniciar simulación",
             on_iniciar,
             width=24,
-            font=("Arial", 10, "bold"),
+            font=FUENTE_NEGRITA,
         ).grid(row=3, column=1, sticky="ew", pady=(24, 8))
 
         # --- Fila 4: Selector de Estrategia ---
@@ -147,12 +148,6 @@ class VistaMenu(tk.Frame):
             fg=BLANCO,
             activebackground="#9F3939",
             activeforeground=BLANCO,
-        )
-        btn_cerrar.bind(
-            "<Enter>", lambda _event: btn_cerrar.config(bg="#9F3939")
-        )
-        btn_cerrar.bind(
-            "<Leave>", lambda _event: btn_cerrar.config(bg=ROJO)
         )
         btn_cerrar.grid(row=7, column=1, sticky="ew", pady=(12, 0))
 

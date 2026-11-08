@@ -101,6 +101,7 @@ class TestViajesDinamicos(unittest.TestCase):
         self.assertEqual(tuple(picker.posicion_actual), (0, 0))
         self.assertEqual(picker.carga_actual_kg, 0)
         self.assertEqual(estado["productos_recogidos"], 0)
+        self.assertEqual(estado["productos_despachados"], 0)
         self.assertEqual(estado["faltantes"], [])
         self.assertEqual(estado["descargas"], [])
 
@@ -286,17 +287,28 @@ class TestViajesDinamicos(unittest.TestCase):
         ]
 
         calcular_distancias = simulacion._calcular_distancias_con_picker
+        camino_desde_busqueda = simulacion._camino_desde_busqueda
         cantidad_busquedas = 0
+        cantidad_caminos_reconstruidos = 0
 
         def contar_busquedas(picker_actual, origen=None, destinos=None):
             nonlocal cantidad_busquedas
             cantidad_busquedas += 1
             return calcular_distancias(picker_actual, origen, destinos)
 
+        def contar_caminos(picker_actual, destino, busqueda):
+            nonlocal cantidad_caminos_reconstruidos
+            cantidad_caminos_reconstruidos += 1
+            return camino_desde_busqueda(
+                picker_actual, destino, busqueda
+            )
+
         simulacion._calcular_distancias_con_picker = contar_busquedas
+        simulacion._camino_desde_busqueda = contar_caminos
         simulacion._planificar_picker_dinamico(picker_sim)
 
         self.assertEqual(cantidad_busquedas, 1)
+        self.assertEqual(cantidad_caminos_reconstruidos, 1)
         self.assertEqual(
             simulacion._objetivos_dinamicos[picker_sim.id]["tipo"],
             "producto",
