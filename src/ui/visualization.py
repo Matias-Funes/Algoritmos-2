@@ -42,7 +42,7 @@ class Ventana(tk.Frame):
         self.panel.pack(side=tk.LEFT, fill=tk.Y)
         self.panel.pack_propagate(False)
 
-        # 0. BOTÓN VOLVER AL MENÚ (Movido arriba para que siempre se vea)
+        # 0. BOTÓN VOLVER AL MENÚ (Arriba para que siempre se vea)
         self.btn_volver = tk.Button(self.panel, text="← Volver al menú", command=self.btn_volver_menu, font=("Arial", 10, "bold"))
         self.btn_volver.pack(fill=tk.X, pady=(0, 15))
         self._estilo_volver_original = {
@@ -93,7 +93,6 @@ class Ventana(tk.Frame):
 
         # 4. Pedidos de la Wave
         tk.Label(self.panel, text="Pedidos en Wave", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
-        # Reducimos un poco el alto del Text para que no ocupe tanto espacio vertical
         self.txt_pedidos = tk.Text(self.panel, height=5, width=38, font=("Arial", 9), bg="#ffffff", state=tk.DISABLED)
         self.txt_pedidos.pack(fill=tk.X)
 
@@ -202,7 +201,6 @@ class Ventana(tk.Frame):
         notebook.add(tab_global, text="Resumen Global")
         notebook.add(tab_detalle, text="Detalle por Wave")
 
-        # Resumen Global
         nombres_ui = {"A": "A (Orden)", "B": "B (Cercanía)"}
         totales = comparacion["totales"]
         nombres = list(totales)
@@ -238,7 +236,6 @@ class Ventana(tk.Frame):
         tk.Label(frame_ganadores, text=f"🏆 Mejor Distancia: {nombres_ui.get(ganador_dist, ganador_dist)}", font=("Arial", 12, "bold"), fg="#0ea5e9", bg="#f8fafc").pack(anchor="w")
         tk.Label(frame_ganadores, text=f"⏱️ Mejor Tiempo: {nombres_ui.get(ganador_tiempo, ganador_tiempo)}", font=("Arial", 12, "bold"), fg="#0ea5e9", bg="#f8fafc").pack(anchor="w")
 
-        # Detalle
         columnas_detalle = ["Wave", "Distancia A", "Distancia B", "Ganador"]
         tabla_detalle = ttk.Treeview(tab_detalle, columns=columnas_detalle, show="headings", height=10)
 
@@ -372,10 +369,14 @@ class Ventana(tk.Frame):
         font_size = max(6, int(self.tamano_celda * 0.4))
         self.canvas.create_text(cx, cy, text=inicial, fill="white", font=("Arial", font_size, "bold"))
         
-        wave = p_data.get('wave_actual', '?')
+        # --- ACTUALIZADO: Mostrar ID de wave específico sobre el mapa ---
+        wave_str = p_data.get('wave_actual', '-')
+        if wave_str == "-":
+            wave_str = "Sin wave"
         carga = p_data.get('carga_actual_kg', 0)
         cap = p_data.get('capacidad_carga_kg', 0)
-        detalle = f"{p_data['id']} | W{wave} | {carga:.0f}/{cap:.0f}kg"
+        detalle = f"{p_data['id']} | {wave_str} | {carga:.0f}/{cap:.0f}kg"
+        
         font_detalle = max(6, int(self.tamano_celda * 0.35))
         self.canvas.create_text(cx, cy + radio + (font_detalle/2), text=detalle, fill=color, font=("Arial", font_detalle, "bold"))
 
@@ -399,6 +400,7 @@ class Ventana(tk.Frame):
             if p.get("activo", True):
                 self.dibujar_picker(p['x'], p['y'], p, color=color)
 
+        # Métricas Globales
         self.lbl_wave.config(text=f"Wave: {estado.get('wave_actual', 0)} / {estado.get('waves_totales', 0)}")
         self.lbl_paso.config(text=f"Paso actual: {estado.get('paso_actual', 0)}")
         self.lbl_productos.config(text=f"Productos Recogidos: {estado.get('productos_recogidos', 0)} / {estado.get('total_productos', 0)}")
@@ -412,6 +414,7 @@ class Ventana(tk.Frame):
                     widget.destroy()
                 del self.lbl_carga_pickers[picker_id]
 
+        # --- ESTADO INDIVIDUAL DE LOS PICKERS ---
         for picker in pickers_estado:
             picker_id = picker["id"]
             if picker_id not in self.lbl_carga_pickers:
@@ -423,9 +426,22 @@ class Ventana(tk.Frame):
             cantidad_objetivo = picker.get("productos_objetivo", 0)
             items = picker.get("items_transportados", [])
             detalle = ", ".join(f"{i['producto_id']}({i['cantidad']})" for i in items) or "Vacío"
-            estado_texto = "📦 ¡RECOLECTANDO!" if picker.get("recolectando", False) else "🚶 En movimiento"
             
-            texto = f"• {picker_id}: {cantidad_actual}/{cantidad_objetivo} items\n  {estado_texto}\n  {detalle}"
+            # Lógica para el estado de reposo
+            if not picker.get("activo", True):
+                estado_texto = "💤 Sin trabajo (Terminó)"
+            elif picker.get("recolectando", False):
+                estado_texto = "📦 ¡RECOLECTANDO!"
+            else:
+                estado_texto = "🚶 En movimiento"
+
+            # Obtenemos la wave específica del picker (viene de main.py)
+            wave_str = picker.get("wave_actual", "-")
+            if wave_str == "-":
+                wave_str = "Sin wave"
+
+            # Formato del texto: "• PK_01 | WAVE_002"
+            texto = f"• {picker_id} | {wave_str}\n  {estado_texto}\n  {detalle}"
             self.lbl_carga_pickers[picker_id][0].config(text=texto)
 
         self.txt_pedidos.config(state=tk.NORMAL)
