@@ -37,3 +37,6 @@ Thumbs.db
 data/sesiones/
 comandos.txt
 *.pdf
+
+# escenarios
+data/scenarios/*.json

@@ -17,12 +17,20 @@ COLORES_PICKERS = [
 class Ventana(tk.Frame):
     """Vista de la simulación con escalado automático del mapa (Zoom to Fit)."""
 
-    def __init__(self, warehouse, tamano_celda=30, master=None, on_volver=None):
+    def __init__(
+        self,
+        warehouse,
+        tamano_celda=30,
+        master=None,
+        on_volver=None,
+        on_cerrar=None,
+    ):
         super().__init__(master)
         self.warehouse = warehouse
         self.tamano_celda = tamano_celda
         self.simulacion = None
         self.on_volver = on_volver
+        self.on_cerrar = on_cerrar
         self.en_ejecucion = False
         self.root = self.winfo_toplevel()
 
@@ -39,6 +47,17 @@ class Ventana(tk.Frame):
         # ==========================================
         self.top_bar = tk.Frame(self, bg="#ffffff", padx=10, pady=10, highlightthickness=1, highlightbackground="#cbd5e1")
         self.top_bar.pack(side=tk.TOP, fill=tk.X)
+
+        tk.Button(
+            self.top_bar,
+            text="✕ Cerrar",
+            command=self.btn_cerrar_aplicacion,
+            font=("Arial", 9, "bold"),
+            relief=tk.FLAT,
+            bg="#fee2e2",
+            padx=10,
+            pady=4,
+        ).pack(side=tk.RIGHT, padx=(8, 0))
 
         # Botón Volver (Izquierda)
         self.btn_volver = tk.Button(self.top_bar, text="← Volver al menú", command=self.btn_volver_menu, font=("Arial", 10, "bold"), relief=tk.FLAT, bg="#f1f5f9", padx=10)
@@ -120,14 +139,59 @@ class Ventana(tk.Frame):
 
         # 2. Panel de Pickers
         tk.Label(self.panel, text="Estado Pickers", font=("Arial", 12, "bold"), bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(20, 5))
-        self.frame_carga_pickers = tk.Frame(self.panel, bg="#f8fafc")
-        self.frame_carga_pickers.pack(fill=tk.X)
+        frame_lista_pickers = tk.Frame(self.panel, bg="#f8fafc")
+        frame_lista_pickers.pack(fill=tk.X)
+        self.canvas_pickers = tk.Canvas(
+            frame_lista_pickers,
+            height=180,
+            bg="#f8fafc",
+            highlightthickness=0,
+        )
+        scrollbar_pickers = ttk.Scrollbar(
+            frame_lista_pickers,
+            orient=tk.VERTICAL,
+            command=self.canvas_pickers.yview,
+        )
+        self.canvas_pickers.configure(yscrollcommand=scrollbar_pickers.set)
+        self.canvas_pickers.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        scrollbar_pickers.pack(side=tk.RIGHT, fill=tk.Y)
+        self.frame_carga_pickers = tk.Frame(self.canvas_pickers, bg="#f8fafc")
+        self._ventana_pickers = self.canvas_pickers.create_window(
+            (0, 0), window=self.frame_carga_pickers, anchor="nw"
+        )
+        self.frame_carga_pickers.bind(
+            "<Configure>",
+            lambda _event: self.canvas_pickers.configure(
+                scrollregion=self.canvas_pickers.bbox("all")
+            ),
+        )
+        self.canvas_pickers.bind(
+            "<Configure>",
+            lambda event: self.canvas_pickers.itemconfigure(
+                self._ventana_pickers, width=event.width
+            ),
+        )
+        self.canvas_pickers.bind("<MouseWheel>", self._scroll_pickers)
+        self.canvas_pickers.bind("<Button-4>", self._scroll_pickers)
+        self.canvas_pickers.bind("<Button-5>", self._scroll_pickers)
+        self.frame_carga_pickers.bind("<MouseWheel>", self._scroll_pickers)
+        self.frame_carga_pickers.bind("<Button-4>", self._scroll_pickers)
+        self.frame_carga_pickers.bind("<Button-5>", self._scroll_pickers)
         self.lbl_carga_pickers = {}
 
         # 3. Pedidos de la Wave
         tk.Label(self.panel, text="Pedidos en Wave", font=("Arial", 12, "bold"), bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(20, 5))
-        self.txt_pedidos = tk.Text(self.panel, height=8, width=38, font=("Arial", 9), bg="#ffffff", state=tk.DISABLED, relief=tk.FLAT, padx=5, pady=5, highlightthickness=1, highlightbackground="#cbd5e1")
-        self.txt_pedidos.pack(fill=tk.BOTH, expand=True)
+        frame_pedidos = tk.Frame(self.panel, bg="#f8fafc")
+        frame_pedidos.pack(fill=tk.BOTH, expand=True)
+        self.txt_pedidos = tk.Text(frame_pedidos, height=8, width=38, font=("Arial", 9), bg="#ffffff", state=tk.DISABLED, relief=tk.FLAT, padx=5, pady=5, highlightthickness=1, highlightbackground="#cbd5e1")
+        scrollbar_pedidos = ttk.Scrollbar(
+            frame_pedidos,
+            orient=tk.VERTICAL,
+            command=self.txt_pedidos.yview,
+        )
+        self.txt_pedidos.configure(yscrollcommand=scrollbar_pedidos.set)
+        self.txt_pedidos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar_pedidos.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Área del Mapa (Derecha)
         self.frame_mapa = tk.Frame(self.main_area, bg="#e2e8f0")
@@ -156,6 +220,25 @@ class Ventana(tk.Frame):
 
         self.offset_x = (ancho_disp - ancho_real_mapa) / 2
         self.offset_y = (alto_disp - alto_real_mapa) / 2
+
+    def _scroll_pickers(self, event):
+        if getattr(event, "num", None) == 4:
+            unidades = -1
+        elif getattr(event, "num", None) == 5:
+            unidades = 1
+        else:
+            unidades = int(-event.delta / 120)
+        if unidades:
+            self.canvas_pickers.yview_scroll(unidades, "units")
+
+    def btn_cerrar_aplicacion(self):
+        if self.on_cerrar:
+            self.on_cerrar()
+            return
+        pausar = getattr(self.simulacion, "pausar", None)
+        if pausar is not None:
+            pausar()
+        self.root.destroy()
 
     def _on_canvas_resize(self, event):
         self._recalcular_dimensiones()
@@ -499,6 +582,9 @@ class Ventana(tk.Frame):
             if picker_id not in self.lbl_carga_pickers:
                 lbl = tk.Label(self.frame_carga_pickers, text="", bg="#f8fafc", font=("Arial", 9), justify=tk.LEFT, anchor="w", wraplength=340)
                 lbl.pack(fill=tk.X, pady=2)
+                lbl.bind("<MouseWheel>", self._scroll_pickers)
+                lbl.bind("<Button-4>", self._scroll_pickers)
+                lbl.bind("<Button-5>", self._scroll_pickers)
                 self.lbl_carga_pickers[picker_id] = [lbl]
 
             cantidad_actual = picker.get("productos_transportados", 0)

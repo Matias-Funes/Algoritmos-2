@@ -11,6 +11,7 @@ from src.ui.estilos import (
     FUENTE,
     GRIS_VERDOSO,
     NEGRO_AZULADO,
+    ROJO,
     VERDE_OSCURO,
     crear_boton,
     px,
@@ -25,7 +26,13 @@ class VistaMenu(tk.Frame):
     """Menú principal: cargar JSON, configuración manual e iniciar simulación."""
 
     def __init__(
-        self, master, on_cargar_json, on_config_manual, on_iniciar, on_cargar_partida
+        self,
+        master,
+        on_cargar_json,
+        on_config_manual,
+        on_iniciar,
+        on_cargar_partida,
+        on_cerrar,
     ):
         super().__init__(master, bg=CREMA_PRINCIPAL)
 
@@ -129,6 +136,25 @@ class VistaMenu(tk.Frame):
             justify=tk.CENTER,
         )
         self.lbl_aviso.grid(row=6, column=0, columnspan=2, pady=(10, 0))
+
+        btn_cerrar = crear_boton(
+            contenedor,
+            "Cerrar aplicación",
+            on_cerrar,
+            width=24,
+            primario=False,
+            bg=ROJO,
+            fg=BLANCO,
+            activebackground="#9F3939",
+            activeforeground=BLANCO,
+        )
+        btn_cerrar.bind(
+            "<Enter>", lambda _event: btn_cerrar.config(bg="#9F3939")
+        )
+        btn_cerrar.bind(
+            "<Leave>", lambda _event: btn_cerrar.config(bg=ROJO)
+        )
+        btn_cerrar.grid(row=7, column=1, sticky="ew", pady=(12, 0))
 
     # --- API para el controlador ---
     def set_archivo_json(self, nombre=None):
