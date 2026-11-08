@@ -167,7 +167,7 @@ def _crear_waves(
                 wave_id=f"WAVE_{siguiente_wave_id:03d}",
                 capacidad_max_pedidos=max_pedidos,
                 capacidad_max_productos=max_productos,
-                peso_max_kg=picker_elegido.capacidad_carga_kg # ¡Límite correcto por picker!
+                peso_max_kg=configuracion.get("wave_max_peso_kg", 100000.0)
             )
             siguiente_wave_id += 1
 
@@ -338,9 +338,13 @@ class _SimulationTk:
         recogidos_en_fase = (
             0 if self._fase_completada else estado["productos_recogidos"]
         )
+        total_productos_fase = estado["total_productos"]
         estado["productos_recogidos"] = (
             self._productos_recogidos_acumulados + recogidos_en_fase
         )
+        estado["total_productos_wave_actual"] = total_productos_fase
+        # Exponer métrica de la wave actual
+        estado["productos_recogidos_wave_actual"] = recogidos_en_fase
         distancia_en_fase = (
             0 if self._fase_completada else estado["distancia"]
         )

@@ -103,6 +103,8 @@ class Ventana(tk.Frame):
         self.lbl_paso.pack(anchor="w")
         self.lbl_productos = tk.Label(self.panel, text="Productos Recogidos: 0 / 0", font=("Arial", 10), bg="#f8fafc")
         self.lbl_productos.pack(anchor="w")
+        self.lbl_productos_wave = tk.Label(self.panel, text="Recogidos Wave Actual: 0", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_productos_wave.pack(anchor="w")
         self.lbl_distancia = tk.Label(self.panel, text="Distancia Total: 0 m", font=("Arial", 10), bg="#f8fafc")
         self.lbl_distancia.pack(anchor="w")
         self.lbl_altura = tk.Label(self.panel, text="Última altura recogida: Nivel 0", font=("Arial", 10), bg="#f8fafc")
@@ -450,6 +452,9 @@ class Ventana(tk.Frame):
         self.lbl_wave.config(text=f"Wave: {estado.get('wave_actual', 0)} / {estado.get('waves_totales', 0)}")
         self.lbl_paso.config(text=f"Paso actual: {estado.get('paso_actual', 0)}")
         self.lbl_productos.config(text=f"Productos Recogidos: {estado.get('productos_recogidos', 0)} / {estado.get('total_productos', 0)}")
+        rec_wave = estado.get('productos_recogidos_wave_actual', 0)
+        tot_wave = estado.get('total_productos_wave_actual', 0)
+        self.lbl_productos_wave.config(text=f"Recogidos Wave Actual: {rec_wave} / {tot_wave}")
         self.lbl_distancia.config(text=f"Distancia Total: {estado.get('distancia', 0)} m")
         self.lbl_altura.config(text=f"Última altura recogida: Nivel {estado.get('ultima_altura', 0)}")
 
