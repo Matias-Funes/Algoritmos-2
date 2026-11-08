@@ -256,6 +256,50 @@ class TestViajesDinamicos(unittest.TestCase):
         # La nueva ruta debe empezar en la posición actual del picker
         self.assertEqual(ruta_paso_1[0], tuple(picker.posicion_actual))
 
+    def test_cuatro_pickers_aparecen_en_estado_y_rutas_pendientes(self):
+        warehouse = Warehouse(8, 6)
+        warehouse.rellenar_pasillos_implicitos()
+        producto_1 = Producto("P001", "Producto 1", "R1", (6, 4, 1), 1, 1.0)
+        producto_2 = Producto("P002", "Producto 2", "R2", (7, 5, 1), 1, 1.0)
+        picker_1 = Picker("PK_01", (0, 0), 1.0)
+        picker_2 = Picker("PK_02", (1, 1), 1.0)
+        picker_3 = Picker("PK_03", (2, 2), 1.0)  # sin trabajo
+        picker_4 = Picker("PK_04", (3, 3), 1.0)  # sin trabajo
+        pedidos_1 = [Orden("PED_01", 1, [("P001", 1)])]
+        pedidos_2 = [Orden("PED_02", 1, [("P002", 1)])]
+        grafo = construir_grafo(warehouse)
+        simulacion = Simulation(
+            warehouse=warehouse,
+            pickers=[picker_1, picker_2, picker_3, picker_4],
+            productos=[producto_1, producto_2],
+            asignaciones={
+                picker_1.id: pedidos_1,
+                picker_2.id: pedidos_2,
+                picker_3.id: [],
+                picker_4.id: [],
+            },
+            cache_distancias=CacheDistancias(grafo),
+            puntos_despacho={"ZONA_A": [(0, 0)]},
+        )
+
+        estado_inicial = simulacion.get_estado()
+        self.assertEqual(len(estado_inicial["pickers"]), 4)
+
+        # Los inactivos no deben desaparecer del estado
+        inactivos = [p for p in estado_inicial["pickers"] if not p["activo"]]
+        self.assertEqual(len(inactivos), 2)
+        self.assertEqual(inactivos[0]["id"], "PK_03")
+        self.assertEqual(inactivos[1]["id"], "PK_04")
+
+        # Validar que el camino pendiente se recorta al avanzar
+        ruta_inicial = estado_inicial["rutas"][0]
+        simulacion.avanzar_paso()
+        estado_paso_1 = simulacion.get_estado()
+        ruta_paso_1 = estado_paso_1["rutas"][0]
+
+        self.assertEqual(len(ruta_paso_1), len(ruta_inicial) - 1)
+        self.assertEqual(ruta_paso_1[0], tuple(picker_1.posicion_actual))
+
 
 if __name__ == "__main__":
     unittest.main()
