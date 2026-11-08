@@ -15,6 +15,7 @@ from src.ui.estilos import (
     FUENTE_TITULO,
     ROJO,
     crear_boton,
+    px,
 )
 
 COLOR_VOLVER_TERMINADA = "#10b981"
@@ -194,10 +195,17 @@ class Ventana(tk.Frame):
             bg="#f8fafc",
             highlightthickness=0,
         )
-        scrollbar_pickers = ttk.Scrollbar(
+        scrollbar_pickers = tk.Scrollbar(
             frame_lista_pickers,
             orient=tk.VERTICAL,
             command=self.canvas_pickers.yview,
+            width=px(14),
+            bg="#cbd5e1",
+            activebackground="#64748b",
+            troughcolor="#f1f5f9",
+            relief=tk.FLAT,
+            bd=0,
+            highlightthickness=0,
         )
         self.canvas_pickers.configure(yscrollcommand=scrollbar_pickers.set)
         self.canvas_pickers.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -231,10 +239,17 @@ class Ventana(tk.Frame):
         frame_pedidos = tk.Frame(self.panel, bg="#f8fafc")
         frame_pedidos.pack(fill=tk.BOTH, expand=True)
         self.txt_pedidos = tk.Text(frame_pedidos, height=8, width=38, font=("Segoe UI", 9), bg="#ffffff", state=tk.DISABLED, relief=tk.FLAT, padx=8, pady=8, highlightthickness=1, highlightbackground="#cbd5e1")
-        scrollbar_pedidos = ttk.Scrollbar(
+        scrollbar_pedidos = tk.Scrollbar(
             frame_pedidos,
             orient=tk.VERTICAL,
             command=self.txt_pedidos.yview,
+            width=px(14),
+            bg="#cbd5e1",
+            activebackground="#64748b",
+            troughcolor="#f1f5f9",
+            relief=tk.FLAT,
+            bd=0,
+            highlightthickness=0,
         )
         self.txt_pedidos.configure(yscrollcommand=scrollbar_pedidos.set)
         self.txt_pedidos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -754,9 +769,13 @@ class Ventana(tk.Frame):
 
         rutas = estado.get('rutas', [])
         pickers_estado = estado.get('pickers', [])
+        colores_por_picker = {
+            picker["id"]: COLORES_PICKERS[i % len(COLORES_PICKERS)]
+            for i, picker in enumerate(pickers_estado)
+        }
 
         for i, p in enumerate(pickers_estado):
-            color = COLORES_PICKERS[i % len(COLORES_PICKERS)]
+            color = colores_por_picker[p["id"]]
             self.dibujar_recorrido(
                 p["id"], rutas[i] if i < len(rutas) else [], color=color
             )
@@ -786,12 +805,56 @@ class Ventana(tk.Frame):
         for picker in pickers_estado:
             picker_id = picker["id"]
             if picker_id not in self.lbl_carga_pickers:
-                lbl = tk.Label(self.frame_carga_pickers, text="", bg="#f8fafc", font=("Segoe UI", 9), justify=tk.LEFT, anchor="w", wraplength=340)
-                lbl.pack(fill=tk.X, pady=2)
-                lbl.bind("<MouseWheel>", self._scroll_pickers)
-                lbl.bind("<Button-4>", self._scroll_pickers)
-                lbl.bind("<Button-5>", self._scroll_pickers)
-                self.lbl_carga_pickers[picker_id] = [lbl]
+                tarjeta = tk.Frame(
+                    self.frame_carga_pickers,
+                    bg="#ffffff",
+                    padx=8,
+                    pady=5,
+                    highlightthickness=1,
+                    highlightbackground="#e2e8f0",
+                )
+                tarjeta.pack(fill=tk.X, pady=2, padx=(0, 3))
+                encabezado = tk.Frame(tarjeta, bg="#ffffff")
+                encabezado.pack(fill=tk.X)
+                lbl_id = tk.Label(
+                    encabezado,
+                    text=picker_id,
+                    bg="#ffffff",
+                    fg=colores_por_picker[picker_id],
+                    font=FUENTE_NEGRITA,
+                    anchor="w",
+                )
+                lbl_id.pack(side=tk.LEFT)
+                lbl_resumen = tk.Label(
+                    encabezado,
+                    text="",
+                    bg="#ffffff",
+                    fg="#475569",
+                    font=FUENTE,
+                    anchor="e",
+                )
+                lbl_resumen.pack(side=tk.RIGHT)
+                lbl_detalle = tk.Label(
+                    tarjeta,
+                    text="",
+                    bg="#ffffff",
+                    fg="#334155",
+                    font=("Segoe UI", 9),
+                    justify=tk.LEFT,
+                    anchor="w",
+                    wraplength=340,
+                )
+                lbl_detalle.pack(fill=tk.X, pady=(3, 0))
+                for widget in (tarjeta, encabezado, lbl_id, lbl_resumen, lbl_detalle):
+                    widget.bind("<MouseWheel>", self._scroll_pickers)
+                    widget.bind("<Button-4>", self._scroll_pickers)
+                    widget.bind("<Button-5>", self._scroll_pickers)
+                self.lbl_carga_pickers[picker_id] = [
+                    tarjeta,
+                    lbl_id,
+                    lbl_resumen,
+                    lbl_detalle,
+                ]
 
             cantidad_actual = picker.get("productos_transportados", 0)
             cantidad_objetivo = picker.get("productos_objetivo", 0)
@@ -811,8 +874,15 @@ class Ventana(tk.Frame):
             if wave_str == "-":
                 wave_str = "Sin wave"
 
-            texto = f"• {picker_id} | {wave_str}  ({cantidad_actual}/{cantidad_objetivo} items)\n  {estado_texto}\n  {detalle}"
-            self.lbl_carga_pickers[picker_id][0].config(text=texto)
+            tarjeta, lbl_id, lbl_resumen, lbl_detalle = (
+                self.lbl_carga_pickers[picker_id]
+            )
+            color_picker = colores_por_picker[picker_id]
+            lbl_id.config(fg=color_picker)
+            lbl_resumen.config(
+                text=f"{wave_str}  ·  {cantidad_actual}/{cantidad_objetivo} items"
+            )
+            lbl_detalle.config(text=f"{estado_texto}\n{detalle}")
 
         self.txt_pedidos.config(state=tk.NORMAL)
         self.txt_pedidos.delete(1.0, tk.END)
@@ -822,6 +892,11 @@ class Ventana(tk.Frame):
             self.txt_pedidos.insert(tk.END, "No hay pedidos pendientes.\n¡Wave completada!")
         else:
             es_anidado = bool(pedidos) and isinstance(list(pedidos.values())[0], dict)
+            tags_por_picker = {
+                picker_id: f"picker_id_{indice}"
+                for indice, picker_id in enumerate(colores_por_picker)
+            }
+
             def obtener_altura(pid):
                 try:
                     inv = getattr(self.simulacion, "inventario", None)
@@ -834,7 +909,18 @@ class Ventana(tk.Frame):
             if es_anidado:
                 for picker_id, demanda in pedidos.items():
                     if demanda:
-                        self.txt_pedidos.insert(tk.END, f"Picker {picker_id}:\n")
+                        tag_picker = tags_por_picker[picker_id]
+                        self.txt_pedidos.tag_configure(
+                            tag_picker,
+                            foreground=colores_por_picker[picker_id],
+                            font=FUENTE_NEGRITA,
+                        )
+                        self.txt_pedidos.insert(tk.END, "Picker ")
+                        inicio_id = self.txt_pedidos.index("end-1c")
+                        self.txt_pedidos.insert(tk.END, picker_id)
+                        fin_id = self.txt_pedidos.index("end-1c")
+                        self.txt_pedidos.tag_add(tag_picker, inicio_id, fin_id)
+                        self.txt_pedidos.insert(tk.END, ":\n")
                         for prod_id, cant in demanda.items():
                             self.txt_pedidos.insert(tk.END, f"  - {prod_id}: {cant} u, alt ({obtener_altura(prod_id)})\n")
             else:
