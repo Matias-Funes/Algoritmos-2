@@ -17,17 +17,30 @@ COLORES_PICKERS = [
 class Ventana(tk.Frame):
     """Vista de la simulación con escalado automático del mapa (Zoom to Fit)."""
 
-    def __init__(self, warehouse, tamano_celda=30, master=None, on_volver=None):
+    def __init__(
+        self,
+        warehouse,
+        tamano_celda=30,
+        master=None,
+        on_volver=None,
+        on_cerrar=None,
+    ):
         super().__init__(master)
         self.warehouse = warehouse
         self.tamano_celda = tamano_celda
         self.simulacion = None
         self.on_volver = on_volver
+        self.on_cerrar = on_cerrar
         self.en_ejecucion = False
         self.root = self.winfo_toplevel()
 
         self.offset_x = 0
         self.offset_y = 0
+        self._geometria_dibujada = None
+        self._stock_por_celda = {}
+        self._productos_recogidos_stock = None
+        self._rutas_dibujadas = {}
+        self._items_pickers = {}
 
         if master is None:
             self.root.title("Wave Picking - Simulador")
@@ -39,6 +52,17 @@ class Ventana(tk.Frame):
         # ==========================================
         self.top_bar = tk.Frame(self, bg="#ffffff", padx=10, pady=10, highlightthickness=1, highlightbackground="#cbd5e1")
         self.top_bar.pack(side=tk.TOP, fill=tk.X)
+
+        tk.Button(
+            self.top_bar,
+            text="✕ Cerrar",
+            command=self.btn_cerrar_aplicacion,
+            font=("Arial", 9, "bold"),
+            relief=tk.FLAT,
+            bg="#fee2e2",
+            padx=10,
+            pady=4,
+        ).pack(side=tk.RIGHT, padx=(8, 0))
 
         # Botón Volver (Izquierda)
         self.btn_volver = tk.Button(self.top_bar, text="← Volver al menú", command=self.btn_volver_menu, font=("Arial", 10, "bold"), relief=tk.FLAT, bg="#f1f5f9", padx=10)
@@ -120,14 +144,59 @@ class Ventana(tk.Frame):
 
         # 2. Panel de Pickers
         tk.Label(self.panel, text="Estado Pickers", font=("Arial", 12, "bold"), bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(20, 5))
-        self.frame_carga_pickers = tk.Frame(self.panel, bg="#f8fafc")
-        self.frame_carga_pickers.pack(fill=tk.X)
+        frame_lista_pickers = tk.Frame(self.panel, bg="#f8fafc")
+        frame_lista_pickers.pack(fill=tk.X)
+        self.canvas_pickers = tk.Canvas(
+            frame_lista_pickers,
+            height=180,
+            bg="#f8fafc",
+            highlightthickness=0,
+        )
+        scrollbar_pickers = ttk.Scrollbar(
+            frame_lista_pickers,
+            orient=tk.VERTICAL,
+            command=self.canvas_pickers.yview,
+        )
+        self.canvas_pickers.configure(yscrollcommand=scrollbar_pickers.set)
+        self.canvas_pickers.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        scrollbar_pickers.pack(side=tk.RIGHT, fill=tk.Y)
+        self.frame_carga_pickers = tk.Frame(self.canvas_pickers, bg="#f8fafc")
+        self._ventana_pickers = self.canvas_pickers.create_window(
+            (0, 0), window=self.frame_carga_pickers, anchor="nw"
+        )
+        self.frame_carga_pickers.bind(
+            "<Configure>",
+            lambda _event: self.canvas_pickers.configure(
+                scrollregion=self.canvas_pickers.bbox("all")
+            ),
+        )
+        self.canvas_pickers.bind(
+            "<Configure>",
+            lambda event: self.canvas_pickers.itemconfigure(
+                self._ventana_pickers, width=event.width
+            ),
+        )
+        self.canvas_pickers.bind("<MouseWheel>", self._scroll_pickers)
+        self.canvas_pickers.bind("<Button-4>", self._scroll_pickers)
+        self.canvas_pickers.bind("<Button-5>", self._scroll_pickers)
+        self.frame_carga_pickers.bind("<MouseWheel>", self._scroll_pickers)
+        self.frame_carga_pickers.bind("<Button-4>", self._scroll_pickers)
+        self.frame_carga_pickers.bind("<Button-5>", self._scroll_pickers)
         self.lbl_carga_pickers = {}
 
         # 3. Pedidos de la Wave
         tk.Label(self.panel, text="Pedidos en Wave", font=("Arial", 12, "bold"), bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(20, 5))
-        self.txt_pedidos = tk.Text(self.panel, height=8, width=38, font=("Arial", 9), bg="#ffffff", state=tk.DISABLED, relief=tk.FLAT, padx=5, pady=5, highlightthickness=1, highlightbackground="#cbd5e1")
-        self.txt_pedidos.pack(fill=tk.BOTH, expand=True)
+        frame_pedidos = tk.Frame(self.panel, bg="#f8fafc")
+        frame_pedidos.pack(fill=tk.BOTH, expand=True)
+        self.txt_pedidos = tk.Text(frame_pedidos, height=8, width=38, font=("Arial", 9), bg="#ffffff", state=tk.DISABLED, relief=tk.FLAT, padx=5, pady=5, highlightthickness=1, highlightbackground="#cbd5e1")
+        scrollbar_pedidos = ttk.Scrollbar(
+            frame_pedidos,
+            orient=tk.VERTICAL,
+            command=self.txt_pedidos.yview,
+        )
+        self.txt_pedidos.configure(yscrollcommand=scrollbar_pedidos.set)
+        self.txt_pedidos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar_pedidos.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Área del Mapa (Derecha)
         self.frame_mapa = tk.Frame(self.main_area, bg="#e2e8f0")
@@ -157,13 +226,56 @@ class Ventana(tk.Frame):
         self.offset_x = (ancho_disp - ancho_real_mapa) / 2
         self.offset_y = (alto_disp - alto_real_mapa) / 2
 
+    def _scroll_pickers(self, event):
+        if getattr(event, "num", None) == 4:
+            unidades = -1
+        elif getattr(event, "num", None) == 5:
+            unidades = 1
+        else:
+            unidades = int(-event.delta / 120)
+        if unidades:
+            self.canvas_pickers.yview_scroll(unidades, "units")
+
+    def btn_cerrar_aplicacion(self):
+        if self.on_cerrar:
+            self.on_cerrar()
+            return
+        pausar = getattr(self.simulacion, "pausar", None)
+        if pausar is not None:
+            pausar()
+        self.root.destroy()
+
     def _on_canvas_resize(self, event):
         self._recalcular_dimensiones()
         if self.simulacion:
             self.actualizar_desde_simulacion()
-        else:
-            self.canvas.delete("all")
-            self.dibujar_warehouse(self._obtener_stock_por_celda())
+        elif self._geometria_canvas() != self._geometria_dibujada:
+            self._dibujar_fondo()
+
+    def _geometria_canvas(self):
+        return (
+            self.canvas.winfo_width(),
+            self.canvas.winfo_height(),
+            self.tamano_celda,
+            self.offset_x,
+            self.offset_y,
+        )
+
+    def _dibujar_fondo(self):
+        self.canvas.delete("all")
+        self._rutas_dibujadas.clear()
+        self._items_pickers.clear()
+        self.dibujar_warehouse(self._stock_por_celda)
+        self._geometria_dibujada = self._geometria_canvas()
+
+    def _actualizar_iconos_stock(self, stock_map):
+        self.canvas.delete("stock")
+        for (x, y), cantidad in stock_map.items():
+            if cantidad > 0:
+                self._dibujar_icono_paquete(*self._obtener_centro(x, y), tag="stock")
+        if any(datos["items"] for datos in self._rutas_dibujadas.values()):
+            self.canvas.tag_lower("stock", "rutas")
+        self._stock_por_celda = stock_map
 
     def set_simulacion(self, sim):
         self.simulacion = sim
@@ -377,13 +489,16 @@ class Ventana(tk.Frame):
                 elif cell.tipo == PUERTA: color = "#f59e0b"
                 elif cell.tipo == "VACIA": color = "#cbd5e1"
 
-                self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="#e2e8f0")
+                self.canvas.create_rectangle(
+                    x1, y1, x2, y2, fill=color, outline="#e2e8f0",
+                    tags=("warehouse",),
+                )
 
                 if cell.tipo == RACK:
                     stock = stock_map.get((x, y), 0)
                     if stock > 0:
                         cx, cy = self._obtener_centro(x, y)
-                        self._dibujar_icono_paquete(cx, cy)
+                        self._dibujar_icono_paquete(cx, cy, tag="stock")
 
                 if cell.tipo == PASILLO and cell.sentido != AMBOS:
                     cx, cy = self._obtener_centro(x, y)
@@ -393,24 +508,119 @@ class Ventana(tk.Frame):
                     elif cell.sentido == E: flecha = "→"
                     elif cell.sentido == O: flecha = "←"
                     font_size = max(6, int(self.tamano_celda * 0.6))
-                    self.canvas.create_text(cx, cy, text=flecha, fill="#64748b", font=("Arial", font_size, "bold"))
+                    self.canvas.create_text(
+                        cx, cy, text=flecha, fill="#64748b",
+                        font=("Arial", font_size, "bold"), tags=("warehouse",),
+                    )
 
-    def _dibujar_icono_paquete(self, cx, cy):
+    def _dibujar_icono_paquete(self, cx, cy, tag="stock"):
         tam = self.tamano_celda * 0.45
         x1, y1 = cx - tam, cy - tam
         x2, y2 = cx + tam, cy + tam
-        self.canvas.create_rectangle(x1, y1, x2, y2, fill="#d97706", outline="#190b03", width=1)
-        self.canvas.create_line(x1, cy, x2, cy, fill="#fde68a", width=1)
-        self.canvas.create_line(cx, y1, cx, y2, fill="#fde68a", width=1)
+        self.canvas.create_rectangle(
+            x1, y1, x2, y2, fill="#d97706", outline="#190b03", width=1,
+            tags=(tag,),
+        )
+        self.canvas.create_line(
+            x1, cy, x2, cy, fill="#fde68a", width=1, tags=(tag,)
+        )
+        self.canvas.create_line(
+            cx, y1, cx, y2, fill="#fde68a", width=1, tags=(tag,)
+        )
 
-    def dibujar_recorrido(self, ruta, color="#0ea5e9"):
-        if not ruta or len(ruta) < 2: return
-        puntos_px = []
-        for (x, y) in ruta:
-            cx, cy = self._obtener_centro(x, y)
-            puntos_px.extend([cx, cy])
+    def _crear_segmento_ruta(self, picker_id, origen, destino, color, grosor):
+        x1, y1 = self._obtener_centro(*origen)
+        x2, y2 = self._obtener_centro(*destino)
+        return self.canvas.create_line(
+            x1, y1, x2, y2,
+            fill=color,
+            width=grosor,
+            dash=(4, 2),
+            arrow=tk.LAST,
+            tags=("rutas", f"ruta:{picker_id}"),
+        )
+
+    def dibujar_recorrido(self, picker_id, ruta, color="#0ea5e9"):
+        nueva_ruta = tuple(tuple(punto) for punto in ruta)
+        datos = self._rutas_dibujadas.get(picker_id)
+        if datos is None:
+            datos = {"ruta": (), "items": [], "color": color}
+            self._rutas_dibujadas[picker_id] = datos
+
+        ruta_anterior = datos["ruta"]
+        items = datos["items"]
+        if nueva_ruta == ruta_anterior:
+            return
+
+        prefijo = 0
+        while (
+            prefijo < min(len(ruta_anterior), len(nueva_ruta))
+            and ruta_anterior[prefijo] == nueva_ruta[prefijo]
+        ):
+            prefijo += 1
+        sufijo = 0
+        while (
+            sufijo < min(len(ruta_anterior), len(nueva_ruta)) - prefijo
+            and ruta_anterior[-(sufijo + 1)] == nueva_ruta[-(sufijo + 1)]
+        ):
+            sufijo += 1
+
+        aristas_comunes_inicio = max(0, prefijo - 1)
+        aristas_comunes_final = min(
+            max(0, sufijo - 1),
+            max(
+                0,
+                min(len(ruta_anterior), len(nueva_ruta))
+                - 1
+                - aristas_comunes_inicio,
+            ),
+        )
+        aristas_nuevas = max(0, len(nueva_ruta) - 1)
+        aristas_comunes_final = min(
+            aristas_comunes_final,
+            max(0, aristas_nuevas - aristas_comunes_inicio),
+        )
+
+        conservar_inicio = items[:aristas_comunes_inicio]
+        conservar_final = (
+            items[-aristas_comunes_final:]
+            if aristas_comunes_final
+            else []
+        )
+        conservar = set(conservar_inicio + conservar_final)
+        for item in items:
+            if item not in conservar:
+                self.canvas.delete(item)
+
         grosor = max(1, int(self.tamano_celda * 0.1))
-        self.canvas.create_line(puntos_px, fill=color, width=grosor, dash=(4, 2), arrow=tk.LAST)
+        nuevos_items = []
+        fin_nuevas_aristas = aristas_nuevas - aristas_comunes_final
+        for indice in range(aristas_comunes_inicio, fin_nuevas_aristas):
+            nuevos_items.append(
+                self._crear_segmento_ruta(
+                    picker_id,
+                    nueva_ruta[indice],
+                    nueva_ruta[indice + 1],
+                    color,
+                    grosor,
+                )
+            )
+        for item in nuevos_items:
+            self.canvas.itemconfigure(item, arrow=tk.NONE)
+
+        items = conservar_inicio + nuevos_items + conservar_final
+        if items:
+            ultimo_anterior = datos["items"][-1] if datos["items"] else None
+            if (
+                ultimo_anterior in conservar
+                and ultimo_anterior != items[-1]
+            ):
+                self.canvas.itemconfigure(ultimo_anterior, arrow=tk.NONE)
+            self.canvas.itemconfigure(items[-1], arrow=tk.LAST)
+
+        datos["ruta"] = nueva_ruta
+        datos["items"] = items
+        datos["color"] = color
 
     def dibujar_picker(self, x, y, p_data, color="#ef4444"):
         cx, cy = self._obtener_centro(x, y)
@@ -419,58 +629,86 @@ class Ventana(tk.Frame):
         if p_data.get("recolectando", False):
             color = "#10b981"
 
-        # 1. Dibujamos el círculo
-        self.canvas.create_oval(cx - radio, cy - radio, cx + radio, cy + radio, fill=color, outline="#1e293b", width=1)
-
-        # 2. Número en el centro del círculo
         inicial = str(p_data['id'])[-1]
         font_size = max(6, int(self.tamano_celda * 0.4))
-        self.canvas.create_text(cx, cy, text=inicial, fill="white", font=("Arial", font_size, "bold"))
-
-        # 3. ETIQUETAS (Solo si el toggle está activo)
-        if self.mostrar_etiquetas.get():
-            wave_str = p_data.get('wave_actual', '-')
-            if wave_str == "-":
-                wave_str = "Sin wave"
-
-            carga = p_data.get('carga_actual_kg', 0)
-            cap = p_data.get('capacidad_carga_kg', 0)
-
-            # ID ARRIBA
-            font_id = max(9, int(self.tamano_celda * 0.45))
-            self.canvas.create_text(
-                cx, cy - radio - 2,
-                text=p_data['id'], fill=color,
-                font=("Arial", font_id, "bold"), anchor=tk.S
+        items = self._items_pickers.get(p_data["id"])
+        if items is None:
+            circulo = self.canvas.create_oval(
+                0, 0, 0, 0, fill=color, outline="#1e293b", width=1
             )
-
-            # PESO Y WAVE ABAJO
-            texto_detalle = f"{carga:.0f}/{cap:.0f}kg\n{wave_str}"
-            font_detalle = max(9, int(self.tamano_celda * 0.42))
-            self.canvas.create_text(
-                cx, cy + radio + 2,
-                text=texto_detalle, fill=color,
-                font=("Arial", font_detalle, "bold"),
-                justify=tk.CENTER, anchor=tk.N
+            numero = self.canvas.create_text(
+                cx, cy, text=inicial, fill="white",
+                font=("Arial", font_size, "bold"),
             )
+            etiqueta_id = self.canvas.create_text(0, 0, anchor=tk.S)
+            etiqueta_detalle = self.canvas.create_text(
+                0, 0, justify=tk.CENTER, anchor=tk.N
+            )
+            items = (circulo, numero, etiqueta_id, etiqueta_detalle)
+            self._items_pickers[p_data["id"]] = items
+
+        circulo, numero, etiqueta_id, etiqueta_detalle = items
+        self.canvas.coords(circulo, cx - radio, cy - radio, cx + radio, cy + radio)
+        self.canvas.itemconfigure(circulo, fill=color)
+        self.canvas.coords(numero, cx, cy)
+        self.canvas.itemconfigure(numero, text=inicial, font=("Arial", font_size, "bold"))
+
+        wave_str = p_data.get("wave_actual", "-")
+        if wave_str == "-":
+            wave_str = "Sin wave"
+        carga = p_data.get("carga_actual_kg", 0)
+        cap = p_data.get("capacidad_carga_kg", 0)
+        font_id = max(9, int(self.tamano_celda * 0.45))
+        self.canvas.coords(etiqueta_id, cx, cy - radio - 2)
+        self.canvas.itemconfigure(
+            etiqueta_id,
+            text=p_data["id"],
+            fill=color,
+            font=("Arial", font_id, "bold"),
+            state=tk.NORMAL if self.mostrar_etiquetas.get() else tk.HIDDEN,
+        )
+        font_detalle = max(9, int(self.tamano_celda * 0.42))
+        self.canvas.coords(etiqueta_detalle, cx, cy + radio + 2)
+        self.canvas.itemconfigure(
+            etiqueta_detalle,
+            text=f"{carga:.0f}/{cap:.0f}kg\n{wave_str}",
+            fill=color,
+            font=("Arial", font_detalle, "bold"),
+            state=tk.NORMAL if self.mostrar_etiquetas.get() else tk.HIDDEN,
+        )
+        for item in items:
+            self.canvas.tag_raise(item)
 
     def actualizar_desde_simulacion(self):
         if not self.simulacion: return
         self._recalcular_dimensiones()
 
         estado = self.simulacion.get_estado()
-        self.canvas.delete("all")
+        productos_recogidos = estado.get("productos_recogidos")
+        actualizar_stock = False
+        if (
+            self._productos_recogidos_stock is None
+            or productos_recogidos != self._productos_recogidos_stock
+        ):
+            stock_map = self._obtener_stock_por_celda()
+            self._productos_recogidos_stock = productos_recogidos
+            if stock_map != self._stock_por_celda:
+                self._stock_por_celda = stock_map
+                actualizar_stock = True
 
-        stock_map = self._obtener_stock_por_celda()
-        self.dibujar_warehouse(stock_map)
+        if self._geometria_canvas() != self._geometria_dibujada:
+            self._dibujar_fondo()
+        elif actualizar_stock:
+            self._actualizar_iconos_stock(self._stock_por_celda)
 
         rutas = estado.get('rutas', [])
         pickers_estado = estado.get('pickers', [])
 
         for i, p in enumerate(pickers_estado):
             color = COLORES_PICKERS[i % len(COLORES_PICKERS)]
-            if i < len(rutas):
-                self.dibujar_recorrido(rutas[i], color=color)
+            self.dibujar_recorrido(
+                p["id"], rutas[i] if i < len(rutas) else [], color=color
+            )
 
             # --- RESOLUCIÓN: Tu lógica de gris, eliminando la duplicación ---
             color_picker = color if p.get("activo", True) else "#94a3b8"
@@ -499,6 +737,9 @@ class Ventana(tk.Frame):
             if picker_id not in self.lbl_carga_pickers:
                 lbl = tk.Label(self.frame_carga_pickers, text="", bg="#f8fafc", font=("Arial", 9), justify=tk.LEFT, anchor="w", wraplength=340)
                 lbl.pack(fill=tk.X, pady=2)
+                lbl.bind("<MouseWheel>", self._scroll_pickers)
+                lbl.bind("<Button-4>", self._scroll_pickers)
+                lbl.bind("<Button-5>", self._scroll_pickers)
                 self.lbl_carga_pickers[picker_id] = [lbl]
 
             cantidad_actual = picker.get("productos_transportados", 0)

@@ -84,6 +84,9 @@ class Simulation:
             zona_id: list(dict.fromkeys(tuple(punto) for punto in puntos))
             for zona_id, puntos in (puntos_despacho or {}).items()
         }
+        self._celdas_recoleccion_cache: dict[
+            int, tuple[tuple[int, int], ...]
+        ] = {}
         self._ticks_bloqueado = {
             picker.id: 0 for picker in self.pickers
         }
@@ -380,6 +383,10 @@ class Simulation:
             picker.tiempo_recoleccion = 0
 
     def _celdas_recoleccion(self, producto: Any) -> list[tuple[int, int]]:
+        cache_key = id(producto)
+        if cache_key in self._celdas_recoleccion_cache:
+            return list(self._celdas_recoleccion_cache[cache_key])
+
         ubicacion = self._valor(producto, "ubicacion")
         if isinstance(ubicacion, dict):
             x, y = int(ubicacion["x"]), int(ubicacion["y"])
@@ -387,7 +394,9 @@ class Simulation:
             x, y = int(ubicacion[0]), int(ubicacion[1])
 
         if self.warehouse is None or not hasattr(self.warehouse, "grid"):
-            return [(x, y)]
+            puntos = [(x, y)]
+            self._celdas_recoleccion_cache[cache_key] = tuple(puntos)
+            return puntos
 
         puntos = []
         if self.warehouse.grid[y][x].es_transitable():
@@ -400,7 +409,9 @@ class Simulation:
                 and self.warehouse.grid[ny][nx].es_transitable()
             ):
                 puntos.append((nx, ny))
-        return list(dict.fromkeys(puntos))
+        puntos = list(dict.fromkeys(puntos))
+        self._celdas_recoleccion_cache[cache_key] = tuple(puntos)
+        return puntos
 
     def _registrar_faltante(
         self,
@@ -426,10 +437,17 @@ class Simulation:
         picker: Any,
         origen: tuple[int, int],
         destinos: list[tuple[int, int]],
+        busqueda: tuple[
+            tuple[int, int],
+            dict[tuple[int, int], float],
+            dict[tuple[int, int], tuple[int, int]],
+        ] | None = None,
     ) -> tuple[tuple[int, int], list[tuple[int, int]]] | None:
+        if busqueda is None:
+            busqueda = self._calcular_distancias_con_picker(picker, origen)
         mejor: tuple[float, tuple[int, int], list[tuple[int, int]]] | None = None
         for destino in destinos:
-            ruta = self._camino_con_picker(picker, destino)
+            ruta = self._camino_desde_busqueda(picker, destino, busqueda)
             if ruta is None:
                 continue
             distancia, camino = ruta
@@ -440,17 +458,23 @@ class Simulation:
             return None
         return mejor[1], mejor[2]
 
-    def _camino_con_picker(
+    def _calcular_distancias_con_picker(
         self,
         picker: Any,
-        destino: tuple[int, int],
-    ) -> tuple[float, list[tuple[int, int]]] | None:
-        origen = tuple(picker.posicion_actual)
+        origen: tuple[int, int] | None = None,
+        destinos: set[tuple[int, int]] | None = None,
+    ) -> tuple[
+        tuple[int, int],
+        dict[tuple[int, int], float],
+        dict[tuple[int, int], tuple[int, int]],
+    ] | None:
+        """Calcula una búsqueda desde el picker para todos los destinos."""
+        origen = (
+            tuple(picker.posicion_actual) if origen is None else tuple(origen)
+        )
         grafo = getattr(self._cache_distancias, "_grafo", None)
         if grafo is None:
-            distancia = self._cache_distancias.distancia(origen, destino)
-            camino = self._cache_distancias.camino(origen, destino)
-            return (distancia, camino) if camino else None
+            return None
 
         bloqueadas = {
             tuple(otro.posicion_actual)
@@ -458,17 +482,18 @@ class Simulation:
             if otro.id != picker.id
             and self._estado_picker.get(otro.id) != "terminado"
         }
-        if destino in bloqueadas:
-            return None
-
         distancias = {origen: 0.0}
-        predecesores = {}
+        predecesores: dict[tuple[int, int], tuple[int, int]] = {}
+        destinos_pendientes = set(destinos or ())
+        destinos_pendientes.difference_update(bloqueadas)
+        destinos_pendientes.discard(origen)
         cola = [(0.0, origen)]
         while cola:
             distancia_actual, actual = heapq.heappop(cola)
             if distancia_actual != distancias.get(actual):
                 continue
-            if actual == destino:
+            destinos_pendientes.discard(actual)
+            if destinos is not None and not destinos_pendientes:
                 break
             for vecino, peso in grafo.get_neighbors(actual).items():
                 if vecino in bloqueadas:
@@ -478,14 +503,42 @@ class Simulation:
                     distancias[vecino] = nueva_distancia
                     predecesores[vecino] = actual
                     heapq.heappush(cola, (nueva_distancia, vecino))
+        return origen, distancias, predecesores
 
-        if destino not in distancias:
+    def _camino_desde_busqueda(
+        self,
+        picker: Any,
+        destino: tuple[int, int],
+        busqueda: tuple[
+            tuple[int, int],
+            dict[tuple[int, int], float],
+            dict[tuple[int, int], tuple[int, int]],
+        ] | None,
+    ) -> tuple[float, list[tuple[int, int]]] | None:
+        if busqueda is None:
+            origen = tuple(picker.posicion_actual)
+            distancia = self._cache_distancias.distancia(origen, destino)
+            camino = self._cache_distancias.camino(origen, destino)
+            return (distancia, camino) if camino else None
+
+        origen, distancias, predecesores = busqueda
+        distancia = distancias.get(destino)
+        if distancia is None:
             return None
         camino = [destino]
         while camino[-1] != origen:
             camino.append(predecesores[camino[-1]])
         camino.reverse()
-        return distancias[destino], camino
+        return distancia, camino
+
+    def _camino_con_picker(
+        self,
+        picker: Any,
+        destino: tuple[int, int],
+    ) -> tuple[float, list[tuple[int, int]]] | None:
+        origen = tuple(picker.posicion_actual)
+        busqueda = self._calcular_distancias_con_picker(picker, origen)
+        return self._camino_desde_busqueda(picker, destino, busqueda)
 
     def _establecer_tramo(
         self,
@@ -515,18 +568,39 @@ class Simulation:
         if objetivo is None:
             return False
 
+        if objetivo["tipo"] == "producto":
+            destinos = set(
+                self._celdas_recoleccion(
+                    self._productos[objetivo["producto_id"]]
+                )
+            )
+        elif objetivo["tipo"] == "despacho":
+            destinos = {
+                destino
+                for puntos in self._puntos_despacho.values()
+                for destino in puntos
+            }
+        else:
+            return False
+        busqueda = self._calcular_distancias_con_picker(
+            picker, destinos=destinos
+        )
         opciones: list[tuple[float, tuple[int, int], list[tuple[int, int]]]] = []
         if objetivo["tipo"] == "producto":
             producto = self._productos[objetivo["producto_id"]]
             for destino in self._celdas_recoleccion(producto):
-                ruta = self._camino_con_picker(picker, destino)
+                ruta = self._camino_desde_busqueda(
+                    picker, destino, busqueda
+                )
                 if ruta is not None:
                     distancia, camino = ruta
                     opciones.append((distancia, destino, camino))
         elif objetivo["tipo"] == "despacho":
             for zona_id, puntos in self._puntos_despacho.items():
                 for destino in puntos:
-                    ruta = self._camino_con_picker(picker, destino)
+                    ruta = self._camino_desde_busqueda(
+                        picker, destino, busqueda
+                    )
                     if ruta is None:
                         continue
                     distancia, camino = ruta
@@ -564,6 +638,15 @@ class Simulation:
             and self._estado_picker.get(otro.id) != "terminado"
         }
         opciones = []
+        destinos = {
+            punto
+            for puntos in self._puntos_despacho.values()
+            for punto in puntos
+            if punto not in ocupadas
+        }
+        busqueda = self._calcular_distancias_con_picker(
+            picker, destinos=destinos
+        )
         hay_punto_alcanzable = False
         puntos_ocupados = 0
         origen = tuple(picker.posicion_actual)
@@ -572,7 +655,9 @@ class Simulation:
                 if punto in ocupadas:
                     puntos_ocupados += 1
                     continue
-                ruta = self._camino_con_picker(picker, punto)
+                ruta = self._camino_desde_busqueda(
+                    picker, punto, busqueda
+                )
                 if ruta is None:
                     camino = self._cache_distancias.camino(origen, punto)
                     if not camino:
@@ -666,7 +751,8 @@ class Simulation:
                 picker.capacidad_carga_kg - picker.carga_actual_kg
             )
             origen = tuple(picker.posicion_actual)
-            opciones = []
+            productos_candidatos = []
+            destinos = set()
             inalcanzables = []
             for producto_id, cantidad in demanda.items():
                 producto = self._productos[producto_id]
@@ -677,11 +763,19 @@ class Simulation:
                     )
                     if unidades_posibles <= 0:
                         continue
-                else:
-                    unidades_posibles = cantidad
 
                 puntos = self._celdas_recoleccion(producto)
-                ruta = self._ruta_mas_cercana(picker, origen, puntos)
+                productos_candidatos.append((producto_id, puntos))
+                destinos.update(puntos)
+
+            busqueda = self._calcular_distancias_con_picker(
+                picker, origen, destinos
+            )
+            opciones = []
+            for producto_id, puntos in productos_candidatos:
+                ruta = self._ruta_mas_cercana(
+                    picker, origen, puntos, busqueda
+                )
                 if ruta is None:
                     puntos_alcanzables = [
                         (self._cache_distancias.distancia(origen, punto), punto)

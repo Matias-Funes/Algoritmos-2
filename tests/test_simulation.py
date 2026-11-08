@@ -256,6 +256,56 @@ class TestViajesDinamicos(unittest.TestCase):
         # La nueva ruta debe empezar en la posición actual del picker
         self.assertEqual(ruta_paso_1[0], tuple(picker.posicion_actual))
 
+    def test_planifica_varios_productos_con_una_sola_busqueda(self):
+        warehouse = Warehouse(8, 6)
+        warehouse.rellenar_pasillos_implicitos()
+        productos = [
+            Producto("P001", "Producto 1", "R1", (6, 4, 1), 1, 1.0),
+            Producto("P002", "Producto 2", "R2", (7, 5, 1), 1, 1.0),
+        ]
+        picker = Picker("PK_01", (0, 0), 2.0)
+        pedidos = [
+            Orden("PED_01", 1, [("P001", 1)]),
+            Orden("PED_02", 1, [("P002", 1)]),
+        ]
+        grafo = construir_grafo(warehouse)
+        simulacion = Simulation(
+            warehouse=warehouse,
+            pickers=[picker],
+            productos=productos,
+            asignaciones={picker.id: pedidos},
+            cache_distancias=CacheDistancias(grafo),
+            puntos_despacho={"ZONA_A": [(0, 0)]},
+        )
+        picker_sim = simulacion.pickers[0]
+        simulacion._tramos_dinamicos[picker_sim.id] = []
+        simulacion._indices_ruta[picker_sim.id] = 0
+        simulacion._objetivos_dinamicos[picker_sim.id] = None
+        simulacion._rutas[picker_sim.id] = [
+            tuple(picker_sim.posicion_actual)
+        ]
+
+        calcular_distancias = simulacion._calcular_distancias_con_picker
+        cantidad_busquedas = 0
+
+        def contar_busquedas(picker_actual, origen=None, destinos=None):
+            nonlocal cantidad_busquedas
+            cantidad_busquedas += 1
+            return calcular_distancias(picker_actual, origen, destinos)
+
+        simulacion._calcular_distancias_con_picker = contar_busquedas
+        simulacion._planificar_picker_dinamico(picker_sim)
+
+        self.assertEqual(cantidad_busquedas, 1)
+        self.assertEqual(
+            simulacion._objetivos_dinamicos[picker_sim.id]["tipo"],
+            "producto",
+        )
+        self.assertIn(
+            simulacion._objetivos_dinamicos[picker_sim.id]["producto_id"],
+            {"P001", "P002"},
+        )
+
     def test_cuatro_pickers_aparecen_en_estado_y_rutas_pendientes(self):
         warehouse = Warehouse(8, 6)
         warehouse.rellenar_pasillos_implicitos()
