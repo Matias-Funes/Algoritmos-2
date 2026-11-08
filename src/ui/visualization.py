@@ -1,4 +1,5 @@
 # src/ui/visualization.py
+import re
 import sys
 import tkinter as tk
 from pathlib import Path
@@ -697,8 +698,12 @@ class Ventana(tk.Frame):
         if p_data.get("recolectando", False):
             color = "#10b981"
 
-        inicial = str(p_data['id'])[-1]
-        font_size = max(6, int(self.tamano_celda * 0.4))
+        # Número completo del picker (PK_04 -> "4", PK_12 -> "12")
+        coincidencia = re.search(r"\d+", str(p_data["id"]))
+        inicial = str(int(coincidencia.group())) if coincidencia else str(p_data["id"])[-1]
+        # Con 2+ dígitos se reduce la fuente para que quepa en el círculo
+        factor_fuente = 0.4 if len(inicial) == 1 else 0.3
+        font_size = max(6, int(self.tamano_celda * factor_fuente))
         items = self._items_pickers.get(p_data["id"])
         if items is None:
             circulo = self.canvas.create_oval(
