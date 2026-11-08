@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.algorithms.pathfinding import CacheDistancias
-from src.algorithms.wave_manager import generar_waves
 from src.controlador import Controlador
 from src.core.graph_builder import construir_grafo
 from src.core.inventory import GestorInventario, Producto
@@ -102,128 +101,84 @@ def _validar_stock_pedidos(
             )
 
 
-def _crear_fases_por_wave(
-    pedidos: list[Orden],
-    pickers: list[Picker],
-    inventario: GestorInventario,
-    grafo: Any,
-    configuracion: dict[str, Any],
-) -> tuple[list[Wave], list[dict[str, Any]]]:
-    """Agrupa pedidos en Waves y luego reparte cada Wave entre todos los pickers."""
-
-    # 1. Configuramos el diccionario que espera generar_waves
-    config_wm = {
-        "max_pedidos": configuracion.get("wave_max_pedidos", 10),
-        "max_productos": configuracion.get("wave_max_productos", 100),
-        "peso_max_kg": sum(p.peso_total(inventario) for p in pedidos) + 1,
-    }
-
-    # 2. Agrupamos inteligentemente (por prioridad y cercanía)
-    waves = generar_waves(pedidos, inventario, grafo, config_wm)
-
-    fases = []
-    # 3. Para cada Wave, repartimos sus pedidos entre TODOS los pickers
-    for wave in waves:
-        asignaciones = {p.id: [] for p in pickers}
-
-        # Repartimos en forma de "Round Robin" o balanceando la carga
-        for i, pedido in enumerate(wave.pedidos):
-            picker_asignado = pickers[i % len(pickers)]
-            asignaciones[picker_asignado.id].append(pedido)
-
-        # 4. Cada Wave se convierte en una Fase de simulación
-        fases.append({
-            "wave_id": wave.id,
-            "asignaciones": asignaciones
-        })
-
-    return waves, fases
-
 def _crear_waves(
     pedidos: list[Orden],
     pickers: list[Picker],
     inventario: GestorInventario,
     configuracion: dict[str, Any],
 ) -> tuple[list[Wave], dict[str, list[Orden]], dict[str, list[Wave]]]:
-    """Distribuye pedidos en waves sin limitar su peso a la carga del picker.
-
-    El picker puede completar el trabajo de una wave en varios viajes. Cada
-    unidad individual debe caber en al menos un picker; los límites de cantidad
-    de pedidos/productos de la wave siguen vigentes.
+    """
+    Asigna pedidos a waves individuales por picker usando un algoritmo Greedy general.
+    Funciona para cualquier cantidad de pickers y pedidos.
     """
     max_pedidos = configuracion.get("wave_max_pedidos", len(pedidos) or 1)
-    max_productos = configuracion.get("wave_max_productos", 1)
-    if (
-        not isinstance(max_pedidos, int)
-        or isinstance(max_pedidos, bool)
-        or max_pedidos <= 0
-    ):
-        raise ValueError("wave_max_pedidos debe ser un entero positivo.")
-    if (
-        not isinstance(max_productos, int)
-        or isinstance(max_productos, bool)
-        or max_productos <= 0
-    ):
-        raise ValueError("wave_max_productos debe ser un entero positivo.")
+    max_productos = configuracion.get("wave_max_productos", 100)
+    
+    if max_pedidos <= 0 or max_productos <= 0:
+        raise ValueError("Los límites de wave deben ser enteros positivos.")
     if pedidos and not pickers:
         raise ValueError("No se pueden procesar pedidos sin pickers.")
 
+    # 1. Ordenar pedidos por prioridad (mayor a menor)
+    pedidos_ordenados = sorted(pedidos, key=lambda p: -p.prioridad)
+    
     waves: list[Wave] = []
     pedidos_por_picker = {picker.id: [] for picker in pickers}
     waves_por_picker = {picker.id: [] for picker in pickers}
     carga_wave_actual = {picker.id: 0.0 for picker in pickers}
-    wave_actual: dict[str, Wave] = {}
+    wave_actual: dict[str, Wave] = {picker.id: None for picker in pickers}
     siguiente_wave_id = 1
-    peso_max_wave = sum(pedido.peso_total(inventario) for pedido in pedidos)
 
-    for pedido in pedidos:
+    for pedido in pedidos_ordenados:
         peso_pedido = pedido.peso_total(inventario)
-
-        # CORRECCIÓN B: Priorizamos a los pickers con mayor prioridad al asignar waves
-        candidatos = sorted(
-            pickers,
-            key=lambda picker: (-picker.prioridad, carga_wave_actual[picker.id], picker.id),
-        )
-        candidatos = [
-            picker
-            for picker in candidatos
-            if all(
-                inventario.obtener_producto(producto_id).peso_kg
-                <= picker.capacidad_carga_kg
-                for producto_id, _ in pedido.items
-            )
-        ]
-        if not candidatos:
-            raise ValueError(
-                f"Ningún picker puede transportar una unidad de cada "
-                f"producto del pedido {pedido.orden_id}."
-            )
         asignado = False
-
-        for picker in candidatos:
-            wave = wave_actual.get(picker.id)
-            if wave is None or not wave.puede_aceptar(pedido, inventario):
-                nueva_wave = Wave(
-                    wave_id=f"WAVE_{siguiente_wave_id:03d}",
-                    capacidad_max_pedidos=max_pedidos,
-                    capacidad_max_productos=max_productos,
-                    peso_max_kg=peso_max_wave,
-                )
-                if not nueva_wave.puede_aceptar(pedido, inventario):
-                    continue
-                wave = nueva_wave
-                siguiente_wave_id += 1
-                wave_actual[picker.id] = wave
-                carga_wave_actual[picker.id] = 0.0
-                waves.append(wave)
-                waves_por_picker[picker.id].append(wave)
-
-            if wave.agregar_pedido(pedido, inventario):
+        
+        # 2. Filtrar pickers que puedan transportar el pedido (capacidad individual)
+        candidatos = [
+            p for p in pickers 
+            if p.capacidad_carga_kg >= peso_pedido
+        ]
+        
+        if not candidatos:
+            print(f"   Advertencia: El pedido {pedido.orden_id} pesa más que cualquier picker.")
+            candidatos = pickers
+            
+        # 3. Ordenar candidatos por menor carga acumulada (Balanceo de carga)
+        candidatos_ordenados = sorted(
+            candidatos, 
+            key=lambda p: carga_wave_actual[p.id]
+        )
+        
+        # 4. Intentar meter en la wave actual del picker
+        for picker in candidatos_ordenados:
+            wave = wave_actual[picker.id]
+            if wave is not None and wave.puede_aceptar(pedido, inventario):
+                wave.agregar_pedido(pedido, inventario)
                 pedidos_por_picker[picker.id].append(pedido)
                 carga_wave_actual[picker.id] += peso_pedido
                 asignado = True
                 break
-
+                
+        # 5. Si no entró en ninguna wave actual, crear una nueva wave
+        if not asignado:
+            # Elegir al picker con menos carga actual
+            picker_elegido = min(candidatos, key=lambda p: carga_wave_actual[p.id])
+            nueva_wave = Wave(
+                wave_id=f"WAVE_{siguiente_wave_id:03d}",
+                capacidad_max_pedidos=max_pedidos,
+                capacidad_max_productos=max_productos,
+                peso_max_kg=picker_elegido.capacidad_carga_kg # ¡Límite correcto por picker!
+            )
+            siguiente_wave_id += 1
+            
+            if nueva_wave.agregar_pedido(pedido, inventario):
+                wave_actual[picker_elegido.id] = nueva_wave
+                waves_por_picker[picker_elegido.id].append(nueva_wave)
+                pedidos_por_picker[picker_elegido.id].append(pedido)
+                carga_wave_actual[picker_elegido.id] += peso_pedido
+                waves.append(nueva_wave)
+                asignado = True
+                
         if not asignado:
             raise ValueError(
                 f"El pedido {pedido.orden_id} excede los límites de "
@@ -239,7 +194,6 @@ def _crear_fases_simulacion(
 ) -> list[dict[str, Any]]:
     """Agrupa el trabajo de cada wave por turno para ejecutar pickers juntos."""
     fases = []
-
     cantidad_turnos = max(
         (len(waves_por_picker[picker.id]) for picker in pickers),
         default=0,
@@ -320,6 +274,7 @@ class _SimulationTk:
         self._distancia_acumulada = 0
         self._faltantes_acumulados: list[dict[str, Any]] = []
         self._descargas_acumuladas: list[dict[str, Any]] = []
+        
         self._total_productos = sum(
             cantidad
             for fase in fases
@@ -327,9 +282,7 @@ class _SimulationTk:
             for pedido in pedidos_fase
             for _, cantidad in pedido.items
         )
-        self._productos_objetivo_por_picker = {
-            picker.id: 0 for picker in pickers
-        }
+        self._productos_objetivo_por_picker = {picker.id: 0 for picker in pickers}
         for fase in fases:
             for picker_id, pedidos_picker in fase["asignaciones"].items():
                 self._productos_objetivo_por_picker[picker_id] = (
@@ -354,7 +307,6 @@ class _SimulationTk:
         }
         self._simulacion_actual = self._crear_simulacion_fase(0)
         self.historial_snapshots = []
-        self.estrategia_recorrido = estrategia_recorrido
 
     def _crear_simulacion_fase(self, indice: int) -> Simulation:
         """Crea un motor común que planifica el trabajo de toda la flota."""
@@ -382,9 +334,7 @@ class _SimulationTk:
         faltantes_actuales = estado["faltantes"]
         descargas_actuales = estado["descargas"]
         recogidos_en_fase = (
-            0
-            if self._fase_completada
-            else estado["productos_recogidos"]
+            0 if self._fase_completada else estado["productos_recogidos"]
         )
         estado["productos_recogidos"] = (
             self._productos_recogidos_acumulados + recogidos_en_fase
@@ -407,9 +357,7 @@ class _SimulationTk:
             for descarga in estado["descargas"]
             for item in descarga["items"]
         )
-        estado_pickers = {
-            picker["id"]: picker for picker in estado["pickers"]
-        }
+        estado_pickers = {picker["id"]: picker for picker in estado["pickers"]}
         estado["pickers"] = [
             {
                 "id": picker.id,
@@ -534,13 +482,10 @@ class _SimulationTk:
     def retroceder_paso(self) -> bool:
         """Revierte el estado al paso anterior usando el historial."""
         if not self.historial_snapshots:
-            return False # No hay pasos para atrás
+            return False 
 
-        # Sacamos la última foto y la restauramos
         snapshot_anterior = self.historial_snapshots.pop()
         self.restaurar_snapshot(snapshot_anterior)
-
-        # Pausamos por si estaba corriendo en automático
         self.pausar()
         return True
 
@@ -554,8 +499,6 @@ class _SimulationTk:
             self.grafo, self.waves, self.warehouse, self.inventario
         )
 
-
-
     def get_snapshot(self) -> dict:
         """Devuelve un diccionario con el estado exacto para guardar."""
         return {
@@ -568,7 +511,7 @@ class _SimulationTk:
             "pickers": [
                 {
                     "id": p.id,
-                    "posicion_actual": list(p.posicion_actual), # tupla a lista para JSON
+                    "posicion_actual": list(p.posicion_actual),
                     "carga_actual_kg": p.carga_actual_kg,
                     "items_transportados": list(p.items_transportados),
                 } for p in self.pickers
@@ -576,7 +519,6 @@ class _SimulationTk:
             "stock_productos": {
                 prod.producto_id: prod.cantidad_disponible for prod in self.productos
             },
-            # Guardamos el estado interno de la fase actual ---
             "distancia_fase_actual": self._simulacion_actual.distancia,
             "recogidos_fase_actual": list(self._simulacion_actual.productos_recogidos),
             "faltantes_fase_actual": list(self._simulacion_actual.productos_faltantes),
@@ -603,30 +545,31 @@ class _SimulationTk:
                 picker.carga_actual_kg = data["carga_actual_kg"]
                 picker.items_transportados = [tuple(item) for item in data["items_transportados"]]
 
-        # Re-armamos el motor
         self._fase_completada = False
         self._simulacion_actual = self._crear_simulacion_fase(self.fase_actual)
         self._simulacion_actual.paso_actual = snapshot["paso_actual"]
 
-        # Restauramos el estado de la fase actual
         self._simulacion_actual.distancia = snapshot.get("distancia_fase_actual", 0)
         self._simulacion_actual.productos_recogidos = snapshot.get("recogidos_fase_actual", [])
         self._simulacion_actual.productos_faltantes = snapshot.get("faltantes_fase_actual", [])
         self._simulacion_actual.descargas = snapshot.get("descargas_fase_actual", [])
 
-        # descontamos de la nueva simulación los productos que los pickers ya traen
-        for picker in self._simulacion_actual.pickers:
-            for prod_id, cant in picker.items_transportados:
-                self._simulacion_actual._reducir_demanda(picker, prod_id, cant)
+        # Descontamos la demanda correctamente: por lo recogido Y lo transportado
+        picker_por_id = {p.id: p for p in self._simulacion_actual.pickers}
+        for rec in snapshot.get("recogidos_fase_actual", []):
+            picker = picker_por_id.get(rec["picker_id"])
+            if picker is not None:
+                self._simulacion_actual._reducir_demanda(
+                    picker, rec["producto_id"], rec["cantidad"]
+                )
 
 
-
-def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (Flota)", estrategia_recorrido: str = "Vecino más cercano (B)") -> tuple[Any, _SimulationTk]:
-    """Carga un escenario JSON y arma el warehouse y la simulación.
-
-    Devuelve (warehouse, simulacion). La simulación todavía no está vinculada a
-    ninguna ventana: de eso se encarga el controlador al abrir la visualización.
-    """
+def construir_simulacion(
+    ruta_escenario: Path, 
+    modo_waves: str = "Wave Global (Flota)", # Lo mantenemos por compatibilidad con el controlador
+    estrategia_recorrido: str = "Vecino más cercano (B)"
+) -> tuple[Any, _SimulationTk]:
+    """Carga un escenario JSON y arma el warehouse y la simulación."""
     print("=== Wave Picking System ===")
     print(f"1. Cargando escenario: {ruta_escenario}")
     warehouse, productos_raw, pedidos_raw, pickers_raw, configuracion = (
@@ -641,22 +584,17 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
     pedidos = _crear_pedidos(pedidos_raw)
     pickers = _crear_pickers(pickers_raw)
 
-   # ASIGNAR POSICIONES ALEATORIAS EN PASILLOS
-    # (Asegurate de que el warehouse ya se cargó antes de esta línea)
+    # ASIGNAR POSICIONES ALEATORIAS EN PASILLOS SIN SOLAPAMIENTO
     celdas_transitables = warehouse.celdas_transitables()
     if celdas_transitables:
-        celdas_disponibles = list(celdas_transitables)
-        random.shuffle(celdas_disponibles)
-
-        for picker in pickers:
-            if not celdas_disponibles:
-                celdas_disponibles = list(celdas_transitables)
-                random.shuffle(celdas_disponibles)
-
-            celda_aleatoria = celdas_disponibles.pop()
-            nueva_pos = (celda_aleatoria.x, celda_aleatoria.y)
-
-            # Sobreescribimos la posición del JSON con la nueva aleatoria
+        if len(pickers) > len(celdas_transitables):
+            raise ValueError(
+                f"Hay {len(pickers)} pickers y solo {len(celdas_transitables)} "
+                "celdas transitables. No se pueden ubicar sin solaparse."
+            )
+        celdas_elegidas = random.sample(celdas_transitables, len(pickers))
+        for picker, celda in zip(pickers, celdas_elegidas):
+            nueva_pos = (celda.x, celda.y)
             picker.posicion_inicial = nueva_pos
             picker.posicion_actual = nueva_pos
 
@@ -667,16 +605,11 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
     if grafo.node_count() == 0:
         raise ValueError("El almacén no contiene celdas transitables.")
 
-    print(f"4. Generando waves (Modo: {modo_waves})")
-
-    if modo_waves == "Wave Global (Flota)":
-        # Lógica NUEVA (Todos trabajan en la misma wave)
-        waves, fases = _crear_fases_por_wave(pedidos, pickers, inventario, grafo, configuracion)
-    else:
-        # Lógica VIEJA (Cada picker tiene su propia wave)
-        waves, _, waves_por_picker = _crear_waves(pedidos, pickers, inventario, configuracion)
-        fases = _crear_fases_simulacion(pickers, waves_por_picker)
-
+    # Como unificamos la lógica, ignoramos el modo_waves y usamos el Greedy general
+    print(f"4. Generando waves (Algoritmo Greedy unificado para todos los pickers)")
+    waves, _, waves_por_picker = _crear_waves(pedidos, pickers, inventario, configuracion)
+    fases = _crear_fases_simulacion(pickers, waves_por_picker)
+    
     print(f"   Waves generadas: {len(waves)}")
 
     print("5. Preparando rutas dinámicas y zonas de despacho")
@@ -684,8 +617,7 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
     puntos_despacho = _obtener_puntos_despacho(warehouse, grafo)
     if waves and not puntos_despacho:
         raise ValueError(
-            "No hay zonas de despacho accesibles asociadas a una puerta "
-            "de salida."
+            "No hay zonas de despacho accesibles asociadas a una puerta de salida."
         )
 
     print(
@@ -694,7 +626,6 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
     )
 
     if not fases:
-        # Si no hay fases (por ejemplo, no hay pedidos), creamos una vacía para evitar IndexError
         fases = [{"asignaciones": {}}]
 
     simulacion = _SimulationTk(
@@ -712,12 +643,11 @@ def construir_simulacion(ruta_escenario: Path, modo_waves: str = "Wave Global (F
     )
     return warehouse, simulacion
 
+
 def guardar_partida(ruta_json: Path, sim_tk: _SimulationTk):
     """Guarda el escenario base Y el estado actual de la simulación."""
     from src.io.persistence import crear_datos_escenario
 
-    # Extraemos los pedidos reales de las waves actuales
-    # Los guardamos con estado PENDIENTE para que al cargar se vuelvan a agrupar
     pedidos_actuales = []
     for wave in sim_tk.waves:
         for pedido in wave.pedidos:
@@ -745,10 +675,6 @@ def guardar_partida(ruta_json: Path, sim_tk: _SimulationTk):
     with open(ruta_json, "w", encoding="utf-8") as f:
         json.dump(datos, f, indent=2, ensure_ascii=False)
 
-    datos["snapshot_simulacion"] = sim_tk.get_snapshot()
-
-    with open(ruta_json, "w", encoding="utf-8") as f:
-        json.dump(datos, f, indent=2, ensure_ascii=False)
 
 def main() -> None:
     """Abre la aplicación empezando por el menú."""
