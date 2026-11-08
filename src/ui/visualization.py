@@ -10,6 +10,15 @@ if __package__ in (None, ""):
 from src.core.cell import AMBOS, DESPACHO, PASILLO, PUERTA, RACK, E, N, O, S
 
 COLOR_VOLVER_TERMINADA = "#10b981"
+COLOR_BOTON_PRIMARIO = "#24577a"
+COLOR_BOTON_PRIMARIO_HOVER = "#34769a"
+COLOR_BOTON_SECUNDARIO = "#dce7ef"
+COLOR_BOTON_SECUNDARIO_HOVER = "#c5d6e3"
+COLOR_BOTON_PELIGRO = "#b94747"
+COLOR_BOTON_PELIGRO_HOVER = "#9e3737"
+COLOR_BOTON_TERMINADO_HOVER = "#0c8b60"
+COLOR_PANEL = "#f8fafc"
+COLOR_TEXTO = "#193b59"
 COLORES_PICKERS = [
     "#0ea5e9", # Celeste
     "#10b981", # Verde
@@ -33,90 +42,133 @@ class Ventana(tk.Frame):
         super().__init__(master)
         self.warehouse = warehouse
         self.tamano_celda = tamano_celda
+        self._offset_x = 0.0
+        self._offset_y = 0.0
         self.simulacion = None
         self.on_volver = on_volver
         self.on_cerrar = on_cerrar
         self.en_ejecucion = False
         self.root = self.winfo_toplevel()
+        self._configurar_estilo_scrollbars()
 
         if master is None:
             self.root.title("Wave Picking - Simulador")
             self.pack(fill=tk.BOTH, expand=True)
 
         # --- Configuración del Panel Lateral (Izquierda) ---
-        self.panel = tk.Frame(self, width=280, bg="#f8fafc", padx=10, pady=10)
+        self.panel = tk.Frame(self, width=280, bg=COLOR_PANEL, padx=10, pady=10)
         self.panel.pack(side=tk.LEFT, fill=tk.Y)
         self.panel.pack_propagate(False)  # Evita que el frame se achique
 
         # 1. Controles
-        tk.Label(self.panel, text="Controles", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(0, 5))
+        tk.Label(self.panel, text="Controles", font=("Arial", 12, "bold"), bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(anchor="w", pady=(0, 5))
 
-        frame_btn = tk.Frame(self.panel, bg="#f8fafc")
+        frame_btn = tk.Frame(self.panel, bg=COLOR_PANEL)
         frame_btn.pack(fill=tk.X)
 
         # Fila 0: Play/Pausar (Izquierda) y Reiniciar (Derecha)
-        self.btn_play_pause = tk.Button(
-            frame_btn, text="▶ Iniciar", command=self.btn_toggle_play_pause
+        self.btn_play_pause = self._crear_boton_simulacion(
+            frame_btn,
+            "▶ Iniciar",
+            self.btn_toggle_play_pause,
+            variante="primario",
         )
-        self.btn_play_pause.grid(row=0, column=0, sticky="ew", pady=2, padx=(2, 1))
+        self.btn_play_pause.grid(
+            row=0, column=0, sticky="ew", pady=3, padx=(2, 1)
+        )
 
-        tk.Button(
-            frame_btn, text="🔄 Reiniciar", command=self.btn_reset
-        ).grid(row=0, column=1, sticky="ew", pady=2, padx=(1, 2))
+        self._crear_boton_simulacion(
+            frame_btn,
+            "🔄 Reiniciar",
+            self.btn_reset,
+            variante="secundario",
+        ).grid(row=0, column=1, sticky="ew", pady=3, padx=(1, 2))
 
         # Fila 1: Atrás y Adelante
-        frame_pasos = tk.Frame(frame_btn, bg="#f8fafc")
+        frame_pasos = tk.Frame(frame_btn, bg=COLOR_PANEL)
         frame_pasos.grid(row=1, column=0, columnspan=2, sticky="ew", pady=2)
 
-        tk.Button(frame_pasos, text="⏮ Atrás", command=self.btn_paso_atras).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 1))
-        tk.Button(frame_pasos, text="⏭ Adelante", command=self.btn_paso).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(1, 2))
+        self._crear_boton_simulacion(
+            frame_pasos,
+            "⏮ Atrás",
+            self.btn_paso_atras,
+            variante="secundario",
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 1), pady=2)
+        self._crear_boton_simulacion(
+            frame_pasos,
+            "⏭ Adelante",
+            self.btn_paso,
+            variante="secundario",
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(1, 2), pady=2)
 
         # Fila 2: Guardar y Comparar
-        tk.Button(frame_btn, text="💾 Guardar Partida", command=self.btn_guardar_partida).grid(
-            row=2, column=0, columnspan=2, sticky="ew", pady=2, padx=2
-        )
+        self._crear_boton_simulacion(
+            frame_btn,
+            "💾 Guardar Partida",
+            self.btn_guardar_partida,
+            variante="secundario",
+        ).grid(row=2, column=0, columnspan=2, sticky="ew", pady=3, padx=2)
 
-        tk.Button(
-            frame_btn, text="📊 Comparar Estrategias", command=self.btn_comparar_estrategias,
-            bg="#e0f2fe", font=("Arial", 9, "bold")
-        ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 2), padx=2)
+        self._crear_boton_simulacion(
+            frame_btn,
+            "📊 Comparar Estrategias",
+            self.btn_comparar_estrategias,
+            variante="acento",
+        ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 3), padx=2)
+
+        self.btn_cerrar = self._crear_boton_simulacion(
+            frame_btn,
+            "✕ Cerrar juego",
+            self.on_cerrar or self.root.destroy,
+            variante="peligro",
+        )
+        self.btn_cerrar.grid(
+            row=4,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            pady=(6, 2),
+            padx=2,
+        )
 
         frame_btn.columnconfigure(0, weight=1)
         frame_btn.columnconfigure(1, weight=1)
 
         # 2. Métricas Globales
-        tk.Label(self.panel, text="Métricas Globales", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
+        tk.Label(self.panel, text="Métricas Globales", font=("Arial", 12, "bold"), bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(anchor="w", pady=(15, 5))
 
-        self.lbl_wave = tk.Label(self.panel, text="Wave: 0 / 0", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_wave = tk.Label(self.panel, text="Wave: 0 / 0", font=("Arial", 10), bg=COLOR_PANEL, fg=COLOR_TEXTO)
         self.lbl_wave.pack(anchor="w")
 
-        self.lbl_paso = tk.Label(self.panel, text="Paso actual: 0", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_paso = tk.Label(self.panel, text="Paso actual: 0", font=("Arial", 10), bg=COLOR_PANEL, fg=COLOR_TEXTO)
         self.lbl_paso.pack(anchor="w")
 
-        self.lbl_productos = tk.Label(self.panel, text="Productos Recogidos: 0 / 0", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_productos = tk.Label(self.panel, text="Productos Recogidos: 0 / 0", font=("Arial", 10), bg=COLOR_PANEL, fg=COLOR_TEXTO)
         self.lbl_productos.pack(anchor="w")
 
-        self.lbl_distancia = tk.Label(self.panel, text="Distancia Total: 0 m", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_distancia = tk.Label(self.panel, text="Distancia Total: 0 m", font=("Arial", 10), bg=COLOR_PANEL, fg=COLOR_TEXTO)
         self.lbl_distancia.pack(anchor="w")
 
         # --- NUEVA MÉTRICA DE ALTURA ---
-        self.lbl_altura = tk.Label(self.panel, text="Última altura recogida: Nivel 0", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_altura = tk.Label(self.panel, text="Última altura recogida: Nivel 0", font=("Arial", 10), bg=COLOR_PANEL, fg=COLOR_TEXTO)
         self.lbl_altura.pack(anchor="w")
 
         # 3. Panel de Pickers
-        tk.Label(self.panel, text="Estado Pickers", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
-        contenedor_pickers = tk.Frame(self.panel, bg="#f8fafc")
+        tk.Label(self.panel, text="Estado Pickers", font=("Arial", 12, "bold"), bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(anchor="w", pady=(15, 5))
+        contenedor_pickers = tk.Frame(self.panel, bg=COLOR_PANEL)
         contenedor_pickers.pack(fill=tk.BOTH, expand=True)
         self.canvas_pickers = tk.Canvas(
             contenedor_pickers,
-            bg="#f8fafc",
+            bg=COLOR_PANEL,
             highlightthickness=0,
             height=100,
+            yscrollincrement=24,
         )
         self.scrollbar_pickers = ttk.Scrollbar(
             contenedor_pickers,
             orient=tk.VERTICAL,
             command=self.canvas_pickers.yview,
+            style="Simulation.Vertical.TScrollbar",
         )
         self.canvas_pickers.configure(
             yscrollcommand=self.scrollbar_pickers.set,
@@ -142,8 +194,8 @@ class Ventana(tk.Frame):
         self.lbl_carga_pickers = {}
 
         # 4. Pedidos de la Wave
-        tk.Label(self.panel, text="Pedidos en Wave", font=("Arial", 12, "bold"), bg="#f8fafc").pack(anchor="w", pady=(15, 5))
-        contenedor_pedidos = tk.Frame(self.panel, bg="#f8fafc")
+        tk.Label(self.panel, text="Pedidos en Wave", font=("Arial", 12, "bold"), bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(anchor="w", pady=(15, 5))
+        contenedor_pedidos = tk.Frame(self.panel, bg=COLOR_PANEL)
         contenedor_pedidos.pack(fill=tk.X)
         self.txt_pedidos = tk.Text(
             contenedor_pedidos,
@@ -151,6 +203,13 @@ class Ventana(tk.Frame):
             width=35,
             font=("Arial", 9),
             bg="#ffffff",
+            fg=COLOR_TEXTO,
+            insertbackground=COLOR_TEXTO,
+            selectbackground=COLOR_BOTON_PRIMARIO,
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightbackground="#d5e0e8",
+            highlightcolor=COLOR_BOTON_PRIMARIO,
             state=tk.DISABLED,
             wrap=tk.WORD,
         )
@@ -158,6 +217,7 @@ class Ventana(tk.Frame):
             contenedor_pedidos,
             orient=tk.VERTICAL,
             command=self.txt_pedidos.yview,
+            style="Simulation.Vertical.TScrollbar",
         )
         self.txt_pedidos.configure(
             yscrollcommand=self.scrollbar_pedidos.set,
@@ -171,20 +231,13 @@ class Ventana(tk.Frame):
         self._wave_pedidos_mostrada = None
 
         # 5. Volver al menú
-        self.btn_volver = tk.Button(self.panel, text="← Volver al menú", command=self.btn_volver_menu)
-        self.btn_volver.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
-        self.btn_cerrar = tk.Button(
+        self.btn_volver = self._crear_boton_simulacion(
             self.panel,
-            text="✕ Cerrar aplicación",
-            command=self.on_cerrar or self.root.destroy,
-            bg="#b94747",
-            fg="white",
-            activebackground="#9e3737",
-            activeforeground="white",
-            relief=tk.FLAT,
-            cursor="hand2",
+            "← Volver al menú",
+            self.btn_volver_menu,
+            variante="secundario",
         )
-        self.btn_cerrar.pack(side=tk.BOTTOM, fill=tk.X, pady=(6, 0))
+        self.btn_volver.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
         self._estilo_volver_original = {
             "bg": self.btn_volver.cget("bg"),
             "fg": self.btn_volver.cget("fg"),
@@ -192,13 +245,113 @@ class Ventana(tk.Frame):
         }
 
         # --- Configuración del Canvas (Derecha) ---
-        self.ancho_px = self.warehouse.ancho_x * self.tamano_celda
-        self.alto_px = self.warehouse.largo_y * self.tamano_celda
-        self.canvas = tk.Canvas(self, width=self.ancho_px, height=self.alto_px, bg="#e2e8f0")
-        self.canvas.pack(side=tk.RIGHT, padx=10, pady=10)
+        self.canvas = tk.Canvas(self, width=1, height=1, bg="#e2e8f0")
+        self.canvas.pack(
+            side=tk.RIGHT,
+            fill=tk.BOTH,
+            expand=True,
+            padx=10,
+            pady=10,
+        )
+        self.canvas.bind("<Configure>", self._ajustar_mapa_a_ventana)
 
     def set_simulacion(self, sim):
         self.simulacion = sim
+
+    def _crear_boton_simulacion(
+        self,
+        parent,
+        texto,
+        comando,
+        variante="secundario",
+    ):
+        estilos = {
+            "primario": (
+                COLOR_BOTON_PRIMARIO,
+                COLOR_BOTON_PRIMARIO_HOVER,
+                "white",
+            ),
+            "secundario": (
+                COLOR_BOTON_SECUNDARIO,
+                COLOR_BOTON_SECUNDARIO_HOVER,
+                COLOR_TEXTO,
+            ),
+            "acento": ("#dceef8", "#c5e2f1", COLOR_TEXTO),
+            "peligro": (
+                COLOR_BOTON_PELIGRO,
+                COLOR_BOTON_PELIGRO_HOVER,
+                "white",
+            ),
+        }
+        fondo, hover, texto_color = estilos[variante]
+        boton = tk.Button(
+            parent,
+            text=texto,
+            command=comando,
+            bg=fondo,
+            fg=texto_color,
+            activebackground=hover,
+            activeforeground=texto_color,
+            relief=tk.FLAT,
+            bd=0,
+            padx=8,
+            pady=6,
+            font=("Arial", 9, "bold"),
+            cursor="hand2",
+            highlightthickness=1,
+            highlightbackground=COLOR_PANEL,
+            highlightcolor=hover,
+        )
+        boton._color_fondo_normal = fondo
+        boton._color_fondo_hover = hover
+        boton.bind(
+            "<Enter>",
+            lambda _evento: boton.configure(bg=boton._color_fondo_hover),
+            add="+",
+        )
+        boton.bind(
+            "<Leave>",
+            lambda _evento: boton.configure(bg=boton._color_fondo_normal),
+            add="+",
+        )
+        return boton
+
+    def _configurar_estilo_scrollbars(self):
+        estilo = ttk.Style(self)
+        estilo.configure(
+            "Simulation.Vertical.TScrollbar",
+            background=COLOR_BOTON_SECUNDARIO,
+            darkcolor=COLOR_BOTON_SECUNDARIO,
+            lightcolor=COLOR_BOTON_SECUNDARIO,
+            troughcolor="#e8eef3",
+            bordercolor="#e8eef3",
+            arrowcolor=COLOR_TEXTO,
+            relief=tk.FLAT,
+            borderwidth=0,
+            arrowsize=10,
+            width=13,
+        )
+        estilo.map(
+            "Simulation.Vertical.TScrollbar",
+            background=[("active", COLOR_BOTON_PRIMARIO_HOVER)],
+            arrowcolor=[("active", COLOR_BOTON_PRIMARIO)],
+        )
+
+    def _ajustar_mapa_a_ventana(self, evento):
+        ancho_mapa = self.warehouse.ancho_x
+        alto_mapa = self.warehouse.largo_y
+        ancho_disponible = max(1, evento.width - 24)
+        alto_disponible = max(1, evento.height - 24)
+
+        self.tamano_celda = min(
+            ancho_disponible / max(1, ancho_mapa),
+            alto_disponible / max(1, alto_mapa),
+        )
+        self._offset_x = (evento.width - ancho_mapa * self.tamano_celda) / 2
+        self._offset_y = (evento.height - alto_mapa * self.tamano_celda) / 2
+
+        if self.simulacion is not None:
+            self.actualizar_desde_simulacion()
 
     def _actualizar_region_scroll_pickers(self, _evento=None):
         region = self.canvas_pickers.bbox("all")
@@ -447,10 +600,15 @@ class Ventana(tk.Frame):
 
     def _actualizar_boton_volver(self, estado):
         if self._simulacion_terminada(estado):
+            self.btn_volver._color_fondo_normal = COLOR_VOLVER_TERMINADA
+            self.btn_volver._color_fondo_hover = COLOR_BOTON_TERMINADO_HOVER
             self.btn_volver.config(text="✔ Simulación terminada: Volver al menú",
                                    bg=COLOR_VOLVER_TERMINADA, fg="white",
-                                   activebackground=COLOR_VOLVER_TERMINADA)
+                                   activebackground=COLOR_BOTON_TERMINADO_HOVER,
+                                   activeforeground="white")
         else:
+            self.btn_volver._color_fondo_normal = self._estilo_volver_original["bg"]
+            self.btn_volver._color_fondo_hover = COLOR_BOTON_SECUNDARIO_HOVER
             self.btn_volver.config(text="← Volver al menú", **self._estilo_volver_original)
 
     def btn_volver_menu(self):
@@ -466,8 +624,12 @@ class Ventana(tk.Frame):
             self.on_volver()
 
     def _obtener_centro(self, x, y):
-        cx = (x * self.tamano_celda) + (self.tamano_celda / 2)
-        cy = ((self.warehouse.largo_y - 1 - y) * self.tamano_celda) + (self.tamano_celda / 2)
+        cx = self._offset_x + (x * self.tamano_celda) + (self.tamano_celda / 2)
+        cy = (
+            self._offset_y
+            + ((self.warehouse.largo_y - 1 - y) * self.tamano_celda)
+            + (self.tamano_celda / 2)
+        )
         return cx, cy
 
     # --- Lee el stock en tiempo real del inventario ---
@@ -497,8 +659,11 @@ class Ventana(tk.Frame):
         for y in range(self.warehouse.largo_y):
             for x in range(self.warehouse.ancho_x):
                 cell = self.warehouse.grid[y][x]
-                x1 = x * self.tamano_celda
-                y1 = (self.warehouse.largo_y - 1 - y) * self.tamano_celda
+                x1 = self._offset_x + x * self.tamano_celda
+                y1 = (
+                    self._offset_y
+                    + (self.warehouse.largo_y - 1 - y) * self.tamano_celda
+                )
                 x2 = x1 + self.tamano_celda
                 y2 = y1 + self.tamano_celda
 
@@ -628,8 +793,21 @@ class Ventana(tk.Frame):
         for picker in pickers_estado:
             picker_id = picker["id"]
             if picker_id not in self.lbl_carga_pickers:
-                lbl = tk.Label(self.frame_carga_pickers, text="", bg="#f8fafc", font=("Arial", 9), justify=tk.LEFT, anchor="w")
-                lbl.pack(fill=tk.X, pady=2)
+                lbl = tk.Label(
+                    self.frame_carga_pickers,
+                    text="",
+                    bg="white",
+                    fg=COLOR_TEXTO,
+                    font=("Arial", 9),
+                    justify=tk.LEFT,
+                    anchor="w",
+                    padx=7,
+                    pady=5,
+                    relief=tk.FLAT,
+                    highlightthickness=1,
+                    highlightbackground="#e1e8ee",
+                )
+                lbl.pack(fill=tk.X, pady=3, padx=(2, 4))
                 self._habilitar_scroll_pickers(lbl)
                 self.lbl_carga_pickers[picker_id] = [lbl]
 

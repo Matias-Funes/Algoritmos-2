@@ -45,6 +45,7 @@ class Controlador:
         self.root = tk.Tk()
         self.root.title("Wave Picking - Simulador")
         self.root.configure(bg=CREMA_PRINCIPAL)
+        self.root.protocol("WM_DELETE_WINDOW", self.cerrar_aplicacion)
         aplicar_estilos_ttk(self.root)
 
         self.vista_actual = None
@@ -69,6 +70,7 @@ class Controlador:
         self.vista_actual = vista
         vista.pack(fill=tk.BOTH, expand=True)
         if tamano:
+            self.root.state("normal")
             ajustar_ventana(self.root, tamano[0], tamano[1], minimo)
         else:
             self.root.minsize(1, 1)  # saca el mínimo de la vista anterior
@@ -129,6 +131,21 @@ class Controlador:
             vincular(ventana.root, ventana.actualizar_desde_simulacion)
         ventana.set_simulacion(self.simulacion)
         self._mostrar(ventana)  # tamaño automático según el warehouse
+        try:
+            self.root.state("zoomed")
+        except tk.TclError:
+            self.root.update_idletasks()
+            ancho = min(
+                self.root.winfo_reqwidth(),
+                int(ancho_pantalla * 0.95),
+            )
+            alto = min(
+                self.root.winfo_reqheight(),
+                int(alto_pantalla * 0.90),
+            )
+            x = max(0, (ancho_pantalla - ancho) // 2)
+            y = max(0, (alto_pantalla - alto) // 2)
+            self.root.geometry(f"{ancho}x{alto}+{x}+{y}")
         ventana.actualizar_desde_simulacion()
 
     def cerrar_aplicacion(self):
