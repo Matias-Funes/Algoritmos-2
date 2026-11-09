@@ -1,6 +1,7 @@
 from src.core.inventory import*
 
-# constantes de estado
+# Estados del ciclo de vida del pedido. Se usan constantes para evitar
+# diferencias de escritura al comparar o cambiar el estado.
 
 PENDIENTE       =  "PENDIENTE"
 EN_WAVE         =  "EN_WAVE"
@@ -10,6 +11,8 @@ PREPARADO       =  "PREPARADO"
 ESTADOS_VALIDOS = {PENDIENTE, EN_WAVE, EN_PREPARACION, PREPARADO}
 
 class Orden:
+    # Los items son pares (ID de producto, cantidad): son compactos, mantienen
+    # el orden recibido y se resuelven contra el inventario cuando hace falta.
     def __init__(self, orden_id, prioridad, items, estado = PENDIENTE):
         self.orden_id : str = orden_id
         self.prioridad : str = prioridad
@@ -78,6 +81,5 @@ if __name__ == "__main__":
     print("Pedido:", pedido.orden_id, "Peso total:", pedido.peso_total(inv), "kg")
     pedido.cambiar_estado(EN_WAVE)
     print("Nuevo estado:", pedido.estado)
-
 
 

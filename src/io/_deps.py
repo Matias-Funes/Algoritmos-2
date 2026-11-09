@@ -18,9 +18,8 @@ Forzar comportamiento:
 
 import os
 
-# ----------------------------------------------------------------
-# Cambiar a False cuando Juli entregue cell.py y warehouse.py.
-# ----------------------------------------------------------------
+# El valor por defecto se deja en False: la aplicacion debe modelar el almacen
+# real. La variable de entorno conserva la posibilidad de usar el stub en tests.
 DEFAULT_STUB = False
 
 

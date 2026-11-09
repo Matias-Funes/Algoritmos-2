@@ -108,6 +108,8 @@ class VistaMenu(tk.Frame):
             font=FUENTE,
         ).pack(side=tk.LEFT)
 
+        # La seleccion solo cambia el criterio con el que el motor elige el
+        # siguiente producto; la vista no calcula ni guarda rutas.
         self.combo_estrategia = ttk.Combobox(
             frame_estrategia,
             state="readonly",
@@ -153,6 +155,8 @@ class VistaMenu(tk.Frame):
 
     # --- API para el controlador ---
     def set_archivo_json(self, nombre=None):
+        # El controlador mantiene el estado de la carga y esta vista solo
+        # refleja si hay un archivo seleccionado.
         if nombre:
             self.lbl_json.config(text=f"✔ {nombre}", fg=VERDE_OSCURO)
         else:

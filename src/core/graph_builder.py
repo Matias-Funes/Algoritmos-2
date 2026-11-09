@@ -10,6 +10,9 @@ class Graph:
     """
     Grafo dirigido con listas de adyacencia.
     """
+    # El diccionario exterior encuentra los vecinos de una coordenada; el
+    # interior guarda destino y costo. Solo se almacenan conexiones existentes,
+    # no una matriz cuadrada que incluya todas las celdas.
     def __init__(self):
         # adj[u] = {v1: peso1, v2: peso2, ...}
         self.adj = {}
@@ -46,13 +49,16 @@ def construir_grafo(warehouse):
     """
     g = Graph()
 
-    # 1. Crear un nodo por cada celda transitable
+    # Primera pasada: crear todos los nodos antes que las aristas, asi cada
+    # conexion puede comprobar que su destino realmente es transitable.
     for y in range(warehouse.largo_y):
         for x in range(warehouse.ancho_x):
             if warehouse.grid[y][x].es_transitable():
                 g.add_node((x, y))
 
-    # 2. Crear las aristas respetando los sentidos
+    # Segunda pasada: las aristas son dirigidas. El sentido de la celda actual
+    # decide a que vecinos se puede salir; no se agrega automaticamente el
+    # camino inverso, porque una calle de un solo sentido no lo permite.
     for y in range(warehouse.largo_y):
         for x in range(warehouse.ancho_x):
             cell = warehouse.grid[y][x]

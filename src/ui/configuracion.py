@@ -93,6 +93,9 @@ class SeccionTabla(tk.Frame):
 
     def __init__(self, master, campos, columnas, texto_agregar, por_fila=4, on_cambio=None,
                  ayuda=None, generar_ids=None, validar=None, on_renumerar=None):
+        # La seccion conserva los datos en `items` y la Treeview solo los
+        # representa. Esto permite renumerar y actualizar referencias sin
+        # depender del texto que se ve en pantalla.
         super().__init__(master, bg=CREMA_GRISACEO)
         self.campos = campos
         self.columnas = columnas
@@ -189,6 +192,8 @@ class SeccionTabla(tk.Frame):
     # --- Ids automáticos ---
     def _foto(self):
         """Guarda (item, id) antes de un cambio para poder seguir a cada elemento después."""
+        # Se guarda la identidad del diccionario, no una copia: un elemento
+        # editado conserva su identidad aunque cambien sus campos.
         return [(item, item.get("id")) for item in self.items]
 
     def _asignar_ids(self):
@@ -199,6 +204,8 @@ class SeccionTabla(tk.Frame):
 
     def _renumerar(self, previo):
         """Reasigna los ids y avisa qué ids cambiaron (o desaparecieron)."""
+        # Como los IDs dependen del orden, borrar una fila puede cambiar los de
+        # las siguientes. El mapa permite corregir referencias cruzadas.
         self._asignar_ids()
         if self.generar_ids is None or self.on_renumerar is None:
             return
@@ -259,6 +266,8 @@ class SeccionTabla(tk.Frame):
             if mensaje:
                 messagebox.showwarning("Dato inválido", mensaje, parent=self)
                 return
+        # `solo_alta` permite crear varias entidades iguales de una vez; ese
+        # campo no forma parte del registro que se edita posteriormente.
         copias = 1
         for campo in self.campos:
             if campo.get("solo_alta"):
@@ -272,6 +281,8 @@ class SeccionTabla(tk.Frame):
             ver = len(self.items) - 1
         else:
             ver = self.indice_edicion
+            # Se modifica el mismo diccionario para que la foto anterior pueda
+            # reconocer que este registro sigue existiendo tras la edicion.
             destino = self.items[ver]  # se edita en el lugar: conserva su identidad
             destino.clear()
             destino.update(item)
@@ -316,6 +327,8 @@ class SeccionTabla(tk.Frame):
 
         ver: índice del elemento que debe quedar a la vista.
         """
+        # Treeview se reconstruye desde la lista fuente; `iid` es el indice de
+        # esa lista, que usan los botones Editar y Eliminar para ubicar la fila.
         hijos = self.tabla.get_children()
         if hijos:
             self.tabla.delete(*hijos)
@@ -577,6 +590,8 @@ class VistaConfiguracion(tk.Frame):
         return [AUTOMATICO] + ids_racks(racks["cantidad"], racks["largo"])
 
     def _actualizar_resumen(self):
+        # El layout cambia al editar racks o puertas; se recalcula con el mismo
+        # constructor que usara el guardado para que el resumen no sea otra regla.
         if not hasattr(self, "sec_puertas") or not hasattr(self, "lbl_resumen"):
             return
         racks = self.sec_racks.obtener()
@@ -640,6 +655,8 @@ class VistaConfiguracion(tk.Frame):
         return None
 
     def _validar_pedido(self, item, _indice):
+        # Se valida contra los productos y limites actuales de la vista. Al
+        # aceptar, se normaliza el texto a IDs para que renumerar sea seguro.
         if item["prioridad"] < 1:
             return "La prioridad debe ser de 1 o más."
         try:
@@ -662,6 +679,8 @@ class VistaConfiguracion(tk.Frame):
 
     # --- Referencias entre tablas cuando cambian los ids ---
     def _puertas_renumeradas(self, mapa):
+        # Las zonas apuntan a puertas por ID; al borrar o renumerar puertas se
+        # actualiza esa relacion antes de volver a dibujar su tabla.
         nuevas, quitadas = [], 0
         for zona in self.sec_zonas.items:
             destino = mapa.get(zona["puerta"], zona["puerta"])
@@ -677,6 +696,8 @@ class VistaConfiguracion(tk.Frame):
                                 "ya no existe.", parent=self)
 
     def _productos_renumerados(self, mapa):
+        # Un pedido es texto de usuario, asi que se reescriben sus tokens cuando
+        # cambian IDs; los items borrados se quitan y no se dejan referencias rotas.
         nuevos, pedidos_quitados, items_quitados = [], 0, 0
         for pedido in self.sec_pedidos.items:
             texto, quitados = reasignar_ids_en_texto(pedido["productos"], mapa)

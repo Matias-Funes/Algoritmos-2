@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from core.inventory import Producto
 
+# Representa un recolector y el estado que cambia durante la simulacion.
 class Picker:
     def __init__(
         self,
@@ -27,6 +28,8 @@ class Picker:
         if not isinstance(prioridad, int) or prioridad <= 0:
             raise ValueError("La prioridad debe ser un entero positivo.")
 
+        # Se conserva tanto la posicion inicial como la actual: la primera
+        # permite reiniciar y la segunda refleja el avance del turno.
         self.id = picker_id
         self.posicion_inicial = posicion_inicial
         self.posicion_actual = posicion_inicial
@@ -72,6 +75,8 @@ class Picker:
             "El peso del producto debe ser finito y no negativo.",
         )
 
+        # La carga se compara en kilogramos antes de modificar el picker para
+        # que recoger un producto nunca exceda su capacidad.
         nueva_carga = self.carga_actual_kg + producto.peso_kg * cantidad
         return nueva_carga <= self.capacidad_carga_kg or isclose(
             nueva_carga,
@@ -87,6 +92,8 @@ class Picker:
                 f"{cantidad} unidades de {producto.producto_id}."
             )
 
+        # Se acumulan unidades del mismo producto en una sola entrada. La lista
+        # es pequeña (solo la carga actual) y conserva el orden de recoleccion.
         for indice, (producto_id, cantidad_actual) in enumerate(
             self.items_transportados
         ):
@@ -106,6 +113,8 @@ class Picker:
         self.posicion_actual = tuple(nueva_posicion)
 
     def descargar(self) -> list[tuple[str, int]]:
+        # Se devuelve una copia antes de vaciar el estado interno, para que el
+        # registro de la descarga conserve los items que se entregaron.
         items_descargados = self.items_transportados.copy()
         self.items_transportados.clear()
         self.carga_actual_kg = 0.0

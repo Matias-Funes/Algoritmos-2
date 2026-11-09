@@ -1,7 +1,9 @@
 import sys
 from pathlib import Path
 
-# Agregamos la carpeta raíz al path para que encuentre main.py y src/
+# Este script de consola reutiliza el constructor de main.py, pero no crea Tk:
+# permite inspeccionar una corrida completa y sus metricas desde terminal.
+# Se agrega la raiz al path para poder importar el punto de entrada y src/.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import time
@@ -13,14 +15,15 @@ def correr_prueba(ruta_json):
     print(f"=== PROBANDO ESCENARIO: {ruta_json} ===")
     t_inicio = time.time()
 
-    # 1. Construimos la simulación (esto NO abre ventana)
+    # 1. Construir el mismo motor que usa la app, sin iniciar la interfaz.
     try:
         warehouse, simulacion = construir_simulacion(Path(ruta_json))
     except Exception as e:
         print(f"❌ ERROR AL CONSTRUIR: {e}")
         return
 
-    # 2. Corremos el bucle de simulación hasta que termine
+    # 2. Cada llamada avanza un paso sincronizado; el tope detecta un posible
+    # bloqueo en lugar de dejar este programa de diagnostico girando sin fin.
     pasos = 0
     try:
         while simulacion.avanzar_paso():
@@ -34,7 +37,8 @@ def correr_prueba(ruta_json):
 
     t_fin = time.time()
 
-    # 3. Extraemos las métricas finales
+    # 3. Consultar el estado final permite comparar cobertura, distancia y
+    # pickers activos sin depender de elementos graficos.
     estado = simulacion.get_estado()
 
     print("\n=== RESULTADOS ===")

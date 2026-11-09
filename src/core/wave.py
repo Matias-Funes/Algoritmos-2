@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 
 
+# Grupo limitado de pedidos que un picker prepara dentro de un turno.
 class Wave:
     def __init__(
         self,
@@ -63,6 +64,8 @@ class Wave:
     def puede_aceptar(
         self, orden: Orden, inventario: GestorInventario
     ) -> bool:
+        # Centralizar todas las restricciones aqui evita que los llamadores
+        # agreguen una orden que exceda pedidos, unidades o peso maximo.
         if not orden.items:
             raise ValueError("No se puede agregar una orden sin productos.")
 

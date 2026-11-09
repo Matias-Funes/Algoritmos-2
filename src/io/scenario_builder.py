@@ -42,6 +42,8 @@ _PREFIJO_PUERTA = {"OUTBOUND": "OUT", "INBOUND": "IN", "AMBOS": "MIX"}
 
 
 class ErrorConfiguracion(ValueError):
+    # Se acumulan varios problemas para que la interfaz pueda pedir al usuario
+    # corregirlos todos juntos, en vez de detenerse ante el primer campo.
     def __init__(self, mensajes):
         self.mensajes = list(mensajes)
         super().__init__("; ".join(self.mensajes))
@@ -51,6 +53,8 @@ class ErrorConfiguracion(ValueError):
 
 
 def _letras(indice):
+    # Convierte indices en etiquetas tipo Excel: A..Z, AA..AZ, etc. Se usa
+    # para generar IDs legibles de bandas y zonas sin colisiones por limite 26.
     indice += 1
     texto = ""
     while indice:
@@ -68,6 +72,7 @@ def tipo_puerta(valor):
 
 
 def ids_puertas(tipos):
+    # Los contadores son independientes por tipo: puede haber OUT_1 e IN_1.
     contadores = {}
     ids = []
     for valor in tipos:
@@ -103,6 +108,8 @@ def calcular_layout(n_racks, largo, n_puertas_inferiores=0, n_puertas_superiores
     largo = min(max(int(largo), LARGO_RACK_MIN), LARGO_RACK_MAX)
     tiene_superior = n_puertas_superiores > 0
 
+    # Se prueban distintas cantidades de bandas. El puntaje favorece un almacen
+    # ancho (aprox. 1.5 veces su alto), para evitar layouts excesivamente largos.
     mejor = None
     for bandas in range(1, min(n_racks, 26) + 1):
         columnas = math.ceil(n_racks / bandas)
@@ -112,6 +119,7 @@ def calcular_layout(n_racks, largo, n_puertas_inferiores=0, n_puertas_superiores
         if mejor is None or puntaje < mejor[0] - 1e-9:
             mejor = (puntaje, bandas, columnas)
     _, bandas, columnas = mejor
+    # Reparto equilibrado: las primeras bandas reciben como mucho un rack extra.
     por_banda = [n_racks // bandas + (1 if b < n_racks % bandas else 0) for b in range(bandas)]
 
     ancho_base = SEPARACION_RACKS * columnas + SEPARACION_RACKS
@@ -129,6 +137,8 @@ def calcular_layout(n_racks, largo, n_puertas_inferiores=0, n_puertas_superiores
     y_sup = y_banda0 + bandas * largo + (bandas - 1) * ALTO_PASILLO_MEDIO
     alto = y_sup + alto_corredor_sup + (ZONA_ALTO_ENTRADA + 1 if tiene_superior else 0)
 
+    # Alternar N/S entre pasillos contiguos reduce cruces enfrentados; los
+    # corredores horizontales AMBOS conectan los extremos de esas bandas.
     racks, pasillos = [], []
     for b in range(bandas):
         y0 = y_banda0 + b * (largo + ALTO_PASILLO_MEDIO)
@@ -201,11 +211,15 @@ _TOKEN = re.compile(r"^(?P<nombre>.+?)(?:\s*[xX×*]\s*(?P<cantidad>\d+))?$")
 
 
 def resolver_items(texto, productos):
+    # Se indexa por ID y por nombre una sola vez. Asi cada token se resuelve
+    # rapido, y los nombres repetidos se detectan en lugar de elegir al azar.
     por_id = {str(p["id"]).casefold(): p["id"] for p in productos}
     por_nombre = {}
     for p in productos:
         por_nombre.setdefault(str(p["nombre"]).strip().casefold(), []).append(p["id"])
 
+    # Un diccionario agrupa referencias repetidas al mismo producto, por ejemplo
+    # "P001 x2, P001 x3" se normaliza a una unica entrada de 5 unidades.
     items = {}
     for token in str(texto).split(","):
         token = token.strip()
@@ -260,6 +274,9 @@ def formatear_items(items):
 
 
 def _orden_celdas(largo):
+    # El paso es coprimo con el total de huecos; el recorrido modular visita
+    # todas las celdas del rack antes de repetir una. Esto distribuye productos
+    # consecutivos en vez de llenar primero una sola zona del rack.
     celdas = 2 * largo
     paso = max(1, celdas // 3)
     while math.gcd(paso, celdas) != 1:
@@ -343,6 +360,8 @@ def validar_geometria(escenario):
         u = o["ubicacion"]
         return {(u["x"] + i, u["y"] + j) for i in range(o["ancho"]) for j in range(o["alto"])}
 
+    # El mapa coordenada -> objetos que la ocupan permite detectar solapamientos
+    # con consultas promedio O(1), y tambien informa que elementos chocaron.
     ocupadas = {}
 
     def registrar(nombre, conjunto, clase):
@@ -407,6 +426,9 @@ def validar_geometria(escenario):
 
 
 def construir_escenario(config):
+    # La funcion sigue tres etapas: validar entradas, convertirlas a objetos
+    # serializables y validar el layout final. Se acumulan errores para dar un
+    # reporte completo sin escribir un escenario parcialmente valido.
     errores = []
 
     datos_racks = config.get("racks", {})
@@ -473,6 +495,9 @@ def construir_escenario(config):
         errores.append(f"Con este almacén solo caben {lugares_pickers} pickers en los pasillos "
                        f"y hay {len(pickers_cfg)}. Agregue racks o reduzca los pickers.")
 
+    # Cada rack tiene dos columnas, `largo` posiciones y niveles verticales.
+    # El contador por rack asigna huecos distintos y permite detectar cuando
+    # la capacidad fisica ya se completo.
     productos_cfg = config.get("productos", [])
     if not productos_cfg:
         errores.append("Agregue al menos un producto.")
@@ -530,6 +555,8 @@ def construir_escenario(config):
     if max_peso is None or max_peso <= 0:
         errores.append("El peso máximo por wave debe ser mayor que 0.")
 
+    # Los pedidos se convierten a IDs de producto antes de calcular unidades y
+    # peso: asi se valida el limite de wave usando los mismos datos del motor.
     pedidos_cfg = config.get("pedidos", [])
     if not pedidos_cfg:
         errores.append("Agregue al menos un pedido.")
@@ -563,6 +590,8 @@ def construir_escenario(config):
     if errores:
         raise ErrorConfiguracion(errores)
 
+    # Las puertas INBOUND se colocan arriba; las OUTBOUND/AMBOS, abajo. Las
+    # zonas se centran frente a su puerta y se ordenan para IDs reproducibles.
     bordes = {"inf": [], "sup": []}
     for indice, tipo in enumerate(tipos):
         bordes["sup" if tipo == "INBOUND" else "inf"].append(indice)
@@ -614,6 +643,8 @@ def construir_escenario(config):
 
 
 def guardar_escenario(config, carpeta):
+    # El nombre con fecha evita pisar escenarios anteriores; el sufijo resuelve
+    # una posible colision si ya existe un archivo del mismo segundo.
     escenario = construir_escenario(config)
     carpeta = Path(carpeta)
     carpeta.mkdir(parents=True, exist_ok=True)
@@ -628,6 +659,9 @@ def guardar_escenario(config, carpeta):
 
 
 def escenario_a_config(datos):
+    # La vista manual admite un layout regular propio. Al importar un escenario
+    # arbitrario se conservan los datos de negocio, pero IDs y ubicaciones se
+    # regeneran; los avisos hacen visibles las partes que no pudieron mapearse.
     if not isinstance(datos, dict) or not isinstance(datos.get("warehouse"), dict):
         raise ValueError("El archivo no tiene el formato de un escenario (falta «warehouse»).")
     avisos = []

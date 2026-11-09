@@ -26,6 +26,11 @@ TICKS_ATASCO = 3
 
 
 class Simulation:
+    # El motor mantiene el estado de un turno y expone avanzar_paso() para que
+    # una interfaz o un script puedan controlar el mismo proceso. En modo
+    # dinamico no se prepara una ruta completa: se vuelve a planificar al llegar
+    # a cada producto o despacho.
+
     def __init__(
         self,
         warehouse: Any,
@@ -260,6 +265,9 @@ class Simulation:
         return normalizados
 
     def _cargar_demanda(self, pedidos: Any, asignaciones: dict[str, Any] | None) -> None:
+        # La demanda global se usa cuando los pedidos son compartidos. Si hay
+        # asignaciones explicitas, cada picker tiene su propio contador para no
+        # descontar dos veces la misma necesidad.
         if pedidos is not None and asignaciones is None:
             lista_pedidos = getattr(pedidos, "pedidos", pedidos)
             if isinstance(lista_pedidos, dict):
@@ -328,6 +336,8 @@ class Simulation:
             demanda.pop(producto_id, None)
 
     def _recoger_en_posicion(self, picker: Any) -> None:
+        # En el modo de rutas prearmadas, revisar los productos al llegar a una
+        # celda permite que el movimiento y el consumo de stock ocurran juntos.
         posicion = tuple(picker.posicion_actual)
         for producto_id, producto in self._productos.items():
             cantidad = self._cantidad_pendiente(picker, producto_id)
@@ -382,6 +392,8 @@ class Simulation:
             self._recoger_en_posicion(picker)
 
     def _inicializar_navegacion_dinamica(self) -> None:
+        # Estos mapas estan indexados por ID porque todos los pasos consultan el
+        # tramo, objetivo e indice de ruta de cada picker.
         self._tramos_dinamicos: dict[str, list[tuple[int, int]]] = {
             picker.id: [] for picker in self.pickers
         }
@@ -408,6 +420,10 @@ class Simulation:
     def _calcular_puntos_despacho_reingreso(
         self, picker_ids: set[str]
     ) -> dict[str, set[tuple[int, int]]]:
+        # Para saber desde que despachos se puede volver al inicio, se invierten
+        # las aristas y se hace un BFS desde la posicion inicial. Un punto
+        # alcanzable en el grafo invertido tiene una ruta de regreso en el grafo
+        # original. Los conjuntos hacen rapida la consulta durante la descarga.
         if not picker_ids or self._cache_distancias is None:
             return {}
 
@@ -444,6 +460,8 @@ class Simulation:
         return puntos_por_picker
 
     def _celdas_recoleccion(self, producto: Any) -> list[tuple[int, int]]:
+        # El picker se para en una celda transitable, no dentro del rack. Como
+        # la ubicacion de cada producto no cambia, se cachean sus celdas vecinas.
         cache_key = id(producto)
         if cache_key in self._celdas_recoleccion_cache:
             return list(self._celdas_recoleccion_cache[cache_key])
@@ -530,6 +548,9 @@ class Simulation:
         dict[tuple[int, int], tuple[int, int]],
     ] | None:
         """Calcula una búsqueda desde el picker para todos los destinos."""
+        # Es Dijkstra con una cola heapq local: las posiciones ocupadas por otros
+        # pickers se tratan como bloqueadas. Si se dieron destinos, termina al
+        # encontrar todos los alcanzables, evitando explorar el resto del mapa.
         origen = (
             tuple(picker.posicion_actual) if origen is None else tuple(origen)
         )
@@ -737,6 +758,9 @@ class Simulation:
         """Detecta grupos de pickers que se bloquean entre sí (cruces de frente,
         pickers esperando un punto de despacho ocupado, etc.) y hace que uno
         del grupo, el de menor prioridad, cede el paso."""
+        # `bloqueos_por_picker` representa dependencias entre pickers. Union-find
+        # agrupa ciclos de espera sin recorrer repetidamente todo el grafo de
+        # bloqueos; despues se elige un miembro que pueda ceder o replanificar.
         activos = {
             picker.id: picker
             for picker in self.pickers
@@ -798,6 +822,10 @@ class Simulation:
                     break
 
     def _planificar_descarga_dinamica(self, picker: Any) -> bool:
+        # Una descarga debe cumplir tres condiciones: la zona es de salida,
+        # el punto es alcanzable ahora y (si queda trabajo futuro) desde ahi se
+        # puede volver al area de trabajo. Entre opciones validas se elige la
+        # ruta mas corta; el desempate por ID/coordenada es determinista.
         if not self._puntos_despacho:
             raise ValueError(
                 f"El picker {picker.id} necesita descargar, pero no hay "
@@ -833,14 +861,13 @@ class Simulation:
         puntos_ocupados = 0
         origen = tuple(picker.posicion_actual)
 
-        # --- NUEVO: Evaluar si es el final absoluto de la simulación ---
+        # En la ultima fase y sin demanda restante no hace falta volver: el
+        # picker puede usar cualquier punto de descarga aunque sea un callejon.
         tiene_mas_tareas = any(
             self._cantidad_pendiente(picker, pid) > 0
             for pid in self._productos
         )
         es_viaje_final_absoluto = self.es_ultima_fase and not tiene_mas_tareas
-        # ---------------------------------------------------------------
-
         for zona_id, puntos in self._puntos_despacho.items():
             for punto in puntos:
                 if (
@@ -852,15 +879,16 @@ class Simulation:
                     puntos_ocupados += 1
                     continue
 
-                # --- NUEVO: Filtro de Callejón Sin Salida ---
+                # Evitar terminar en un extremo sin salida cuando el picker
+                # necesitara seguir moviendose; al final absoluto si se permite.
                 if not es_viaje_final_absoluto:
                     grafo = getattr(self._cache_distancias, "_grafo", None)
                     if grafo:
-                        # Si el punto tiene 1 o 0 vecinos, es un callejón
                         if len(grafo.get_neighbors(punto)) <= 1:
-                            puntos_ocupados += 1 # Lo contamos como no disponible
+                            # Se cuenta como no disponible para que el flujo
+                            # diferencie un callejon de una descarga alcanzable.
+                            puntos_ocupados += 1
                             continue
-                # ---------------------------------------------
 
                 ruta = self._camino_desde_busqueda(
                     picker, punto, busqueda
@@ -890,7 +918,9 @@ class Simulation:
             if cantidad_puntos and puntos_ocupados == cantidad_puntos:
                 return False
             if not hay_punto_alcanzable:
-                return False # Retornamos False en lugar de lanzar error si todo es callejón
+                # Sin una zona alcanzable se deja que el planificador registre
+                # faltantes o espere a que se libere un punto, segun el estado.
+                return False
             return False
 
         _, zona_id, punto, camino = min(
@@ -904,6 +934,9 @@ class Simulation:
         return True
 
     def _planificar_picker_dinamico(self, picker: Any) -> None:
+        # Planifica solo el siguiente objetivo, no una ruta para todos los
+        # productos. Asi puede reaccionar al stock agotado, a la carga actual y
+        # a las posiciones que otros pickers ocupan en este momento.
         if self._estado_picker[picker.id] == "terminado":
             return
         if self._indices_ruta[picker.id] < len(
@@ -924,6 +957,8 @@ class Simulation:
                 if self._asignaciones_explicitas
                 else self._demanda_global
             )
+            # Se itera sobre una copia porque registrar un faltante elimina la
+            # demanda correspondiente del diccionario original.
             for producto_id, cantidad in list(demanda.items()):
                 producto = self._productos.get(producto_id)
                 if producto is None:
@@ -939,7 +974,8 @@ class Simulation:
                         picker, producto_id, cantidad, "stock_agotado"
                     )
 
-                # ... (el resto del código sigue igual)
+                # Si el producto ya no tiene stock, el faltante se registra y
+                # se quita de la demanda; los productos con stock siguen activos.
             demanda = (
                 self._demanda_por_picker.get(picker.id, {})
                 if self._asignaciones_explicitas
@@ -957,6 +993,8 @@ class Simulation:
                 self._estado_picker[picker.id] = "terminado"
                 return
 
+            # Filtrar primero por capacidad evita planificar viajes a productos
+            # que no se podrian cargar ni siquiera en la posicion actual.
             capacidad_libre = (
                 picker.capacidad_carga_kg - picker.carga_actual_kg
             )
@@ -978,6 +1016,9 @@ class Simulation:
                 productos_candidatos.append((producto_id, puntos))
                 destinos.update(puntos)
 
+            # Una busqueda desde el origen sirve para comparar todos los
+            # productos candidatos en conjunto, en vez de correr un Dijkstra
+            # separado por cada destino.
             busqueda = self._calcular_distancias_con_picker(
                 picker, origen, destinos
             )
@@ -1014,6 +1055,9 @@ class Simulation:
                 )
 
             if opciones:
+                # A respeta el primer producto pendiente; B usa el mas cercano.
+                # Si el primero no es alcanzable/cargable, se toma la mejor
+                # opcion disponible para que el picker pueda continuar.
                 if self.estrategia_recorrido == "Orden de pedidos (A)":
                     primer_producto = list(demanda.keys())[0]
                     elegido = None
@@ -1168,6 +1212,9 @@ class Simulation:
         )
 
     def avanzar_paso(self) -> bool:
+        # Cada tick se resuelve en dos tiempos: primero todos proponen su celda
+        # siguiente, luego se arbitran choques y solo despues se mueven los
+        # aceptados. Asi el resultado no depende de actualizar pickers uno a uno.
         propuestas: dict[str, tuple[int, int]] = {}
         habia_pausa = False
 
@@ -1219,6 +1266,8 @@ class Simulation:
             return True
 
         self.paso_actual += 1
+        # Si varios pickers proponen la misma celda, la prioridad define quien
+        # avanza. Los restantes quedan registrados como bloqueados.
         destinos: dict[tuple[int, int], list[Any]] = {}
         for picker in self.pickers:
             if picker.id in propuestas:
@@ -1261,6 +1310,9 @@ class Simulation:
                 else:
                     picker_por_zona[zona_id] = picker.id
 
+        # Quitar movimientos que entrarian en una celda cuyo ocupante finalmente
+        # no se mueve. Se repite porque retirar un movimiento puede bloquear a
+        # otro que dependia de el.
         cambio = True
         while cambio:
             cambio = False
@@ -1372,6 +1424,9 @@ class Simulation:
         return quedan_pasos
 
     def get_estado(self) -> dict[str, Any]:
+        # Devuelve un formato independiente del modelo interno que consume la UI.
+        # Las listas y diccionarios de resultados se copian para que una vista no
+        # pueda modificar accidentalmente el estado del motor.
         return {
             "paso_actual": self.paso_actual,
             "pickers": [
@@ -1451,6 +1506,9 @@ class Simulation:
         self._en_ejecucion = True
 
     def resetear(self) -> None:
+        # Reiniciar restaura tanto el estado fisico como la demanda, el stock,
+        # los contadores y las rutas; resetear solo la posicion no bastaria para
+        # repetir la simulacion con los mismos resultados.
         for picker in self.pickers:
             inicial = self._estado_inicial[picker.id]
             picker.mover_a(inicial["posicion"])

@@ -170,7 +170,8 @@ def crear_boton(parent, texto, comando, primario=True, **opciones):
 # ==========================================================
 
 def crear_entry(parent, variable, ancho=8):
-
+    # Todos los campos comparten el mismo estilo para que las vistas no repitan
+    # configuracion visual y los cambios de paleta se hagan en un solo lugar.
     return tk.Entry(
         parent,
         textvariable=variable,
@@ -195,7 +196,8 @@ def crear_entry(parent, variable, ancho=8):
 # ==========================================================
 
 def crear_spinbox(parent, variable, desde=0, hasta=9999, ancho=6):
-
+    # Spinbox limita la entrada desde la interfaz; la validacion de negocio
+    # sigue correspondiendo a scenario_builder.
     return tk.Spinbox(
         parent,
 
@@ -265,6 +267,8 @@ def aplicar_estilos_ttk(root):
 
     global ESCALA
 
+    # 96 DPI es la escala base de Tk. Se conserva un minimo de 1 para no
+    # achicar controles en pantallas configuradas por debajo de esa densidad.
     ESCALA = max(1.0, root.winfo_fpixels("1i") / 96.0)
 
     estilo = ttk.Style(root)
