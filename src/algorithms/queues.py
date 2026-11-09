@@ -1,8 +1,11 @@
-# queue esta implementada con listas enlazadas pero las colas de prioridad
-# van a estar implementadas con arrays dinamicos de python para mejorar la complejidad
+# Se usan dos estructuras segun la operacion que domina:
+# - Queue enlazada permite encolar y desencolar por los extremos en O(1).
+# - La cola de prioridad usa el heap dinamico porque necesita extraer el menor
+#   valor repetidamente, en O(log n), como hace Dijkstra.
 from .heap import *
 
 
+# Cola FIFO: `head` es el proximo elemento y `tail` el ultimo agregado.
 class Queue:
 
     class Node:
@@ -18,6 +21,7 @@ class Queue:
         """ingresa los elementos a una queue, O(1)"""
         newNode = Queue.Node(element)
 
+        # Mantener ambos extremos evita recorrer la lista para agregar al final.
         if self.head is None:
             self.head = newNode
             self.tail = newNode
@@ -63,6 +67,8 @@ class minPriorityQueue:
 
     def enqueue(self, elemento, prioridad):
         """Agrega un elemento con su prioridad. O(log n)"""
+        # Cada entrada es (prioridad, elemento): la raiz del min-heap queda
+        # siempre disponible para extraer el siguiente costo mas bajo.
         self._heap.append((prioridad, elemento))
         siftUp(self._heap, len(self._heap) - 1, isMaxHeap=False)
 

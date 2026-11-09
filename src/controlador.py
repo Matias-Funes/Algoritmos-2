@@ -37,6 +37,8 @@ class Controlador:
         tamano_celda: tamaño en píxeles de cada celda en la visualización.
         carpeta_json: carpeta donde se abre el explorador de archivos (opcional).
         """
+        # Se inyecta el constructor para separar la navegacion de ventanas de
+        # la logica que carga datos y crea el motor.
         self.constructor_simulacion = constructor_simulacion
         self.tamano_celda = tamano_celda
         self.carpeta_json = carpeta_json
@@ -64,6 +66,8 @@ class Controlador:
 
     # --- Navegación ---
     def _mostrar(self, vista, tamano=None, minimo=None, maximizada=False):
+        # Solo hay una vista principal activa. Destruir la anterior evita
+        # dejar widgets ocultos recibiendo eventos o callbacks.
         if self.vista_actual is not None:
             self.vista_actual.destroy()
         self.vista_actual = vista
@@ -118,7 +122,8 @@ class Controlador:
             on_volver=self.mostrar_menu,
             on_cerrar=self.cerrar_aplicacion,
         )
-        # Si la simulación necesita la ventana para programar sus pasos (after), se la vincula.
+        # Se vincula el callback de refresco para que el motor programe cada tick
+        # con root.after sin bloquear el bucle de eventos de Tkinter.
         vincular = getattr(self.simulacion, "vincular_interfaz", None)
         if vincular is not None:
             vincular(ventana.root, ventana.actualizar_desde_simulacion)
@@ -156,6 +161,8 @@ class Controlador:
 
     def iniciar_simulacion(self):
         """Va a la simulación si hay JSON; si no hay ningún dato, muestra un aviso."""
+        # La fuente de datos puede ser un JSON elegido por el usuario o una
+        # configuracion manual que primero se convierte al formato JSON comun.
         if self.ruta_json is None and self.config_manual is None:
             self.menu.mostrar_aviso(
                 "Cargue un archivo JSON o realice la configuración manual "
@@ -293,7 +300,9 @@ class Controlador:
             with open(ruta, encoding="utf-8") as f:
                 datos = json.load(f)
 
-            # Verificamos si es una partida guardada o un escenario normal
+            # Una partida contiene el escenario base mas el snapshot temporal;
+            # primero se reconstruye el motor desde el escenario y luego se
+            # aplica la foto para restaurar posiciones, stock y contadores.
             snapshot = datos.get("snapshot_simulacion")
             if not snapshot:
                 messagebox.showerror(

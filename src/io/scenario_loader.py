@@ -38,6 +38,8 @@ def cargar_escenario(ruta_json):
         FileNotFoundError si la ruta no existe.
         ValueError si el JSON es inválido o le faltan campos obligatorios.
     """
+    # Se traduce el error de parseo a un mensaje del dominio y se valida el
+    # esquema antes de construir objetos, para reportar fallas en la entrada.
     try:
         with open(ruta_json, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -48,6 +50,9 @@ def cargar_escenario(ruta_json):
 
     _validar_secciones(data)
 
+    # Productos/pedidos/pickers siguen como diccionarios para que main.py los
+    # convierta una sola vez a modelos del dominio. El warehouse, en cambio,
+    # necesita validacion geometrica y se construye aqui.
     warehouse = _construir_warehouse(data["warehouse"])
     warehouse.rellenar_pasillos_implicitos()
 
@@ -96,6 +101,8 @@ def _requerir(d, campos, contexto):
 
 def _construir_warehouse(w_data):
     """Construye un Warehouse a partir de la sección 'warehouse' del JSON."""
+    # Se agregan primero objetos en el mismo orden del esquema. Warehouse
+    # comprueba limites y solapamientos al insertar cada objeto.
     # Leer dimensiones
     ancho_x = int(w_data["dimensiones"]["ancho_x"])
     largo_y = int(w_data["dimensiones"]["largo_y"])

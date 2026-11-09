@@ -3,6 +3,8 @@ from src.algorithms.hashTable import HashTable
 
 
 class Producto:
+    # Producto guarda los datos propios de un SKU; el inventario administra
+    # esos objetos y su stock, sin duplicar la informacion de cada producto.
     def __init__(self, producto_id, nombre, rack_id, ubicacion, cantidad_disponible=0, peso_kg=0.0):
         self.producto_id: str = producto_id
         self.nombre: str = nombre
@@ -43,6 +45,8 @@ class GestorInventario:
     asi buscar, agregar y eliminar cuesta O(1) en promedio"""
 
     def __init__(self):
+        # El ID es la clave estable para resolver pedidos y actualizar stock
+        # sin recorrer la lista completa de productos.
         self.productos = HashTable()
 
     def agregar_producto(self, producto: Producto):
@@ -75,6 +79,8 @@ class GestorInventario:
         if cantidad <= 0:
             raise ValueError("La cantidad a reservar debe ser mayor a 0.")
 
+        # Se valida antes de mutar el objeto: ante stock insuficiente no queda
+        # un descuento parcial ni un inventario en estado inconsistente.
         producto = self.productos.buscarHT(producto_id)
 
         if producto.cantidad_disponible < cantidad:
@@ -110,6 +116,8 @@ class GestorInventario:
     def todos_los_productos(self):
         """Devuelve una lista con todos los productos, O(m+n) peor caso"""
 
+        # Para listar todo hay que visitar todos los buckets y sus cadenas;
+        # esta operacion lineal se reserva para tareas de recorrido/exportacion.
         productos = []
         for casilla in self.productos.casillas:
             actual = casilla

@@ -1,7 +1,9 @@
 import sys
 from pathlib import Path
 
-# Agregamos la carpeta raíz al path para que encuentre main.py y src/
+# Script de stress: genera escenarios de distintos tamaños y ejecuta el mismo
+# constructor y motor que la aplicacion, pero sin abrir una ventana.
+# Se agrega la raiz al path para importar esos modulos desde scripts/.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import contextlib
@@ -17,7 +19,8 @@ def correr_experimento(ruta_json):
     """Corre la simulación sin UI y devuelve las métricas. Silencia los prints de main.py."""
     t_inicio = time.time()
 
-    # Silenciamos la salida de texto de main.py para no saturar la consola
+    # El constructor imprime el progreso normal de la app; el redireccionamiento
+    # lo captura para que una serie larga solo muestre el resumen por escenario.
     f = io.StringIO()
     try:
         with contextlib.redirect_stdout(f):
@@ -61,6 +64,7 @@ def test_masivo_generados():
     resultados = []
     ruta_temp = Path("data/scenarios/temp_experimento.json")
 
+    # Se reutiliza un archivo temporal para no acumular cientos de JSON de prueba.
     for config in configuraciones:
         print(f"\nGenerando escenario {config['nombre']}...")
         generar_escenario(
@@ -91,6 +95,8 @@ def test_todos_los_escenarios_carpeta():
     carpeta = Path("data/scenarios")
     resultados = []
 
+    # Se omiten entradas temporales o deliberadamente invalidas; los escenarios
+    # restantes se ejecutan sin modificar sus archivos.
     for ruta in carpeta.glob("*.json"):
         # Saltamos los temporales o los inválidos
         if "temp_" in ruta.name or "invalido" in ruta.name:
