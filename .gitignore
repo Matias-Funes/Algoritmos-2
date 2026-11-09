@@ -36,7 +36,7 @@ Thumbs.db
 # sesiones guardadas
 data/sesiones/
 comandos.txt
-*.pdf
+# *.pdf
 
 # escenarios
 data/scenarios/*.json
