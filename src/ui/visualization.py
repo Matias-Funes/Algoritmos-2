@@ -1,4 +1,5 @@
 # src/ui/visualization.py
+import re
 import sys
 import tkinter as tk
 from pathlib import Path
@@ -8,6 +9,15 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.core.cell import AMBOS, DESPACHO, PASILLO, PUERTA, RACK, E, N, O, S
+from src.ui.estilos import (
+    BLANCO,
+    FUENTE,
+    FUENTE_NEGRITA,
+    FUENTE_TITULO,
+    ROJO,
+    crear_boton,
+    px,
+)
 
 COLOR_VOLVER_TERMINADA = "#10b981"
 COLORES_PICKERS = [
@@ -41,6 +51,7 @@ class Ventana(tk.Frame):
         self._productos_recogidos_stock = None
         self._rutas_dibujadas = {}
         self._items_pickers = {}
+        self._firma_pedidos_mostrada = None
 
         if master is None:
             self.root.title("Wave Picking - Simulador")
@@ -50,22 +61,33 @@ class Ventana(tk.Frame):
         # ==========================================
         # 1. BARRA SUPERIOR (Controles y Velocidad)
         # ==========================================
-        self.top_bar = tk.Frame(self, bg="#ffffff", padx=10, pady=10, highlightthickness=1, highlightbackground="#cbd5e1")
+        self.top_bar = tk.Frame(self, bg="#ffffff", padx=12, pady=10, highlightthickness=1, highlightbackground="#cbd5e1")
         self.top_bar.pack(side=tk.TOP, fill=tk.X)
 
-        tk.Button(
+        crear_boton(
             self.top_bar,
-            text="✕ Cerrar",
-            command=self.btn_cerrar_aplicacion,
-            font=("Arial", 9, "bold"),
-            relief=tk.FLAT,
-            bg="#fee2e2",
-            padx=10,
-            pady=4,
+            "✕ Cerrar",
+            self.btn_cerrar_aplicacion,
+            primario=False,
+            font=FUENTE_NEGRITA,
+            bg=ROJO,
+            fg=BLANCO,
+            activebackground="#9F3939",
+            activeforeground=BLANCO,
+            padx=12,
+            pady=6,
         ).pack(side=tk.RIGHT, padx=(8, 0))
 
         # Botón Volver (Izquierda)
-        self.btn_volver = tk.Button(self.top_bar, text="← Volver al menú", command=self.btn_volver_menu, font=("Arial", 10, "bold"), relief=tk.FLAT, bg="#f1f5f9", padx=10)
+        self.btn_volver = crear_boton(
+            self.top_bar,
+            "← Volver al menú",
+            self.btn_volver_menu,
+            primario=False,
+            font=FUENTE_NEGRITA,
+            padx=12,
+            pady=6,
+        )
         self.btn_volver.pack(side=tk.LEFT, padx=(0, 20))
         self._estilo_volver_original = {
             "bg": self.btn_volver.cget("bg"), "fg": self.btn_volver.cget("fg"),
@@ -76,14 +98,37 @@ class Ventana(tk.Frame):
         frame_btn = tk.Frame(self.top_bar, bg="#ffffff")
         frame_btn.pack(side=tk.LEFT)
 
-        self.btn_play_pause = tk.Button(frame_btn, text="▶ Iniciar", command=self.btn_toggle_play_pause, font=("Arial", 9, "bold"), bg="#e0f2fe", relief=tk.FLAT, padx=10, pady=4)
+        self.btn_play_pause = crear_boton(
+            frame_btn,
+            "▶ Iniciar",
+            self.btn_toggle_play_pause,
+            font=FUENTE_NEGRITA,
+            padx=12,
+            pady=6,
+        )
         self.btn_play_pause.pack(side=tk.LEFT, padx=2)
 
-        tk.Button(frame_btn, text="🔄 Reiniciar", command=self.btn_reset, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
-        tk.Button(frame_btn, text="⏮ Atrás", command=self.btn_paso_atras, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
-        tk.Button(frame_btn, text="⏭ Adelante", command=self.btn_paso, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
-        tk.Button(frame_btn, text="💾 Guardar Partida", command=self.btn_guardar_partida, relief=tk.FLAT, bg="#f1f5f9", padx=10, pady=4).pack(side=tk.LEFT, padx=2)
-        tk.Button(frame_btn, text="📊 Comparar Estrategias", command=self.btn_comparar_estrategias, bg="#e0f2fe", relief=tk.FLAT, padx=10, pady=4).pack(side=tk.LEFT, padx=2)
+        for texto, comando in (
+            ("🔄 Reiniciar", self.btn_reset),
+            ("⏮ Atrás", self.btn_paso_atras),
+            ("⏭ Adelante", self.btn_paso),
+            ("💾 Guardar Partida", self.btn_guardar_partida),
+        ):
+            crear_boton(
+                frame_btn,
+                texto,
+                comando,
+                primario=False,
+                padx=12,
+                pady=6,
+            ).pack(side=tk.LEFT, padx=2)
+        crear_boton(
+            frame_btn,
+            "📊 Comparar Estrategias",
+            self.btn_comparar_estrategias,
+            padx=12,
+            pady=6,
+        ).pack(side=tk.LEFT, padx=2)
         # --- NUEVO: Toggle para mostrar/ocultar etiquetas ---
         frame_etiquetas = tk.Frame(self.top_bar, bg="#ffffff")
         frame_etiquetas.pack(side=tk.RIGHT, padx=15)
@@ -95,7 +140,7 @@ class Ventana(tk.Frame):
             variable=self.mostrar_etiquetas,
             command=self.toggle_etiquetas,
             bg="#ffffff",
-            font=("Arial", 9, "bold"),
+            font=FUENTE_NEGRITA,
             activebackground="#ffffff"
         )
         chk_etiquetas.pack()
@@ -105,7 +150,7 @@ class Ventana(tk.Frame):
         frame_velocidad = tk.Frame(self.top_bar, bg="#ffffff")
         frame_velocidad.pack(side=tk.RIGHT)
 
-        tk.Label(frame_velocidad, text="Velocidad:", bg="#ffffff", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 5))
+        tk.Label(frame_velocidad, text="Velocidad:", bg="#ffffff", font=FUENTE_NEGRITA).pack(side=tk.LEFT, padx=(0, 5))
         self.combo_velocidad = ttk.Combobox(
             frame_velocidad,
             values=["Lento (500ms)", "Normal (250ms)", "Rápido (100ms)", "Turbo (20ms)", "Hipervelocidad (5ms)", "Máxima Velocidad (0ms)"],
@@ -128,22 +173,26 @@ class Ventana(tk.Frame):
         self.panel.pack_propagate(False)
 
         # 1. Métricas Globales
-        tk.Label(self.panel, text="Métricas Globales", font=("Arial", 12, "bold"), bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(5, 5))
-        self.lbl_wave = tk.Label(self.panel, text="Wave: 0 / 0", font=("Arial", 10), bg="#f8fafc")
+        tk.Label(self.panel, text="Métricas Globales", font=FUENTE_TITULO, bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(5, 5))
+        self.lbl_wave = tk.Label(
+            self.panel, text="Turno: 0 / 0 · Waves: 0", font=FUENTE, bg="#f8fafc"
+        )
         self.lbl_wave.pack(anchor="w")
-        self.lbl_paso = tk.Label(self.panel, text="Paso actual: 0", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_paso = tk.Label(self.panel, text="Paso actual: 0", font=FUENTE, bg="#f8fafc")
         self.lbl_paso.pack(anchor="w")
-        self.lbl_productos = tk.Label(self.panel, text="Productos Recogidos: 0 / 0", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_productos = tk.Label(self.panel, text="Productos Recogidos: 0 / 0", font=FUENTE, bg="#f8fafc")
         self.lbl_productos.pack(anchor="w")
-        self.lbl_productos_wave = tk.Label(self.panel, text="Recogidos Wave Actual: 0", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_productos_wave = tk.Label(
+            self.panel, text="Recogidos en turno: 0 / 0", font=FUENTE, bg="#f8fafc"
+        )
         self.lbl_productos_wave.pack(anchor="w")
-        self.lbl_distancia = tk.Label(self.panel, text="Distancia Total: 0 m", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_distancia = tk.Label(self.panel, text="Distancia Total: 0 m", font=FUENTE, bg="#f8fafc")
         self.lbl_distancia.pack(anchor="w")
-        self.lbl_altura = tk.Label(self.panel, text="Última altura recogida: Nivel 0", font=("Arial", 10), bg="#f8fafc")
+        self.lbl_altura = tk.Label(self.panel, text="Última altura recogida: Nivel 0", font=FUENTE, bg="#f8fafc")
         self.lbl_altura.pack(anchor="w")
 
         # 2. Panel de Pickers
-        tk.Label(self.panel, text="Estado Pickers", font=("Arial", 12, "bold"), bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(20, 5))
+        tk.Label(self.panel, text="Estado Pickers", font=FUENTE_TITULO, bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(20, 5))
         frame_lista_pickers = tk.Frame(self.panel, bg="#f8fafc")
         frame_lista_pickers.pack(fill=tk.X)
         self.canvas_pickers = tk.Canvas(
@@ -152,10 +201,17 @@ class Ventana(tk.Frame):
             bg="#f8fafc",
             highlightthickness=0,
         )
-        scrollbar_pickers = ttk.Scrollbar(
+        scrollbar_pickers = tk.Scrollbar(
             frame_lista_pickers,
             orient=tk.VERTICAL,
             command=self.canvas_pickers.yview,
+            width=px(14),
+            bg="#cbd5e1",
+            activebackground="#64748b",
+            troughcolor="#f1f5f9",
+            relief=tk.FLAT,
+            bd=0,
+            highlightthickness=0,
         )
         self.canvas_pickers.configure(yscrollcommand=scrollbar_pickers.set)
         self.canvas_pickers.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -185,14 +241,21 @@ class Ventana(tk.Frame):
         self.lbl_carga_pickers = {}
 
         # 3. Pedidos de la Wave
-        tk.Label(self.panel, text="Pedidos en Wave", font=("Arial", 12, "bold"), bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(20, 5))
+        tk.Label(self.panel, text="Pedidos en Wave", font=FUENTE_TITULO, bg="#f8fafc", fg="#1e293b").pack(anchor="w", pady=(20, 5))
         frame_pedidos = tk.Frame(self.panel, bg="#f8fafc")
         frame_pedidos.pack(fill=tk.BOTH, expand=True)
-        self.txt_pedidos = tk.Text(frame_pedidos, height=8, width=38, font=("Arial", 9), bg="#ffffff", state=tk.DISABLED, relief=tk.FLAT, padx=5, pady=5, highlightthickness=1, highlightbackground="#cbd5e1")
-        scrollbar_pedidos = ttk.Scrollbar(
+        self.txt_pedidos = tk.Text(frame_pedidos, height=8, width=38, font=("Segoe UI", 9), bg="#ffffff", state=tk.DISABLED, relief=tk.FLAT, padx=8, pady=8, highlightthickness=1, highlightbackground="#cbd5e1")
+        scrollbar_pedidos = tk.Scrollbar(
             frame_pedidos,
             orient=tk.VERTICAL,
             command=self.txt_pedidos.yview,
+            width=px(14),
+            bg="#cbd5e1",
+            activebackground="#64748b",
+            troughcolor="#f1f5f9",
+            relief=tk.FLAT,
+            bd=0,
+            highlightthickness=0,
         )
         self.txt_pedidos.configure(yscrollcommand=scrollbar_pedidos.set)
         self.txt_pedidos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -279,6 +342,7 @@ class Ventana(tk.Frame):
 
     def set_simulacion(self, sim):
         self.simulacion = sim
+        self._firma_pedidos_mostrada = None
 
     def btn_toggle_play_pause(self):
         if not self.simulacion: return
@@ -302,7 +366,7 @@ class Ventana(tk.Frame):
             "Rápido (100ms)": 100,
             "Turbo (20ms)": 20,
             "Hipervelocidad (5ms)": 5,
-            "Instántaneo (0ms)": 0
+            "Máxima Velocidad (0ms)": 0,
         }
 
         nuevo_intervalo = velocidades.get(seleccion, 250)
@@ -357,8 +421,8 @@ class Ventana(tk.Frame):
 
         style = ttk.Style(ventana)
         style.theme_use("clam")
-        style.configure("Treeview", rowheight=25, font=("Arial", 10))
-        style.configure("Treeview.Heading", font=("Arial", 10, "bold"))
+        style.configure("Treeview", rowheight=28, font=FUENTE)
+        style.configure("Treeview.Heading", font=FUENTE_NEGRITA)
 
         notebook = ttk.Notebook(ventana)
         notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -400,8 +464,8 @@ class Ventana(tk.Frame):
         frame_ganadores = tk.Frame(tab_global, bg="#f8fafc")
         frame_ganadores.pack(fill=tk.X, pady=10)
 
-        tk.Label(frame_ganadores, text=f"🏆 Mejor Distancia: {nombres_ui.get(ganador_dist, ganador_dist)}", font=("Arial", 12, "bold"), fg="#0ea5e9", bg="#f8fafc").pack(anchor="w")
-        tk.Label(frame_ganadores, text=f"⏱️ Mejor Tiempo: {nombres_ui.get(ganador_tiempo, ganador_tiempo)}", font=("Arial", 12, "bold"), fg="#0ea5e9", bg="#f8fafc").pack(anchor="w")
+        tk.Label(frame_ganadores, text=f"🏆 Mejor Distancia: {nombres_ui.get(ganador_dist, ganador_dist)}", font=FUENTE_TITULO, fg="#0ea5e9", bg="#f8fafc").pack(anchor="w")
+        tk.Label(frame_ganadores, text=f"⏱️ Mejor Tiempo: {nombres_ui.get(ganador_tiempo, ganador_tiempo)}", font=FUENTE_TITULO, fg="#0ea5e9", bg="#f8fafc").pack(anchor="w")
 
         columnas_detalle = ["Wave", "Distancia A", "Distancia B", "Ganador"]
         tabla_detalle = ttk.Treeview(tab_detalle, columns=columnas_detalle, show="headings", height=10)
@@ -422,7 +486,9 @@ class Ventana(tk.Frame):
             tabla_detalle.insert("", tk.END, values=[wave_id, d_a, d_b, ganador])
 
         tabla_detalle.pack(fill=tk.BOTH, expand=True)
-        tk.Button(ventana, text="Cerrar", command=ventana.destroy, width=15).pack(pady=(0, 10))
+        crear_boton(
+            ventana, "Cerrar", ventana.destroy, primario=False, width=15
+        ).pack(pady=(0, 12))
 
     def btn_guardar_partida(self):
         if not self.simulacion: return
@@ -443,9 +509,16 @@ class Ventana(tk.Frame):
 
     def _actualizar_boton_volver(self, estado):
         if self._simulacion_terminada(estado):
-            self.btn_volver.config(text="✔ Simulación terminada: Volver", bg=COLOR_VOLVER_TERMINADA, fg="white", activebackground=COLOR_VOLVER_TERMINADA)
+            self.btn_volver.config(
+                text="✔ Simulación terminada: Volver",
+                bg=COLOR_VOLVER_TERMINADA,
+                fg="white",
+                activebackground="#059669",
+            )
+            self.btn_volver._hover_normal_background = COLOR_VOLVER_TERMINADA
         else:
             self.btn_volver.config(text="← Volver al menú", **self._estilo_volver_original)
+            self.btn_volver._hover_normal_background = self._estilo_volver_original["bg"]
 
     def btn_volver_menu(self):
         if not self._simulacion_terminada():
@@ -629,8 +702,12 @@ class Ventana(tk.Frame):
         if p_data.get("recolectando", False):
             color = "#10b981"
 
-        inicial = str(p_data['id'])[-1]
-        font_size = max(6, int(self.tamano_celda * 0.4))
+        # Número completo del picker (PK_04 -> "4", PK_12 -> "12")
+        coincidencia = re.search(r"\d+", str(p_data["id"]))
+        inicial = str(int(coincidencia.group())) if coincidencia else str(p_data["id"])[-1]
+        # Con 2+ dígitos se reduce la fuente para que quepa en el círculo
+        factor_fuente = 0.4 if len(inicial) == 1 else 0.3
+        font_size = max(6, int(self.tamano_celda * factor_fuente))
         items = self._items_pickers.get(p_data["id"])
         if items is None:
             circulo = self.canvas.create_oval(
@@ -703,9 +780,13 @@ class Ventana(tk.Frame):
 
         rutas = estado.get('rutas', [])
         pickers_estado = estado.get('pickers', [])
+        colores_por_picker = {
+            picker["id"]: COLORES_PICKERS[i % len(COLORES_PICKERS)]
+            for i, picker in enumerate(pickers_estado)
+        }
 
         for i, p in enumerate(pickers_estado):
-            color = COLORES_PICKERS[i % len(COLORES_PICKERS)]
+            color = colores_por_picker[p["id"]]
             self.dibujar_recorrido(
                 p["id"], rutas[i] if i < len(rutas) else [], color=color
             )
@@ -715,12 +796,20 @@ class Ventana(tk.Frame):
             self.dibujar_picker(p['x'], p['y'], p, color=color_picker)
 
         # Métricas Globales
-        self.lbl_wave.config(text=f"Wave: {estado.get('wave_actual', 0)} / {estado.get('waves_totales', 0)}")
+        self.lbl_wave.config(
+            text=(
+                f"Turno: {estado.get('turno_actual', 0)} / "
+                f"{estado.get('turnos_totales', 0)} · "
+                f"Waves: {estado.get('waves_totales', 0)}"
+            )
+        )
         self.lbl_paso.config(text=f"Paso actual: {estado.get('paso_actual', 0)}")
         self.lbl_productos.config(text=f"Productos Recogidos: {estado.get('productos_recogidos', 0)} / {estado.get('total_productos', 0)}")
         rec_wave = estado.get('productos_recogidos_wave_actual', 0)
         tot_wave = estado.get('total_productos_wave_actual', 0)
-        self.lbl_productos_wave.config(text=f"Recogidos Wave Actual: {rec_wave} / {tot_wave}")
+        self.lbl_productos_wave.config(
+            text=f"Recogidos en turno: {rec_wave} / {tot_wave}"
+        )
         self.lbl_distancia.config(text=f"Distancia Total: {estado.get('distancia', 0)} m")
         self.lbl_altura.config(text=f"Última altura recogida: Nivel {estado.get('ultima_altura', 0)}")
 
@@ -735,14 +824,58 @@ class Ventana(tk.Frame):
         for picker in pickers_estado:
             picker_id = picker["id"]
             if picker_id not in self.lbl_carga_pickers:
-                lbl = tk.Label(self.frame_carga_pickers, text="", bg="#f8fafc", font=("Arial", 9), justify=tk.LEFT, anchor="w", wraplength=340)
-                lbl.pack(fill=tk.X, pady=2)
-                lbl.bind("<MouseWheel>", self._scroll_pickers)
-                lbl.bind("<Button-4>", self._scroll_pickers)
-                lbl.bind("<Button-5>", self._scroll_pickers)
-                self.lbl_carga_pickers[picker_id] = [lbl]
+                tarjeta = tk.Frame(
+                    self.frame_carga_pickers,
+                    bg="#ffffff",
+                    padx=8,
+                    pady=5,
+                    highlightthickness=1,
+                    highlightbackground="#e2e8f0",
+                )
+                tarjeta.pack(fill=tk.X, pady=2, padx=(0, 3))
+                encabezado = tk.Frame(tarjeta, bg="#ffffff")
+                encabezado.pack(fill=tk.X)
+                lbl_id = tk.Label(
+                    encabezado,
+                    text=picker_id,
+                    bg="#ffffff",
+                    fg=colores_por_picker[picker_id],
+                    font=FUENTE_NEGRITA,
+                    anchor="w",
+                )
+                lbl_id.pack(side=tk.LEFT)
+                lbl_resumen = tk.Label(
+                    encabezado,
+                    text="",
+                    bg="#ffffff",
+                    fg="#475569",
+                    font=FUENTE,
+                    anchor="e",
+                )
+                lbl_resumen.pack(side=tk.RIGHT)
+                lbl_detalle = tk.Label(
+                    tarjeta,
+                    text="",
+                    bg="#ffffff",
+                    fg="#334155",
+                    font=("Segoe UI", 9),
+                    justify=tk.LEFT,
+                    anchor="w",
+                    wraplength=340,
+                )
+                lbl_detalle.pack(fill=tk.X, pady=(3, 0))
+                for widget in (tarjeta, encabezado, lbl_id, lbl_resumen, lbl_detalle):
+                    widget.bind("<MouseWheel>", self._scroll_pickers)
+                    widget.bind("<Button-4>", self._scroll_pickers)
+                    widget.bind("<Button-5>", self._scroll_pickers)
+                self.lbl_carga_pickers[picker_id] = [
+                    tarjeta,
+                    lbl_id,
+                    lbl_resumen,
+                    lbl_detalle,
+                ]
 
-            cantidad_actual = picker.get("productos_transportados", 0)
+            cantidad_recogida = picker.get("productos_recogidos", 0)
             cantidad_objetivo = picker.get("productos_objetivo", 0)
             items = picker.get("items_transportados", [])
             detalle = ", ".join(f"{i['producto_id']}({i['cantidad']})" for i in items) or "Vacío"
@@ -760,17 +893,106 @@ class Ventana(tk.Frame):
             if wave_str == "-":
                 wave_str = "Sin wave"
 
-            texto = f"• {picker_id} | {wave_str}  ({cantidad_actual}/{cantidad_objetivo} items)\n  {estado_texto}\n  {detalle}"
-            self.lbl_carga_pickers[picker_id][0].config(text=texto)
+            tarjeta, lbl_id, lbl_resumen, lbl_detalle = (
+                self.lbl_carga_pickers[picker_id]
+            )
+            color_picker = colores_por_picker[picker_id]
+            lbl_id.config(fg=color_picker)
+            lbl_resumen.config(
+                text=(
+                    f"{wave_str}  ·  Recogidos "
+                    f"{cantidad_recogida}/{cantidad_objetivo} u"
+                )
+            )
+            lbl_detalle.config(text=f"{estado_texto}\n{detalle}")
 
-        self.txt_pedidos.config(state=tk.NORMAL)
-        self.txt_pedidos.delete(1.0, tk.END)
         pedidos = estado.get('pedidos_actuales', {})
+        self._actualizar_lista_pedidos(
+            pedidos, colores_por_picker, estado.get("faltantes", [])
+        )
 
-        if not pedidos:
-            self.txt_pedidos.insert(tk.END, "No hay pedidos pendientes.\n¡Wave completada!")
+        self._actualizar_boton_volver(estado)
+
+        if estado.get('terminada', False):
+            self.en_ejecucion = False
+            self.btn_play_pause.config(text="▶ Iniciar")
+
+    def _actualizar_lista_pedidos(
+        self, pedidos, colores_por_picker, faltantes=None
+    ):
+        faltantes = faltantes or []
+        if isinstance(pedidos, dict) and pedidos and isinstance(
+            next(iter(pedidos.values())), dict
+        ):
+            contenido_pedidos = tuple(
+                (picker_id, tuple(demanda.items()))
+                for picker_id, demanda in pedidos.items()
+            )
+        elif isinstance(pedidos, dict):
+            contenido_pedidos = tuple(pedidos.items())
         else:
-            es_anidado = bool(pedidos) and isinstance(list(pedidos.values())[0], dict)
+            contenido_pedidos = tuple(pedidos)
+        contenido_faltantes = tuple(
+            (
+                item["picker_id"],
+                item["producto_id"],
+                item["cantidad"],
+                item["motivo"],
+            )
+            for item in faltantes
+        )
+        firma = (
+            contenido_pedidos,
+            contenido_faltantes,
+            tuple(colores_por_picker.items()),
+        )
+        if firma == self._firma_pedidos_mostrada:
+            return
+
+        self._firma_pedidos_mostrada = firma
+        self.txt_pedidos.config(state=tk.NORMAL)
+        self.txt_pedidos.delete("1.0", tk.END)
+        es_anidado = bool(pedidos) and isinstance(
+            list(pedidos.values())[0], dict
+        )
+        hay_pedidos = (
+            any(pedidos.values()) if es_anidado else bool(pedidos)
+        )
+        if faltantes:
+            cantidades_faltantes = {}
+            for item in faltantes:
+                clave = (item["producto_id"], item["motivo"])
+                cantidades_faltantes[clave] = (
+                    cantidades_faltantes.get(clave, 0) + item["cantidad"]
+                )
+            total_faltantes = sum(cantidades_faltantes.values())
+            self.txt_pedidos.insert(
+                tk.END, f"Faltantes: {total_faltantes} unidades\n"
+            )
+            for (producto_id, motivo), cantidad in cantidades_faltantes.items():
+                self.txt_pedidos.insert(
+                    tk.END,
+                    f"- {producto_id}: {cantidad} u ({motivo})\n",
+                )
+            if hay_pedidos:
+                self.txt_pedidos.insert(tk.END, "\n")
+        if not hay_pedidos:
+            self.txt_pedidos.insert(
+                tk.END,
+                "No hay pedidos pendientes."
+                if faltantes
+                else "No hay pedidos pendientes.\n¡Turno completado!",
+            )
+        else:
+            tags_por_picker = {
+                picker_id: f"picker_id_{indice}"
+                for indice, picker_id in enumerate(colores_por_picker)
+            }
+            numero_por_picker = {
+                picker_id: indice + 1
+                for indice, picker_id in enumerate(colores_por_picker)
+            }
+
             def obtener_altura(pid):
                 try:
                     inv = getattr(self.simulacion, "inventario", None)
@@ -783,19 +1005,32 @@ class Ventana(tk.Frame):
             if es_anidado:
                 for picker_id, demanda in pedidos.items():
                     if demanda:
-                        self.txt_pedidos.insert(tk.END, f"Picker {picker_id}:\n")
+                        tag_picker = tags_por_picker[picker_id]
+                        self.txt_pedidos.tag_configure(
+                            tag_picker,
+                            foreground=colores_por_picker[picker_id],
+                            font=FUENTE_NEGRITA,
+                        )
+                        if self.txt_pedidos.index("end-1c") != "1.0":
+                            self.txt_pedidos.insert(tk.END, "\n")
+                        inicio_id = self.txt_pedidos.index("end-1c")
+                        self.txt_pedidos.insert(
+                            tk.END, f"Picker {numero_por_picker[picker_id]}"
+                        )
+                        fin_id = self.txt_pedidos.index("end-1c")
+                        self.txt_pedidos.tag_add(tag_picker, inicio_id, fin_id)
+                        self.txt_pedidos.insert(tk.END, "\n")
                         for prod_id, cant in demanda.items():
-                            self.txt_pedidos.insert(tk.END, f"  - {prod_id}: {cant} u, alt ({obtener_altura(prod_id)})\n")
+                            altura = obtener_altura(prod_id)
+                            self.txt_pedidos.insert(
+                                tk.END,
+                                f"   • {prod_id}   |   {cant} u   |   Nivel {altura}\n",
+                            )
             else:
                 for prod_id, cant in pedidos.items():
                     self.txt_pedidos.insert(tk.END, f"- {prod_id}: {cant} u, alt ({obtener_altura(prod_id)})\n")
 
         self.txt_pedidos.config(state=tk.DISABLED)
-        self._actualizar_boton_volver(estado)
-
-        if estado.get('terminada', False):
-            self.en_ejecucion = False
-            self.btn_play_pause.config(text="▶ Iniciar")
 
     def iniciar(self):
         self.mainloop()

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import heapq
 import sys
+from collections import deque
 from math import floor
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,10 @@ if __package__ in (None, ""):
 
 from src.core.inventory import Producto
 from src.core.picker import Picker
+
+# Un picker bloqueado esta cantidad de ticks, y cuyos bloqueadores tambien estan
+# parados, se considera atascado y alguien del grupo cede el paso.
+TICKS_ATASCO = 3
 
 
 class Simulation:
@@ -34,6 +39,7 @@ class Simulation:
         puntos_despacho: dict[str, list[tuple[int, int]]] | None = None,
         estrategia_recorrido: str = "Vecino más cercano (B)",
         es_ultima_fase: bool = False,
+        pickers_con_trabajo_posterior: set[str] | None = None,
     ) -> None:
         self.estrategia_recorrido = estrategia_recorrido
         self.es_ultima_fase = es_ultima_fase
@@ -86,6 +92,11 @@ class Simulation:
             zona_id: list(dict.fromkeys(tuple(punto) for punto in puntos))
             for zona_id, puntos in (puntos_despacho or {}).items()
         }
+        self._puntos_despacho_reingreso = (
+            self._calcular_puntos_despacho_reingreso(
+                pickers_con_trabajo_posterior or set()
+            )
+        )
         self._celdas_recoleccion_cache: dict[
             int, tuple[tuple[int, int], ...]
         ] = {}
@@ -95,6 +106,11 @@ class Simulation:
         self.productos_recogidos: list[dict[str, Any]] = []
         self.productos_faltantes: list[dict[str, Any]] = []
         self.descargas: list[dict[str, Any]] = []
+        self._cantidad_productos_recogidos = 0
+        self._productos_recogidos_por_picker = {
+            picker.id: 0 for picker in self.pickers
+        }
+        self._cantidad_productos_despachados = 0
         self.distancia = 0
         self.ultima_altura = 0  # <--- NUEVO: Variable para las métricas
         self._en_ejecucion = False
@@ -355,6 +371,11 @@ class Simulation:
                     "cantidad": cantidad,
                 }
             )
+            self._cantidad_productos_recogidos += cantidad
+            self._productos_recogidos_por_picker[picker.id] = (
+                self._productos_recogidos_por_picker.get(picker.id, 0)
+                + cantidad
+            )
 
     def _recoger_en_posiciones_actuales(self) -> None:
         for picker in self.pickers:
@@ -383,6 +404,44 @@ class Simulation:
         for picker in self.pickers:
             self._planificar_picker_dinamico(picker)
             picker.tiempo_recoleccion = 0
+
+    def _calcular_puntos_despacho_reingreso(
+        self, picker_ids: set[str]
+    ) -> dict[str, set[tuple[int, int]]]:
+        if not picker_ids or self._cache_distancias is None:
+            return {}
+
+        grafo = getattr(self._cache_distancias, "_grafo", None)
+        if grafo is None:
+            return {}
+
+        predecesores: dict[tuple[int, int], list[tuple[int, int]]] = {
+            nodo: [] for nodo in grafo.adj
+        }
+        for origen, vecinos in grafo.adj.items():
+            for destino in vecinos:
+                predecesores.setdefault(destino, []).append(origen)
+
+        puntos_por_picker = {}
+        for picker in self.pickers:
+            if picker.id not in picker_ids:
+                continue
+            origen = tuple(picker.posicion_inicial)
+            alcanzables = {origen}
+            pendientes = deque([origen])
+            while pendientes:
+                actual = pendientes.popleft()
+                for predecesor in predecesores.get(actual, ()):
+                    if predecesor not in alcanzables:
+                        alcanzables.add(predecesor)
+                        pendientes.append(predecesor)
+            puntos_por_picker[picker.id] = {
+                punto
+                for puntos in self._puntos_despacho.values()
+                for punto in puntos
+                if punto in alcanzables
+            }
+        return puntos_por_picker
 
     def _celdas_recoleccion(self, producto: Any) -> list[tuple[int, int]]:
         cache_key = id(producto)
@@ -444,21 +503,21 @@ class Simulation:
             dict[tuple[int, int], float],
             dict[tuple[int, int], tuple[int, int]],
         ] | None = None,
-    ) -> tuple[tuple[int, int], list[tuple[int, int]]] | None:
+    ) -> tuple[float, tuple[int, int]] | None:
         if busqueda is None:
             busqueda = self._calcular_distancias_con_picker(picker, origen)
-        mejor: tuple[float, tuple[int, int], list[tuple[int, int]]] | None = None
+        mejor: tuple[float, tuple[int, int]] | None = None
         for destino in destinos:
-            ruta = self._camino_desde_busqueda(picker, destino, busqueda)
-            if ruta is None:
+            if busqueda is None:
+                distancia = self._cache_distancias.distancia(origen, destino)
+            else:
+                distancia = busqueda[1].get(destino, float("inf"))
+            if distancia == float("inf"):
                 continue
-            distancia, camino = ruta
-            candidato = (distancia, destino, camino)
-            if mejor is None or candidato[:2] < mejor[:2]:
+            candidato = (distancia, destino)
+            if mejor is None or candidato < mejor:
                 mejor = candidato
-        if mejor is None:
-            return None
-        return mejor[1], mejor[2]
+        return mejor
 
     def _calcular_distancias_con_picker(
         self,
@@ -625,12 +684,131 @@ class Simulation:
         self._establecer_tramo(picker, camino, objetivo)
         return True
 
+    def _ceder_paso(self, picker: Any) -> bool:
+        """Intenta destrabar a `picker`: primero busca otra ruta evitando a los
+        demás y, si no hay, se corre a una celda vecina libre para dejar pasar."""
+        if self._replanificar_picker_bloqueado(picker):
+            return True
+        grafo = getattr(self._cache_distancias, "_grafo", None)
+        if grafo is None:
+            return False
+
+        posicion = tuple(picker.posicion_actual)
+        ocupadas: set[tuple[int, int]] = set()
+        siguientes: set[tuple[int, int]] = set()
+        for otro in self.pickers:
+            if (
+                otro.id == picker.id
+                or self._estado_picker[otro.id] == "terminado"
+            ):
+                continue
+            ocupadas.add(tuple(otro.posicion_actual))
+            tramo = self._tramos_dinamicos[otro.id]
+            indice = self._indices_ruta[otro.id]
+            if indice < len(tramo):
+                siguientes.add(tramo[indice])
+
+        tramo_propio = self._tramos_dinamicos[picker.id]
+        indice_propio = self._indices_ruta[picker.id]
+        celda_bloqueada = (
+            tramo_propio[indice_propio]
+            if indice_propio < len(tramo_propio)
+            else None
+        )
+        libres = [
+            vecino
+            for vecino in grafo.get_neighbors(posicion)
+            if vecino not in ocupadas and vecino != celda_bloqueada
+        ]
+        if not libres:
+            return False
+        preferidas = [vecino for vecino in libres if vecino not in siguientes]
+        destino = min(preferidas or libres)
+        self._rutas[picker.id] = [posicion]
+        self._establecer_tramo(picker, [posicion, destino], {"tipo": "ceder"})
+        return True
+
+    def _resolver_atascos(
+        self,
+        bloqueos_por_picker: dict[str, set[str]],
+        aceptados: set[str],
+        propuestas: dict[str, tuple[int, int]],
+    ) -> None:
+        """Detecta grupos de pickers que se bloquean entre sí (cruces de frente,
+        pickers esperando un punto de despacho ocupado, etc.) y hace que uno
+        del grupo, el de menor prioridad, cede el paso."""
+        activos = {
+            picker.id: picker
+            for picker in self.pickers
+            if self._estado_picker[picker.id] != "terminado"
+        }
+
+        def parado(picker_id: str) -> bool:
+            picker = activos.get(picker_id)
+            return (
+                picker is not None
+                and picker_id not in aceptados
+                and getattr(picker, "tiempo_recoleccion", 0) <= 0
+            )
+
+        def parado_firme(picker_id: str) -> bool:
+            return parado(picker_id) and (
+                picker_id not in propuestas
+                or self._ticks_bloqueado.get(picker_id, 0) >= 2
+            )
+
+        padre: dict[str, str] = {}
+
+        def raiz(picker_id: str) -> str:
+            padre.setdefault(picker_id, picker_id)
+            while padre[picker_id] != picker_id:
+                padre[picker_id] = padre[padre[picker_id]]
+                picker_id = padre[picker_id]
+            return picker_id
+
+        hay_atasco = False
+        for picker_id, bloqueadores in bloqueos_por_picker.items():
+            if (
+                not parado(picker_id)
+                or self._ticks_bloqueado.get(picker_id, 0) < TICKS_ATASCO
+                or not bloqueadores
+                or not all(parado_firme(b) for b in bloqueadores)
+            ):
+                continue
+            hay_atasco = True
+            for bloqueador in bloqueadores:
+                padre[raiz(picker_id)] = raiz(bloqueador)
+        if not hay_atasco:
+            return
+
+        grupos: dict[str, list[str]] = {}
+        for picker_id in list(padre):
+            grupos.setdefault(raiz(picker_id), []).append(picker_id)
+        for miembros in grupos.values():
+            if len(miembros) < 2:
+                continue
+            # Cede primero el de menor prioridad; a igualdad, el de id mayor.
+            candidatos = sorted(
+                (activos[m] for m in miembros if m in activos),
+                key=lambda p: (p.prioridad, -self._orden_id_picker(p.id)[1]),
+            )
+            for picker in candidatos:
+                if self._ceder_paso(picker):
+                    self._ticks_bloqueado[picker.id] = 0
+                    break
 
     def _planificar_descarga_dinamica(self, picker: Any) -> bool:
         if not self._puntos_despacho:
             raise ValueError(
                 f"El picker {picker.id} necesita descargar, pero no hay "
                 "puntos de despacho configurados."
+            )
+
+        puntos_reingreso = self._puntos_despacho_reingreso.get(picker.id)
+        if puntos_reingreso is not None and not puntos_reingreso:
+            raise ValueError(
+                f"No hay un punto de despacho desde el que el picker "
+                f"{picker.id} pueda volver a su zona de trabajo."
             )
 
         ocupadas = {
@@ -645,6 +823,7 @@ class Simulation:
             for puntos in self._puntos_despacho.values()
             for punto in puntos
             if punto not in ocupadas
+            and (puntos_reingreso is None or punto in puntos_reingreso)
         }
         busqueda = self._calcular_distancias_con_picker(
             picker, destinos=destinos
@@ -664,6 +843,11 @@ class Simulation:
 
         for zona_id, puntos in self._puntos_despacho.items():
             for punto in puntos:
+                if (
+                    puntos_reingreso is not None
+                    and punto not in puntos_reingreso
+                ):
+                    continue
                 if punto in ocupadas:
                     puntos_ocupados += 1
                     continue
@@ -695,7 +879,13 @@ class Simulation:
 
         if not opciones:
             cantidad_puntos = sum(
-                len(puntos) for puntos in self._puntos_despacho.values()
+                sum(
+                    1
+                    for punto in puntos
+                    if puntos_reingreso is None
+                    or punto in puntos_reingreso
+                )
+                for puntos in self._puntos_despacho.values()
             )
             if cantidad_puntos and puntos_ocupados == cantidad_puntos:
                 return False
@@ -791,49 +981,66 @@ class Simulation:
             busqueda = self._calcular_distancias_con_picker(
                 picker, origen, destinos
             )
-            opciones = []
+            opciones: list[
+                tuple[float, str, tuple[int, int], bool]
+            ] = []
             for producto_id, puntos in productos_candidatos:
-                ruta = self._ruta_mas_cercana(
+                destino_cercano = self._ruta_mas_cercana(
                     picker, origen, puntos, busqueda
                 )
-                if ruta is None:
-                    puntos_alcanzables = [
+                usa_busqueda_dinamica = destino_cercano is not None
+                if destino_cercano is None:
+                    destinos_alcanzables = [
                         (self._cache_distancias.distancia(origen, punto), punto)
                         for punto in puntos
                     ]
-                    puntos_alcanzables = [
-                        (distancia, punto)
-                        for distancia, punto in puntos_alcanzables
-                        if distancia != float("inf")
+                    destinos_alcanzables = [
+                        opcion
+                        for opcion in destinos_alcanzables
+                        if opcion[0] != float("inf")
                     ]
-                    if not puntos_alcanzables:
+                    if not destinos_alcanzables:
                         inalcanzables.append(producto_id)
                         continue
-                    _, punto = min(puntos_alcanzables)
-                    camino = self._cache_distancias.camino(origen, punto)
-                    if not camino:
-                        inalcanzables.append(producto_id)
-                        continue
-                    ruta = punto, camino
-                punto, camino = ruta
-                distancia = len(camino) - 1
-                opciones.append((distancia, producto_id, camino))
+                    destino_cercano = min(destinos_alcanzables)
+                distancia, punto = destino_cercano
+                opciones.append(
+                    (
+                        distancia,
+                        producto_id,
+                        punto,
+                        usa_busqueda_dinamica,
+                    )
+                )
 
             if opciones:
                 if self.estrategia_recorrido == "Orden de pedidos (A)":
                     primer_producto = list(demanda.keys())[0]
                     elegido = None
-                    for dist, prod_id, camino in opciones:
+                    for opcion in opciones:
+                        _, prod_id, _, _ = opcion
                         if prod_id == primer_producto:
-                            elegido = (dist, prod_id, camino)
+                            elegido = opcion
                             break
 
                     if elegido is None:
-                        _, producto_id, camino = min(opciones, key=lambda opcion: (opcion[0], opcion[1]))
-                    else:
-                        _, producto_id, camino = elegido
+                        elegido = min(opciones, key=lambda opcion: opcion[:2])
                 else:
-                    _, producto_id, camino = min(opciones, key=lambda opcion: (opcion[0], opcion[1]))
+                    elegido = min(opciones, key=lambda opcion: opcion[:2])
+
+                _, producto_id, punto, usa_busqueda_dinamica = elegido
+                if usa_busqueda_dinamica:
+                    ruta_elegida = self._camino_desde_busqueda(
+                        picker, punto, busqueda
+                    )
+                else:
+                    ruta_elegida = self._camino_desde_busqueda(
+                        picker, punto, None
+                    )
+                if ruta_elegida is None:
+                    inalcanzables.append(producto_id)
+                    continue
+                _, camino = ruta_elegida
 
                 objetivo = {"tipo": "producto", "producto_id": producto_id}
 
@@ -901,6 +1108,9 @@ class Simulation:
                 ],
             }
         )
+        self._cantidad_productos_despachados += sum(
+            cantidad for _, cantidad in items
+        )
 
     def _recoger_objetivo_dinamico(
         self,
@@ -951,6 +1161,10 @@ class Simulation:
                 "producto_id": producto_id,
                 "cantidad": cantidad,
             }
+        )
+        self._cantidad_productos_recogidos += cantidad
+        self._productos_recogidos_por_picker[picker.id] = (
+            self._productos_recogidos_por_picker.get(picker.id, 0) + cantidad
         )
 
     def avanzar_paso(self) -> bool:
@@ -1117,6 +1331,8 @@ class Simulation:
                 ):
                     self._replanificar_picker_bloqueado(picker)
 
+            self._resolver_atascos(bloqueos_por_picker, aceptados, propuestas)
+
             if aceptados:
                 self._ticks_sin_movimiento = 0
             else:
@@ -1172,6 +1388,9 @@ class Simulation:
                         cantidad
                         for _, cantidad in picker.items_transportados
                     ),
+                    "productos_recogidos": self._productos_recogidos_por_picker.get(
+                        picker.id, 0
+                    ),
                     "productos_objetivo": sum(
                         self._demanda_por_picker_inicial.get(
                             picker.id, {}
@@ -1196,8 +1415,9 @@ class Simulation:
                 )
                 for picker in self.pickers
             ],
-            "productos_recogidos": sum(
-                item["cantidad"] for item in self.productos_recogidos
+            "productos_recogidos": self._cantidad_productos_recogidos,
+            "productos_recogidos_por_picker": dict(
+                self._productos_recogidos_por_picker
             ),
             "total_productos": self._total_productos,
             "distancia": self.distancia,
@@ -1213,11 +1433,7 @@ class Simulation:
 
             "recolecciones": [dict(item) for item in self.productos_recogidos],
             "faltantes": [dict(item) for item in self.productos_faltantes],
-            "productos_despachados": sum(
-                item["cantidad"]
-                for descarga in self.descargas
-                for item in descarga["items"]
-            ),
+            "productos_despachados": self._cantidad_productos_despachados,
             "descargas": [
                 {**descarga, "items": [dict(item) for item in descarga["items"]]}
                 for descarga in self.descargas
@@ -1258,6 +1474,11 @@ class Simulation:
         self.productos_recogidos.clear()
         self.productos_faltantes.clear()
         self.descargas.clear()
+        self._cantidad_productos_recogidos = 0
+        self._productos_recogidos_por_picker = {
+            picker.id: 0 for picker in self.pickers
+        }
+        self._cantidad_productos_despachados = 0
         self._en_ejecucion = False
         self._demanda_global = dict(self._demanda_global_inicial)
         self._demanda_por_picker = {

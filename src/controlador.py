@@ -63,12 +63,16 @@ class Controlador:
         self.root.mainloop()
 
     # --- Navegación ---
-    def _mostrar(self, vista, tamano=None, minimo=None):
+    def _mostrar(self, vista, tamano=None, minimo=None, maximizada=False):
         if self.vista_actual is not None:
             self.vista_actual.destroy()
         self.vista_actual = vista
         vista.pack(fill=tk.BOTH, expand=True)
-        if tamano:
+        self.root.state("normal")
+        if maximizada:
+            self.root.minsize(1, 1)
+            self.root.state("zoomed")
+        elif tamano:
             ajustar_ventana(self.root, tamano[0], tamano[1], minimo)
         else:
             self.root.minsize(1, 1)  # saca el mínimo de la vista anterior
@@ -119,7 +123,7 @@ class Controlador:
         if vincular is not None:
             vincular(ventana.root, ventana.actualizar_desde_simulacion)
         ventana.set_simulacion(self.simulacion)
-        self._mostrar(ventana)  # tamaño automático según el warehouse
+        self._mostrar(ventana, maximizada=True)
         ventana.actualizar_desde_simulacion()
 
     def cerrar_aplicacion(self):

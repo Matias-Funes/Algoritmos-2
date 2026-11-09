@@ -52,9 +52,9 @@ BORDE = "#B8C9D8"
 # FUENTES
 # ==========================================================
 
-FUENTE = ("Arial", 10)
-FUENTE_NEGRITA = ("Arial", 10, "bold")
-FUENTE_TITULO = ("Arial", 11, "bold")
+FUENTE = ("Segoe UI", 10)
+FUENTE_NEGRITA = ("Segoe UI", 10, "bold")
+FUENTE_TITULO = ("Segoe UI", 11, "bold")
 
 
 # ==========================================================
@@ -118,7 +118,7 @@ def crear_boton(parent, texto, comando, primario=True, **opciones):
     else:
         bg = GRIS_CREMA
         fg = NEGRO_AZULADO
-        activo = AZUL_CLARO_GRISACEO
+        activo = GRIS_VERDOSO
 
     config = dict(
         text=texto,
@@ -144,7 +144,25 @@ def crear_boton(parent, texto, comando, primario=True, **opciones):
 
     config.update(opciones)
 
-    return tk.Button(parent, **config)
+    boton = tk.Button(parent, **config)
+    color_normal = boton.cget("bg")
+    color_hover = boton.cget("activebackground")
+    boton._hover_normal_background = color_normal
+    boton.bind(
+        "<Enter>",
+        lambda _event: boton.config(bg=color_hover)
+        if boton["state"] != tk.DISABLED
+        else None,
+    )
+    boton.bind(
+        "<Leave>",
+        lambda _event: boton.config(
+            bg=boton._hover_normal_background
+        )
+        if boton["state"] != tk.DISABLED
+        else None,
+    )
+    return boton
 
 
 # ==========================================================
@@ -363,6 +381,7 @@ def aplicar_estilos_ttk(root):
         background=GRIS_CREMA,
 
         foreground=NEGRO_AZULADO,
+        font=FUENTE,
 
         arrowcolor=AZUL_MARINO,
 
@@ -403,6 +422,7 @@ def aplicar_estilos_ttk(root):
 
         borderwidth=0,
         relief=tk.FLAT,
+        width=px(12),
     )
 
     estilo.map(
@@ -423,6 +443,7 @@ def aplicar_estilos_ttk(root):
 
         borderwidth=0,
         relief=tk.FLAT,
+        width=px(12),
     )
 
     estilo.map(

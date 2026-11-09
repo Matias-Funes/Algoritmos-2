@@ -273,6 +273,10 @@ class _SimulationTk:
         self._en_ejecucion = False
         self._fase_completada = False
         self._productos_recogidos_acumulados = 0
+        self._productos_recogidos_acumulados_por_picker = {
+            picker.id: 0 for picker in pickers
+        }
+        self._productos_despachados_acumulados = 0
         self._distancia_acumulada = 0
         self._faltantes_acumulados: list[dict[str, Any]] = []
         self._descargas_acumuladas: list[dict[str, Any]] = []
@@ -314,6 +318,12 @@ class _SimulationTk:
         """Crea un motor común que planifica el trabajo de toda la flota."""
         fase = self.fases[indice]
         es_ultima = (indice == len(self.fases) - 1)
+        pickers_con_trabajo_posterior = {
+            picker_id
+            for fase_futura in self.fases[indice + 1 :]
+            for picker_id, pedidos in fase_futura["asignaciones"].items()
+            if pedidos
+        }
         return Simulation(
             warehouse=self.warehouse,
             pickers=self.pickers,
@@ -323,6 +333,7 @@ class _SimulationTk:
             puntos_despacho=self.puntos_despacho,
             estrategia_recorrido=self.estrategia_recorrido,
             es_ultima_fase=es_ultima,
+            pickers_con_trabajo_posterior=pickers_con_trabajo_posterior,
         )
 
     def vincular_interfaz(
@@ -340,34 +351,38 @@ class _SimulationTk:
         recogidos_en_fase = (
             0 if self._fase_completada else estado["productos_recogidos"]
         )
+        productos_recogidos_fase = estado["productos_recogidos"]
         total_productos_fase = estado["total_productos"]
         estado["productos_recogidos"] = (
             self._productos_recogidos_acumulados + recogidos_en_fase
         )
         estado["total_productos_wave_actual"] = total_productos_fase
-        # Exponer métrica de la wave actual
-        estado["productos_recogidos_wave_actual"] = recogidos_en_fase
+        estado["productos_recogidos_wave_actual"] = productos_recogidos_fase
         distancia_en_fase = (
             0 if self._fase_completada else estado["distancia"]
         )
         estado["distancia"] = self._distancia_acumulada + distancia_en_fase
         estado["total_productos"] = self._total_productos
         estado["terminada"] = self._fase_completada
-        estado["wave_actual"] = self.fase_actual + 1
-        estado["waves_totales"] = len(self.fases)
+        estado["turno_actual"] = self.fase_actual + 1
+        estado["turnos_totales"] = len(self.fases)
+        estado["waves_totales"] = len(self.waves)
         estado["faltantes"] = list(self._faltantes_acumulados)
         estado["descargas"] = list(self._descargas_acumuladas)
         if not self._fase_completada:
             estado["faltantes"].extend(faltantes_actuales)
             estado["descargas"].extend(descargas_actuales)
-        estado["productos_despachados"] = sum(
-            item["cantidad"]
-            for descarga in estado["descargas"]
-            for item in descarga["items"]
+        estado["productos_despachados"] = (
+            self._productos_despachados_acumulados
+            + (
+                0
+                if self._fase_completada
+                else estado["productos_despachados"]
+            )
         )
         estado_pickers = {picker["id"]: picker for picker in estado["pickers"]}
 
-        # Obtenemos el ID de la wave de cada picker para esta fase
+        # Cada fase sincroniza una wave asignada por picker.
         waves_ids_fase = self.fases[self.fase_actual].get("waves_ids", {})
 
         estado["pickers"] = [
@@ -377,8 +392,11 @@ class _SimulationTk:
                 "y": picker.posicion_actual[1],
                 "carga_actual_kg": picker.carga_actual_kg,
                 "capacidad_carga_kg": picker.capacidad_carga_kg,
-                # CAMBIO AQUÍ: Usamos el ID específico de la wave del picker
-                "wave_actual": waves_ids_fase.get(picker.id, "-"),
+                "wave_actual": (
+                    waves_ids_fase.get(picker.id, "-")
+                    if estado_pickers.get(picker.id, {}).get("activo", False)
+                    else "-"
+                ),
                 "items_transportados": [
                     dict(item)
                     for item in estado_pickers.get(picker.id, {}).get(
@@ -388,6 +406,18 @@ class _SimulationTk:
                 "productos_transportados": estado_pickers.get(
                     picker.id, {}
                 ).get("productos_transportados", 0),
+                "productos_recogidos": (
+                    self._productos_recogidos_acumulados_por_picker.get(
+                        picker.id, 0
+                    )
+                    + (
+                        0
+                        if self._fase_completada
+                        else estado_pickers.get(picker.id, {}).get(
+                            "productos_recogidos", 0
+                        )
+                    )
+                ),
                 "productos_objetivo": self._productos_objetivo_por_picker.get(
                     picker.id, 0
                 ),
@@ -414,6 +444,18 @@ class _SimulationTk:
 
         estado_fase = self._simulacion_actual.get_estado()
         self._productos_recogidos_acumulados += estado_fase["productos_recogidos"]
+        for picker_id, cantidad in estado_fase[
+            "productos_recogidos_por_picker"
+        ].items():
+            self._productos_recogidos_acumulados_por_picker[picker_id] = (
+                self._productos_recogidos_acumulados_por_picker.get(
+                    picker_id, 0
+                )
+                + cantidad
+            )
+        self._productos_despachados_acumulados += estado_fase[
+            "productos_despachados"
+        ]
         self._distancia_acumulada += estado_fase["distancia"]
         self._faltantes_acumulados.extend(estado_fase["faltantes"])
         self._descargas_acumuladas.extend(estado_fase["descargas"])
@@ -469,6 +511,10 @@ class _SimulationTk:
         self.fase_actual = 0
         self._fase_completada = False
         self._productos_recogidos_acumulados = 0
+        self._productos_recogidos_acumulados_por_picker = {
+            picker.id: 0 for picker in self.pickers
+        }
+        self._productos_despachados_acumulados = 0
         self._distancia_acumulada = 0
         self._faltantes_acumulados.clear()
         self._descargas_acumuladas.clear()
@@ -522,6 +568,9 @@ class _SimulationTk:
             "paso_actual": self._simulacion_actual.paso_actual,
             "distancia_acumulada": self._distancia_acumulada,
             "productos_recogidos_acumulados": self._productos_recogidos_acumulados,
+            "productos_recogidos_acumulados_por_picker": dict(
+                self._productos_recogidos_acumulados_por_picker
+            ),
             "faltantes_acumulados": self._faltantes_acumulados,
             "descargas_acumuladas": self._descargas_acumuladas,
             "pickers": [
@@ -548,6 +597,28 @@ class _SimulationTk:
         self._productos_recogidos_acumulados = snapshot["productos_recogidos_acumulados"]
         self._faltantes_acumulados = snapshot["faltantes_acumulados"]
         self._descargas_acumuladas = snapshot["descargas_acumuladas"]
+        recogidos_por_picker = snapshot.get(
+            "productos_recogidos_acumulados_por_picker"
+        )
+        if recogidos_por_picker is None:
+            recogidos_por_picker = {
+                picker.id: 0 for picker in self.pickers
+            }
+            for descarga in self._descargas_acumuladas:
+                picker_id = descarga["picker_id"]
+                recogidos_por_picker[picker_id] = (
+                    recogidos_por_picker.get(picker_id, 0)
+                    + sum(item["cantidad"] for item in descarga["items"])
+                )
+        self._productos_recogidos_acumulados_por_picker = {
+            picker.id: recogidos_por_picker.get(picker.id, 0)
+            for picker in self.pickers
+        }
+        self._productos_despachados_acumulados = sum(
+            item["cantidad"]
+            for descarga in self._descargas_acumuladas
+            for item in descarga["items"]
+        )
 
         for prod in self.productos:
             if prod.producto_id in snapshot["stock_productos"]:
@@ -569,6 +640,28 @@ class _SimulationTk:
         self._simulacion_actual.productos_recogidos = snapshot.get("recogidos_fase_actual", [])
         self._simulacion_actual.productos_faltantes = snapshot.get("faltantes_fase_actual", [])
         self._simulacion_actual.descargas = snapshot.get("descargas_fase_actual", [])
+        self._simulacion_actual._cantidad_productos_recogidos = sum(
+            item["cantidad"]
+            for item in self._simulacion_actual.productos_recogidos
+        )
+        self._simulacion_actual._productos_recogidos_por_picker = {
+            picker.id: 0 for picker in self.pickers
+        }
+        for item in self._simulacion_actual.productos_recogidos:
+            picker_id = item["picker_id"]
+            self._simulacion_actual._productos_recogidos_por_picker[
+                picker_id
+            ] = (
+                self._simulacion_actual._productos_recogidos_por_picker.get(
+                    picker_id, 0
+                )
+                + item["cantidad"]
+            )
+        self._simulacion_actual._cantidad_productos_despachados = sum(
+            item["cantidad"]
+            for descarga in self._simulacion_actual.descargas
+            for item in descarga["items"]
+        )
 
         # Descontamos la demanda de lo ya recogido
         picker_por_id = {p.id: p for p in self._simulacion_actual.pickers}

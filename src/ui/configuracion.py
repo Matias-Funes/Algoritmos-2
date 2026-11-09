@@ -124,7 +124,7 @@ class SeccionTabla(tk.Frame):
         # --- Barra de acciones (info + editar / eliminar) ---
         barra = tk.Frame(self, bg=CREMA_GRISACEO)
         barra.pack(fill=tk.X, pady=(4, 6))
-        self.lbl_info = tk.Label(barra, text="Sin elementos", font=("Arial", 9),
+        self.lbl_info = tk.Label(barra, text="Sin elementos", font=("Segoe UI", 9),
                                  bg=CREMA_GRISACEO, fg=NEGRO_AZULADO)
         self.lbl_info.pack(side=tk.LEFT)
         crear_boton(barra, "🗑 Eliminar", self._eliminar, primario=False,
@@ -139,7 +139,7 @@ class SeccionTabla(tk.Frame):
         for i, campo in enumerate(campos):
             fila = (i // por_fila) * 2
             col = i % por_fila
-            tk.Label(self.form, text=campo["etiqueta"], font=("Arial", 9),
+            tk.Label(self.form, text=campo["etiqueta"], font=("Segoe UI", 9),
                      bg=CREMA_GRISACEO, fg=NEGRO_AZULADO, anchor="w").grid(
                 row=fila, column=col, sticky="w", padx=2)
             var = tk.StringVar(value=str(campo.get("defecto", "")))
@@ -168,7 +168,7 @@ class SeccionTabla(tk.Frame):
                               sticky="e", padx=2, pady=(2, 0))
         self.lbl_ayuda = None
         if ayuda is not None:
-            self.lbl_ayuda = tk.Label(self.form, text=ayuda, font=("Arial", 8), bg=CREMA_GRISACEO,
+            self.lbl_ayuda = tk.Label(self.form, text=ayuda, font=("Segoe UI", 9), bg=CREMA_GRISACEO,
                                       fg=NEGRO_AZULADO, anchor="w", justify=tk.LEFT,
                                       wraplength=px(420))
             self.lbl_ayuda.grid(row=ultima_fila, column=0, columnspan=ancho_columnas,
@@ -371,7 +371,7 @@ class VistaConfiguracion(tk.Frame):
         # --- Encabezado ---
         cabecera = tk.Frame(self, bg=AZUL_MARINO_OSCURO, padx=20, pady=12)
         cabecera.pack(fill=tk.X)
-        tk.Label(cabecera, text="⚙  Configuración del Almacén", font=("Arial", 18, "bold"),
+        tk.Label(cabecera, text="⚙  Configuración del Almacén", font=("Segoe UI", 18, "bold"),
                  bg=AZUL_MARINO_OSCURO, fg=BLANCO).pack(anchor="w")
         tk.Label(cabecera, text="Cargue los datos: los ids, las ubicaciones y el tamaño del "
                                 "almacén se generan automáticamente",
@@ -424,7 +424,7 @@ class VistaConfiguracion(tk.Frame):
         marco, cuerpo = _tarjeta(pag_almacen, "Racks")
         self.sec_racks = SeccionParametros(cuerpo, self.RACKS_DEFECTO, on_cambio=self._actualizar_resumen)
         self.sec_racks.pack(fill=tk.X, pady=(6, 8))
-        self.lbl_resumen = tk.Label(cuerpo, text="", font=("Arial", 9), bg=BEIGE_CLARO,
+        self.lbl_resumen = tk.Label(cuerpo, text="", font=("Segoe UI", 9), bg=BEIGE_CLARO,
                                     fg=NEGRO_AZULADO, wraplength=px(380), justify=tk.LEFT,
                                     padx=10, pady=8)
         self.lbl_resumen.pack(fill=tk.X)
@@ -437,7 +437,7 @@ class VistaConfiguracion(tk.Frame):
         tk.Label(cuerpo,
                  text="Estos valores limitan cuántos pedidos, productos y kilos pueden "
                       "agruparse en una wave de preparación.",
-                 font=("Arial", 9), bg=BEIGE_CLARO, fg=NEGRO_AZULADO, wraplength=px(380),
+                 font=("Segoe UI", 9), bg=BEIGE_CLARO, fg=NEGRO_AZULADO, wraplength=px(380),
                  justify=tk.LEFT, padx=10, pady=8).pack(fill=tk.X)
         self._colocar(marco, 1)
 
@@ -547,7 +547,7 @@ class VistaConfiguracion(tk.Frame):
                       "• Varios productos separados por comas:  P001 x2, P005 x1, P010 x3\n"
                       "• En lugar del ID puede usar el nombre exacto del producto.\n"
                       "• Si omite la cantidad se toma 1.  Prioridad: entero, mayor = más urgente.",
-                 font=("Arial", 9), bg=BEIGE_CLARO, fg=NEGRO_AZULADO, justify=tk.LEFT,
+                 font=("Segoe UI", 9), bg=BEIGE_CLARO, fg=NEGRO_AZULADO, justify=tk.LEFT,
                  anchor="w", padx=10, pady=8).pack(fill=tk.X, pady=(6, 8))
         self.sec_pedidos = SeccionTabla(
             cuerpo,
