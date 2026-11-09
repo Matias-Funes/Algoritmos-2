@@ -317,6 +317,7 @@ class _SimulationTk:
     def _crear_simulacion_fase(self, indice: int) -> Simulation:
         """Crea un motor común que planifica el trabajo de toda la flota."""
         fase = self.fases[indice]
+        es_ultima = (indice == len(self.fases) - 1)
         pickers_con_trabajo_posterior = {
             picker_id
             for fase_futura in self.fases[indice + 1 :]
@@ -331,6 +332,7 @@ class _SimulationTk:
             cache_distancias=self.cache_distancias,
             puntos_despacho=self.puntos_despacho,
             estrategia_recorrido=self.estrategia_recorrido,
+            es_ultima_fase=es_ultima,
             pickers_con_trabajo_posterior=pickers_con_trabajo_posterior,
         )
 
@@ -670,6 +672,75 @@ class _SimulationTk:
                     picker, rec["producto_id"], rec["cantidad"]
                 )
 
+def _limpiar_productos_inalcanzables(pedidos, inventario, warehouse, grafo, cache, puntos_despacho):
+    """
+    Busca productos cuyas celdas de acceso estén totalmente aisladas (sin ida o sin vuelta).
+    Los elimina de los pedidos y del inventario.
+    """
+    productos_invalidos = set()
+    advertencias = []
+
+    # 1. Encontrar un nodo de despacho de referencia
+    nodo_despacho = None
+    for p in puntos_despacho.values():
+        if p:
+            nodo_despacho = p[0]
+            break
+
+    for prod in inventario.todos_los_productos():
+        prod_id = prod.producto_id
+        x, y = prod.ubicacion[0], prod.ubicacion[1]
+        celdas_acceso = []
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < warehouse.ancho_x and 0 <= ny < warehouse.largo_y:
+                if warehouse.grid[ny][nx].tipo == "PASILLO":
+                    celdas_acceso.append((nx, ny))
+
+        if not celdas_acceso:
+            productos_invalidos.add(prod_id)
+            continue
+
+        # 2. Verificar conectividad real con el despacho (Ida y Vuelta)
+        # Si el producto está en un callejón, d_vuelta será infinito y se descarta.
+        es_alcanzable = False
+        if nodo_despacho:
+            for celda in celdas_acceso:
+                d_ida = cache.distancia(nodo_despacho, celda)
+                d_vuelta = cache.distancia(celda, nodo_despacho)
+                if d_ida != float("inf") and d_vuelta != float("inf"):
+                    es_alcanzable = True
+                    break
+
+        if not es_alcanzable:
+            productos_invalidos.add(prod_id)
+            advertencias.append(f"El producto {prod_id} está aislado o no tiene ruta de vuelta al despacho.")
+            continue
+
+    if not productos_invalidos:
+        return pedidos, advertencias
+
+    # Descontar del inventario
+    for pid in productos_invalidos:
+        prod = inventario.obtener_producto(pid)
+        if prod:
+            prod.cantidad_disponible = 0
+
+    # Limpiar pedidos
+    pedidos_limpios = []
+    for pedido in pedidos:
+        nuevos_items = []
+        for prod_id, cant in pedido.items:
+            if prod_id not in productos_invalidos:
+                nuevos_items.append((prod_id, cant))
+            else:
+                advertencias.append(f"Pedido {pedido.orden_id}: quitado {prod_id} (inaccesible).")
+
+        pedido.items = nuevos_items
+        if pedido.items:
+            pedidos_limpios.append(pedido)
+
+    return pedidos_limpios, advertencias
 
 def construir_simulacion(
     ruta_escenario: Path,
@@ -712,19 +783,31 @@ def construir_simulacion(
     if grafo.node_count() == 0:
         raise ValueError("El almacén no contiene celdas transitables.")
 
-    print("4. Generando waves (Algoritmo Greedy unificado para todos los pickers)")
-    waves, _, waves_por_picker = _crear_waves(pedidos, pickers, inventario, configuracion)
-    fases = _crear_fases_simulacion(pickers, waves_por_picker)
-
-    print(f"   Waves generadas: {len(waves)}")
-
-    print("5. Preparando rutas dinámicas y zonas de despacho")
+    print("4. Preparando rutas dinámicas y zonas de despacho")
     cache = CacheDistancias(grafo)
     puntos_despacho = _obtener_puntos_despacho(warehouse, grafo)
-    if waves and not puntos_despacho:
+    if pedidos and not puntos_despacho:
         raise ValueError(
             "No hay zonas de despacho accesibles asociadas a una puerta de salida."
         )
+
+    # --- NUEVO: Limpieza de productos en callejones sin salida ---
+    print("4.5 Validando accesibilidad de productos")
+    pedidos, advertencias = _limpiar_productos_inalcanzables(
+        pedidos, inventario, warehouse, grafo, cache, puntos_despacho
+    )
+    if advertencias:
+        print("\n   [!] ADVERTENCIAS DE ACCESIBILIDAD:")
+        for adv in advertencias[:15]: # Mostramos las primeras 15
+            print(f"       - {adv}")
+        if len(advertencias) > 15:
+            print(f"       ... y {len(advertencias) - 15} advertencias más.")
+    # -------------------------------------------------------------
+
+    print("5. Generando waves (Algoritmo Greedy unificado para todos los pickers)")
+    waves, _, waves_por_picker = _crear_waves(pedidos, pickers, inventario, configuracion)
+    fases = _crear_fases_simulacion(pickers, waves_por_picker)
+    print(f"   Waves generadas: {len(waves)}")
 
     print(
         f"6. Iniciando motor de simulación: {len(waves)} waves "
