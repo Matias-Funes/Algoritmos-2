@@ -76,12 +76,13 @@ class TestViajesDinamicos(unittest.TestCase):
         from src.core.graph_builder import Graph
 
         grafo = Graph()
-        nodos = [(0, 0), (1, 0), (2, 0), (3, 0)]
+        nodos = [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0)]
         for nodo in nodos:
             grafo.add_node(nodo)
         grafo.add_edge((0, 0), (1, 0))
         grafo.add_edge((1, 0), (2, 0))
         grafo.add_edge((2, 0), (0, 0))
+        grafo.add_edge((2, 0), (4, 0))
         grafo.add_edge((1, 0), (3, 0))
         picker = Picker("PK_01", (0, 0), 1.0)
 
