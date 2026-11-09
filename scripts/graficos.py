@@ -1,28 +1,36 @@
 # scripts/graficos.py
-import pandas as pd
-import matplotlib.pyplot as plt
 import os
 
-# Aseguramos que exista la carpeta de resultados
+import matplotlib.pyplot as plt
+import pandas as pd
+
 os.makedirs("data/results", exist_ok=True)
 
 
-# --- GRÁFICO 1: Estrategia A vs B (Distancia y Tiempo) ---
-def generar_grafico_comparacion():
+def generar_grafico_comparacion_escenario(escenario_objetivo):
     try:
         df = pd.read_csv("data/results/experimentos.csv")
     except FileNotFoundError:
         print("No se encontró experimentos.csv")
         return
 
-    # Tomamos el escenario más grande o el "generado" para comparar
-    # (Ajusta 'Escenario' si tus nombres son distintos)
-    escenario_objetivo = df["Escenario"].unique()[0]
-    df_filtrado = df[df["Escenario"] == escenario_objetivo]
+    # Filtramos por el escenario que le pasemos (ej: "grande")
+    df_filtrado = df[df["Escenario"].str.contains(escenario_objetivo, case=False)]
 
+    if df_filtrado.empty:
+        print(f"No hay datos para el escenario: {escenario_objetivo}")
+        print(f"Escenarios disponibles: {df['Escenario'].unique()}")
+        return
+
+    # Agrupamos solo por columnas numéricas
+    df_filtrado = (
+        df_filtrado.groupby("Estrategia").mean(numeric_only=True).reset_index()
+    )
+
+    # --- CREACIÓN DE LA FIGURA ---
     fig, ax1 = plt.subplots(figsize=(8, 5))
 
-    # Gráfico de barras para Distancia
+    # Eje 1: Distancia (Barras)
     color_dist = "#193B59"
     ax1.set_xlabel("Estrategia", fontweight="bold")
     ax1.set_ylabel("Distancia Total (metros)", color=color_dist, fontweight="bold")
@@ -31,7 +39,6 @@ def generar_grafico_comparacion():
     )
     ax1.tick_params(axis="y", labelcolor=color_dist)
 
-    # Añadir etiquetas de valor sobre las barras
     for barra in barras:
         yval = barra.get_height()
         ax1.text(
@@ -43,7 +50,7 @@ def generar_grafico_comparacion():
             fontweight="bold",
         )
 
-    # Gráfico de líneas para Tiempo en un eje secundario
+    # Eje 2: Tiempo (Línea)
     ax2 = ax1.twinx()
     color_tiempo = "#147D5A"
     ax2.set_ylabel("Tiempo (ms)", color=color_tiempo, fontweight="bold")
@@ -58,15 +65,15 @@ def generar_grafico_comparacion():
     ax2.tick_params(axis="y", labelcolor=color_tiempo)
 
     plt.title(
-        f"Comparación A vs B (Escenario: {escenario_objetivo})", fontweight="bold"
+        f"Comparación A vs B (Escenario: {escenario_objetivo.capitalize()})",
+        fontweight="bold",
     )
     plt.tight_layout()
-    plt.savefig("data/results/grafico_comparacion.png", dpi=300)
+    plt.savefig(f"data/results/grafico_comparacion_{escenario_objetivo}.png", dpi=300)
     plt.close()
-    print("✅ Gráfico de comparación generado.")
+    print(f"✅ Gráfico de comparación ({escenario_objetivo}) generado.")
 
 
-# --- GRÁFICO 2: Escalabilidad (Tiempo vs Tamaño del Almacén) ---
 def generar_grafico_escalabilidad():
     try:
         df = pd.read_csv("data/results/resultados_experimentos.csv")
@@ -74,12 +81,11 @@ def generar_grafico_escalabilidad():
         print("No se encontró resultados_experimentos.csv")
         return
 
-    # Filtrar solo los escenarios generados automáticamente (Chico, Mediano, Grande, Enorme)
-    # Si no usas esos nombres, ajusta el filtro
+    # Filtramos solo los 4 escenarios generados
     df_gen = df[df["escenario"].isin(["Chico", "Mediano", "Grande", "Enorme"])]
 
     if df_gen.empty:
-        print("No hay datos de escalabilidad para graficar.")
+        print("No se encontraron escenarios generados para escalabilidad.")
         return
 
     plt.figure(figsize=(8, 5))
@@ -115,5 +121,14 @@ def generar_grafico_escalabilidad():
 
 
 if __name__ == "__main__":
-    generar_grafico_comparacion()
     generar_grafico_escalabilidad()
+    generar_grafico_comparacion_escenario("grande")
+    generar_grafico_comparacion_escenario("generado")
+
+# scripts/graficos.py
+import os
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+os.makedirs("data/results", exist_ok=True)
