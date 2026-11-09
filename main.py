@@ -1,5 +1,10 @@
 """Punto de entrada: abre la aplicación (menú, configuración y simulación)."""
 
+# ============================================================
+# 1. IMPORTS: piezas que main.py conecta para armar la aplicación
+# ============================================================
+# argparse lee argumentos de la consola; json guarda la partida;
+# random ubica los pickers sin superponerlos.
 from __future__ import annotations
 
 import argparse
@@ -19,6 +24,12 @@ from src.io.scenario_loader import cargar_escenario
 from src.simulation.simulation import Simulation
 
 
+# ============================================================
+# 2. CONVERTIR LOS DATOS DEL JSON A OBJETOS DEL PROYECTO
+# ============================================================
+# El archivo JSON contiene diccionarios y listas. El resto del programa
+# trabaja con objetos Producto, Orden y Picker, que tienen sus propios datos
+# y operaciones. Estas funciones hacen esa conversión una sola vez.
 def _crear_productos(datos_productos: list[dict[str, Any]]) -> list[Producto]:
     """Convierte los productos crudos del JSON en objetos del dominio."""
     productos = []
@@ -79,6 +90,12 @@ def _crear_pickers(datos_pickers: list[dict[str, Any]]) -> list[Picker]:
     return pickers
 
 
+# ============================================================
+# 3. VALIDAR EL STOCK ANTES DE INICIAR
+# ============================================================
+# Se suman las cantidades pedidas por producto. El inventario se consulta por
+# ID mediante GestorInventario, que usa una HashTable: así no hace falta
+# recorrer toda la lista de productos cada vez que se busca uno.
 def _validar_stock_pedidos(
     pedidos: list[Orden],
     inventario: GestorInventario,
@@ -101,6 +118,12 @@ def _validar_stock_pedidos(
             )
 
 
+# ============================================================
+# 4. ASIGNAR PEDIDOS A WAVES Y PICKERS
+# ============================================================
+# Una wave agrupa pedidos que un picker preparará en el mismo turno.
+# El algoritmo es greedy: procesa primero los pedidos de mayor prioridad y,
+# en cada decisión, elige una opción que parece conveniente en ese momento.
 def _crear_waves(
     pedidos: list[Orden],
     pickers: list[Picker],
@@ -119,6 +142,9 @@ def _crear_waves(
     if pedidos and not pickers:
         raise ValueError("No se pueden procesar pedidos sin pickers.")
 
+    # Las listas conservan el orden de las waves y de los pedidos.
+    # Los diccionarios, indexados por ID de picker, permiten consultar y
+    # actualizar rápidamente el trabajo y el peso asignados a cada uno.
     # 1. Ordenar pedidos por prioridad (mayor a menor)
     pedidos_ordenados = sorted(pedidos, key=lambda p: -p.prioridad)
 
@@ -133,7 +159,7 @@ def _crear_waves(
         peso_pedido = pedido.peso_total(inventario)
         asignado = False
 
-        # 2. Filtrar pickers que puedan transportar el pedido (capacidad individual)
+        # 2. Preferir pickers cuya capacidad permita llevar el pedido completo.
         candidatos = [
             p for p in pickers
             if p.capacidad_carga_kg >= peso_pedido
@@ -143,13 +169,14 @@ def _crear_waves(
             print(f"   Advertencia: El pedido {pedido.orden_id} pesa más que cualquier picker.")
             candidatos = pickers
 
-        # 3. Ordenar candidatos por menor carga acumulada (Balanceo de carga)
+        # 3. Entre los candidatos, dar preferencia al menos cargado para
+        # repartir el trabajo de forma aproximada.
         candidatos_ordenados = sorted(
             candidatos,
             key=lambda p: carga_wave_actual[p.id]
         )
 
-        # 4. Intentar meter en la wave actual del picker
+        # 4. Si su wave actual todavía tiene espacio, agregar ahí el pedido.
         for picker in candidatos_ordenados:
             wave = wave_actual[picker.id]
             if wave is not None and wave.puede_aceptar(pedido, inventario):
@@ -159,7 +186,8 @@ def _crear_waves(
                 asignado = True
                 break
 
-        # 5. Si no entró en ninguna wave actual, crear una nueva wave
+        # 5. Si no cabe en las waves abiertas, crear una nueva para el picker
+        # con menor carga. La wave valida sus límites antes de aceptar el pedido.
         if not asignado:
             # Elegir al picker con menos carga actual
             picker_elegido = min(candidatos, key=lambda p: carga_wave_actual[p.id])
@@ -188,6 +216,11 @@ def _crear_waves(
     return waves, pedidos_por_picker, waves_por_picker
 
 
+# ============================================================
+# 5. AGRUPAR LAS WAVES POR TURNOS Y LOCALIZAR LOS DESPACHOS
+# ============================================================
+# Los pickers avanzan en paralelo. El turno 1 reúne la primera wave de cada
+# picker; el turno 2, la segunda, y así sucesivamente.
 def _crear_fases_simulacion(
     pickers: list[Picker],
     waves_por_picker: dict[str, list[Wave]],
@@ -200,14 +233,14 @@ def _crear_fases_simulacion(
     )
     for indice_turno in range(cantidad_turnos):
         asignaciones = {}
-        waves_ids = {}  # <--- NUEVO: Guarda el ID de la wave de cada picker
+        waves_ids = {}
         for picker in pickers:
             waves_picker = waves_por_picker[picker.id]
             if indice_turno >= len(waves_picker):
                 continue
             wave = waves_picker[indice_turno]
             asignaciones[picker.id] = wave.pedidos
-            waves_ids[picker.id] = wave.id  # <--- NUEVO
+            waves_ids[picker.id] = wave.id
         fases.append({"asignaciones": asignaciones, "waves_ids": waves_ids})
 
     return fases or [{"asignaciones": {}, "waves_ids": {}}]
@@ -218,6 +251,8 @@ def _obtener_puntos_despacho(
     grafo: Any,
 ) -> dict[str, list[tuple[int, int]]]:
     """Devuelve las celdas transitables de las zonas vinculadas a salida."""
+    # El grafo sirve para filtrar las celdas de la zona que puede usar un
+    # picker. Se agrupan por zona para que el motor sepa dónde descargar.
     puntos_por_zona = {}
     for zona in warehouse.zonas.values():
         puerta = warehouse.puertas.get(zona.puerta_id)
@@ -235,6 +270,12 @@ def _obtener_puntos_despacho(
     return puntos_por_zona
 
 
+# ============================================================
+# 6. COORDINAR EL MOTOR DE SIMULACIÓN CON LA INTERFAZ
+# ============================================================
+# Simulation mueve y planifica los pickers de un turno. Esta clase exterior
+# mantiene el avance de todos los turnos, acumula métricas y conecta el motor
+# con Tkinter, que es quien refresca la ventana.
 class _SimulationTk:
     """Coordina fases y presenta viajes dinámicos al bucle de Tk."""
 
@@ -280,6 +321,9 @@ class _SimulationTk:
         self._faltantes_acumulados: list[dict[str, Any]] = []
         self._descargas_acumuladas: list[dict[str, Any]] = []
 
+        # Las cantidades de estas métricas se calculan una sola vez al inicio.
+        # Se recorren las asignaciones de cada fase para obtener el total global
+        # y un total separado por picker.
         self._total_productos = sum(
             cantidad
             for fase in fases
@@ -317,6 +361,8 @@ class _SimulationTk:
         """Crea un motor común que planifica el trabajo de toda la flota."""
         fase = self.fases[indice]
         es_ultima = (indice == len(self.fases) - 1)
+        # Si un picker tiene pedidos en turnos posteriores, el motor evita
+        # dejarlo en un punto de descarga del que no pueda volver a trabajar.
         pickers_con_trabajo_posterior = {
             picker_id
             for fase_futura in self.fases[indice + 1 :]
@@ -344,6 +390,10 @@ class _SimulationTk:
 
     def get_estado(self) -> dict[str, Any]:
         """Devuelve el estado del turno activo y de toda la flota."""
+        # La interfaz necesita tanto el estado del turno como los acumulados
+        # globales para mostrar la simulación completa.
+        # Simulation conoce solo el turno actual. Aquí se agregan los resultados
+        # de turnos anteriores para que las métricas globales no vuelvan a cero.
         estado = self._simulacion_actual.get_estado()
         faltantes_actuales = estado["faltantes"]
         descargas_actuales = estado["descargas"]
@@ -381,7 +431,8 @@ class _SimulationTk:
         )
         estado_pickers = {picker["id"]: picker for picker in estado["pickers"]}
 
-        # Cada fase sincroniza una wave asignada por picker.
+        # Cada fase sincroniza una wave por picker; algunos pickers pueden no
+        # tener trabajo en esa fase.
         waves_ids_fase = self.fases[self.fase_actual].get("waves_ids", {})
 
         estado["pickers"] = [
@@ -441,6 +492,8 @@ class _SimulationTk:
         if self._simulacion_actual.avanzar_paso():
             return True
 
+        # El motor actual terminó: acumular sus métricas antes de crear el
+        # motor del siguiente turno.
         estado_fase = self._simulacion_actual.get_estado()
         self._productos_recogidos_acumulados += estado_fase["productos_recogidos"]
         for picker_id, cantidad in estado_fase[
@@ -523,6 +576,7 @@ class _SimulationTk:
             self._actualizar_interfaz()
 
     def _programar_paso(self, demora_ms: int) -> None:
+        # Tkinter llama al siguiente paso después de la demora indicada.
         self._after_id = self._root.after(demora_ms, self._avanzar_automaticamente)
 
     def _avanzar_automaticamente(self) -> None:
@@ -551,6 +605,8 @@ class _SimulationTk:
         return True
 
     def comparar_estrategias(self):
+        # La comparación usa las waves y el inventario originales; no cambia
+        # el estado de la animación que está viendo el usuario.
         if self.grafo is None or self.inventario is None or not self.waves:
             return {"por_wave": [], "totales": {},
                     "ganador_distancia": None, "ganador_tiempo": None,
@@ -662,7 +718,8 @@ class _SimulationTk:
             for item in descarga["items"]
         )
 
-        # Descontamos la demanda de lo ya recogido
+        # El snapshot ya incluye esos productos como recogidos. Se descuentan
+        # de la demanda pendiente para que al reanudar no se recojan dos veces.
         picker_por_id = {p.id: p for p in self._simulacion_actual.pickers}
         for rec in snapshot.get("recogidos_fase_actual", []):
             picker = picker_por_id.get(rec["picker_id"])
@@ -671,6 +728,13 @@ class _SimulationTk:
                     picker, rec["producto_id"], rec["cantidad"]
                 )
 
+
+# ============================================================
+# 7. DETECTAR PRODUCTOS SIN RUTA DE IDA Y VUELTA
+# ============================================================
+# Antes de crear las waves, esta función revisa que cada producto tenga una
+# celda de pasillo desde la que se pueda llegar al despacho y regresar. Así la
+# simulación no asigna pedidos que la red de calles no permite completar.
 def _limpiar_productos_inalcanzables(pedidos, inventario, warehouse, grafo, cache, puntos_despacho):
     """
     Busca productos cuyas celdas de acceso estén totalmente aisladas (sin ida o sin vuelta).
@@ -679,13 +743,14 @@ def _limpiar_productos_inalcanzables(pedidos, inventario, warehouse, grafo, cach
     productos_invalidos = set()
     advertencias = []
 
-    # 1. Encontrar un nodo de despacho de referencia
+    # Para la comprobación alcanza con usar un punto de despacho como referencia.
     nodo_despacho = None
     for p in puntos_despacho.values():
         if p:
             nodo_despacho = p[0]
             break
 
+    # set evita guardar dos veces un mismo ID si se encuentra más de un problema.
     for prod in inventario.todos_los_productos():
         prod_id = prod.producto_id
         x, y = prod.ubicacion[0], prod.ubicacion[1]
@@ -700,8 +765,8 @@ def _limpiar_productos_inalcanzables(pedidos, inventario, warehouse, grafo, cach
             productos_invalidos.add(prod_id)
             continue
 
-        # 2. Verificar conectividad real con el despacho (Ida y Vuelta)
-        # Si el producto está en un callejón, d_vuelta será infinito y se descarta.
+        # La caché evita ejecutar Dijkstra de nuevo si ya se consultó el mismo
+        # origen. La distancia infinita significa que no existe camino dirigido.
         es_alcanzable = False
         if nodo_despacho:
             for celda in celdas_acceso:
@@ -719,7 +784,8 @@ def _limpiar_productos_inalcanzables(pedidos, inventario, warehouse, grafo, cach
     if not productos_invalidos:
         return pedidos, advertencias
 
-    # Descontar del inventario
+    # Marcar sin stock los productos inaccesibles y quitarlos de los pedidos
+    # antes de asignarlos. No se elimina el producto del catálogo del inventario.
     for pid in productos_invalidos:
         prod = inventario.obtener_producto(pid)
         if prod:
@@ -741,6 +807,13 @@ def _limpiar_productos_inalcanzables(pedidos, inventario, warehouse, grafo, cach
 
     return pedidos_limpios, advertencias
 
+
+# ============================================================
+# 8. ARMAR LA SIMULACIÓN COMPLETA A PARTIR DE UN ESCENARIO
+# ============================================================
+# Este es el flujo principal de preparación: cargar datos, crear objetos,
+# construir el mapa navegable, validar productos, repartir pedidos y conectar
+# el resultado con el motor que maneja los turnos.
 def construir_simulacion(
     ruta_escenario: Path,
     modo_waves: str = "Wave Global (Flota)", # Se mantiene por compatibilidad con la UI
@@ -761,7 +834,8 @@ def construir_simulacion(
     pedidos = _crear_pedidos(pedidos_raw)
     pickers = _crear_pickers(pickers_raw)
 
-    # ASIGNAR POSICIONES ALEATORIAS EN PASILLOS SIN SOLAPAMIENTO
+    # Los pickers comienzan en celdas de pasillo distintas. random.sample
+    # elige sin reemplazo, por eso no hay dos pickers en la misma celda.
     celdas_transitables = warehouse.celdas_transitables()
     if celdas_transitables:
         if len(pickers) > len(celdas_transitables):
@@ -777,12 +851,17 @@ def construir_simulacion(
 
     _validar_stock_pedidos(pedidos, inventario)
 
+    # El grafo representa las celdas transitables y sus conexiones dirigidas.
+    # Las flechas de los pasillos se convierten en aristas de ida; por eso una
+    # ruta inversa no siempre existe.
     print("3. Construyendo grafo de circulación")
     grafo = construir_grafo(warehouse)
     if grafo.node_count() == 0:
         raise ValueError("El almacén no contiene celdas transitables.")
 
     print("4. Preparando rutas dinámicas y zonas de despacho")
+    # Dijkstra encuentra distancias sobre el grafo. CacheDistancias guarda los
+    # resultados por origen para reutilizarlos durante la generación y el viaje.
     cache = CacheDistancias(grafo)
     puntos_despacho = _obtener_puntos_despacho(warehouse, grafo)
     if pedidos and not puntos_despacho:
@@ -790,7 +869,6 @@ def construir_simulacion(
             "No hay zonas de despacho accesibles asociadas a una puerta de salida."
         )
 
-    # --- NUEVO: Limpieza de productos en callejones sin salida ---
     print("4.5 Validando accesibilidad de productos")
     pedidos, advertencias = _limpiar_productos_inalcanzables(
         pedidos, inventario, warehouse, grafo, cache, puntos_despacho
@@ -801,8 +879,6 @@ def construir_simulacion(
             print(f"       - {adv}")
         if len(advertencias) > 15:
             print(f"       ... y {len(advertencias) - 15} advertencias más.")
-    # -------------------------------------------------------------
-
     print("5. Generando waves (Algoritmo Greedy unificado para todos los pickers)")
     waves, _, waves_por_picker = _crear_waves(pedidos, pickers, inventario, configuracion)
     fases = _crear_fases_simulacion(pickers, waves_por_picker)
@@ -832,6 +908,12 @@ def construir_simulacion(
     return warehouse, simulacion
 
 
+# ============================================================
+# 9. GUARDAR UNA PARTIDA
+# ============================================================
+# Se guarda el escenario junto con un snapshot de la simulación. El escenario
+# conserva los datos para reconstruir el almacén; el snapshot guarda el punto
+# exacto desde el que se quiere continuar.
 def guardar_partida(ruta_json: Path, sim_tk: _SimulationTk):
     """Guarda el escenario base Y el estado actual de la simulación."""
     from src.io.persistence import crear_datos_escenario
@@ -864,6 +946,10 @@ def guardar_partida(ruta_json: Path, sim_tk: _SimulationTk):
         json.dump(datos, f, indent=2, ensure_ascii=False)
 
 
+# ============================================================
+# 10. PUNTO DE ENTRADA DE LA APLICACIÓN
+# ============================================================
+# Permite iniciar con el menú vacío o precargar desde la consola un escenario.
 def main() -> None:
     """Abre la aplicación empezando por el menú."""
     raiz_proyecto = Path(__file__).resolve().parent
