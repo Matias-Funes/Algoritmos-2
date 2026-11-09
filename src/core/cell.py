@@ -47,10 +47,10 @@ class Cell:
     def es_transitable(self):
         """
         True si el picker puede PARARSE en esta celda.
-        Solo las celdas de PASILLO son transitables.
+        Las celdas de pasillo y despacho son transitables.
         Complejidad: O(1).
         """
-        return self.tipo == PASILLO
+        return self.tipo in (PASILLO, DESPACHO)
 
     def es_adyacente_a_transitable(self):
         """

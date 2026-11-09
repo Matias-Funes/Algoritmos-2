@@ -217,19 +217,18 @@ def _obtener_puntos_despacho(
     warehouse: Any,
     grafo: Any,
 ) -> dict[str, list[tuple[int, int]]]:
-    """Busca celdas transitables adyacentes a zonas vinculadas a salida."""
+    """Devuelve las celdas transitables de las zonas vinculadas a salida."""
     puntos_por_zona = {}
     for zona in warehouse.zonas.values():
         puerta = warehouse.puertas.get(zona.puerta_id)
         if puerta is None or puerta.tipo not in ("OUTBOUND", "AMBOS"):
             continue
 
-        puntos = set()
-        for x, y in zona.celdas():
-            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                vecino = (x + dx, y + dy)
-                if vecino in grafo.adj:
-                    puntos.add(vecino)
+        puntos = {
+            (x, y)
+            for x, y in zona.celdas()
+            if (x, y) in grafo.adj
+        }
         if puntos:
             puntos_por_zona[zona.id] = sorted(puntos)
 

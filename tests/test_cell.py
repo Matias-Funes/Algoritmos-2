@@ -31,6 +31,9 @@ class TestCell(unittest.TestCase):
         c.tipo = PASILLO
         self.assertTrue(c.es_transitable())
 
+        c.tipo = DESPACHO
+        self.assertTrue(c.es_transitable())
+
         c.tipo = RACK
         self.assertFalse(c.es_transitable())
 

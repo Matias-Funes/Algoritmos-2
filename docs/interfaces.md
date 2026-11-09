@@ -112,6 +112,9 @@ class Warehouse:
 
 `rellenar_pasillos_implicitos` convierte las celdas vacías en pasillos
 transitables de sentido `AMBOS`.
+Las celdas de las zonas de despacho también son transitables y se incluyen en
+el grafo de circulación y como destinos de descarga. Los pickers siguen
+iniciando en celdas `PASILLO`.
 
 ### `src/core/inventory.py`
 

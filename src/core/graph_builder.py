@@ -41,7 +41,8 @@ class Graph:
 def construir_grafo(warehouse):
     """
     Recorre la grilla y crea el grafo de circulación.
-    Cada celda PASILLO es un nodo (usamos (x, y) como ID).
+    Cada celda transitable (PASILLO o DESPACHO) es un nodo
+    (usamos (x, y) como ID).
     """
     g = Graph()
 

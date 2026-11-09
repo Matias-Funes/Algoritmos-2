@@ -376,13 +376,13 @@ class Warehouse:
 
     def celdas_transitables(self):
         """
-        Devuelve una lista de todas las celdas PASILLO.
+        Devuelve las celdas PASILLO donde se pueden ubicar pickers al inicio.
         Complejidad: O(ancho_x * largo_y).
         """
         resultado = []
         for fila in self.grid:
             for c in fila:
-                if c.es_transitable():
+                if c.tipo == PASILLO:
                     resultado.append(c)
         return resultado
 
