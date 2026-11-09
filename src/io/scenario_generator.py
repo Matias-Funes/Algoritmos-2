@@ -3,6 +3,7 @@ import json
 import random
 import os
 
+
 def generar_escenario(ancho_x = 18, largo_y = 16, cant_racks = 3, cant_productos = 10, cant_pedidos = 5, ruta_salida = "data/scenarios/generado.json"):
     """
     Genera un escenario aleatorio válido y lo guarda como JSON.
@@ -11,6 +12,8 @@ def generar_escenario(ancho_x = 18, largo_y = 16, cant_racks = 3, cant_productos
         raise ValueError("El almacén debe medir al menos 10 x 12 celdas.")
     print(f"Generando escenario de {ancho_x}x{largo_y}...")
 
+    # Se arma el mismo esquema que consume scenario_loader; asi los escenarios
+    # aleatorios pasan por el flujo normal de validacion y simulacion.
     # 1. Estructura base del JSON
     escenario = {
         "warehouse": {
@@ -50,6 +53,8 @@ def generar_escenario(ancho_x = 18, largo_y = 16, cant_racks = 3, cant_productos
         for dy in range(ZONA_H):
             celdas_ocupadas.add((puerta_x - 1 + dx, 1 + dy))
 
+    # El limite de intentos evita un bucle infinito si el almacen ya no tiene
+    # espacio suficiente para acomodar todos los racks solicitados.
     while racks_creados < cant_racks and intentos < 500:
         intentos += 1
         # Racks verticales de ancho 2, siempre completos dentro del almacén y con
@@ -79,7 +84,8 @@ def generar_escenario(ancho_x = 18, largo_y = 16, cant_racks = 3, cant_productos
                 for dy in range(r_alto):
                     celdas_ocupadas.add((rx + dx, ry + dy))
 
-    # Generar 3 productos por rack
+    # Se toma hasta tres posiciones de cada rack creado. Las coordenadas x/y
+    # identifican la celda del rack y z representa el nivel vertical.
     for p in range(3):
         if len(escenario["productos"]) >= cant_productos: break
         pid = f"P{len(escenario['productos'])+1:03d}"
@@ -95,6 +101,8 @@ def generar_escenario(ancho_x = 18, largo_y = 16, cant_racks = 3, cant_productos
     if not escenario["productos"]:
         raise ValueError("No se pudo ubicar ningún rack: agrande el almacén.")
 
+    # Los pedidos seleccionan productos existentes y cantidades acotadas para
+    # producir una carga de prueba reproducible en forma, aunque aleatoria en datos.
     # 4. Generar Pedidos
     for i in range(cant_pedidos):
         pedido_items = []

@@ -1,4 +1,6 @@
 # src/ui/visualization.py
+# Esta vista es solo presentacion: obtiene un snapshot del motor, dibuja el
+# mapa y envia acciones a la simulacion, pero no calcula rutas ni modifica pedidos.
 import re
 import sys
 import tkinter as tk
@@ -46,6 +48,8 @@ class Ventana(tk.Frame):
 
         self.offset_x = 0
         self.offset_y = 0
+        # Se guardan elementos del Canvas y firmas del ultimo dibujo para
+        # actualizar solo lo que cambio, en vez de borrar y recrear todo en cada tick.
         self._geometria_dibujada = None
         self._stock_por_celda = {}
         self._productos_recogidos_stock = None
@@ -272,6 +276,8 @@ class Ventana(tk.Frame):
 
     def _recalcular_dimensiones(self):
         """Calcula el tamaño de celda ideal para que el mapa ocupe toda la pantalla."""
+        # Se usa la menor escala entre ancho y alto para que el mapa entre
+        # completo; los offsets centran el espacio sobrante.
         ancho_disp = self.canvas.winfo_width()
         alto_disp = self.canvas.winfo_height()
 
@@ -325,6 +331,8 @@ class Ventana(tk.Frame):
         )
 
     def _dibujar_fondo(self):
+        # Un cambio de tamaño invalida las coordenadas de todo el Canvas; se
+        # reconstruye el fondo y se vacian las referencias a elementos graficos.
         self.canvas.delete("all")
         self._rutas_dibujadas.clear()
         self._items_pickers.clear()
@@ -332,6 +340,8 @@ class Ventana(tk.Frame):
         self._geometria_dibujada = self._geometria_canvas()
 
     def _actualizar_iconos_stock(self, stock_map):
+        # El stock puede cambiar sin que cambie la geometria. Se reemplaza solo
+        # la capa etiquetada "stock", conservando rutas y pickers dibujados.
         self.canvas.delete("stock")
         for (x, y), cantidad in stock_map.items():
             if cantidad > 0:
@@ -345,6 +355,8 @@ class Ventana(tk.Frame):
         self._firma_pedidos_mostrada = None
 
     def btn_toggle_play_pause(self):
+        # La vista solo controla el ciclo de vida; el motor programa sus ticks
+        # en Tkinter para mantener la ventana receptiva.
         if not self.simulacion: return
         if self.en_ejecucion:
             self.simulacion.pausar()
@@ -413,6 +425,8 @@ class Ventana(tk.Frame):
             messagebox.showinfo("Sin datos", "No hay waves para comparar.", parent=self.root)
             return
 
+        # La comparacion se muestra en una ventana secundaria para mantener
+        # visible la simulacion y separar resumen global de detalle por wave.
         ventana = tk.Toplevel(self.root)
         ventana.title("Comparación de Estrategias")
         ventana.geometry("700x500")
@@ -546,6 +560,8 @@ class Ventana(tk.Frame):
         return stock_map
 
     def dibujar_warehouse(self, stock_map=None):
+        # Cada celda del modelo se pinta en una coordenada de Canvas. El eje y
+        # se invierte porque el grid crece desde abajo y la pantalla desde arriba.
         if stock_map is None: stock_map = {}
         for y in range(self.warehouse.largo_y):
             for x in range(self.warehouse.ancho_x):
@@ -614,6 +630,9 @@ class Ventana(tk.Frame):
         )
 
     def dibujar_recorrido(self, picker_id, ruta, color="#0ea5e9"):
+        # El Canvas mantiene un segmento por arista de ruta. Al replanificar se
+        # conserva el prefijo y sufijo comunes y solo se recrea la parte distinta,
+        # evitando repintar el recorrido completo en cada actualizacion.
         nueva_ruta = tuple(tuple(punto) for punto in ruta)
         datos = self._rutas_dibujadas.get(picker_id)
         if datos is None:
@@ -757,12 +776,17 @@ class Ventana(tk.Frame):
             self.canvas.tag_raise(item)
 
     def actualizar_desde_simulacion(self):
+        # Este metodo es el adaptador entre el snapshot del motor y los widgets.
+        # Se llama tras cada paso, por eso debe evitar reconstrucciones costosas
+        # cuando el stock, los pedidos o la geometria no cambiaron.
         if not self.simulacion: return
         self._recalcular_dimensiones()
 
         estado = self.simulacion.get_estado()
         productos_recogidos = estado.get("productos_recogidos")
         actualizar_stock = False
+        # El numero total de productos recogidos actua como version del stock:
+        # mientras no cambie, no hace falta volver a recorrer el inventario.
         if (
             self._productos_recogidos_stock is None
             or productos_recogidos != self._productos_recogidos_stock
@@ -920,6 +944,8 @@ class Ventana(tk.Frame):
     def _actualizar_lista_pedidos(
         self, pedidos, colores_por_picker, faltantes=None
     ):
+        # La firma permite salir temprano si los pedidos/faltantes visibles son
+        # iguales a los del ultimo tick, evitando reescribir todo el Text widget.
         faltantes = faltantes or []
         if isinstance(pedidos, dict) and pedidos and isinstance(
             next(iter(pedidos.values())), dict
@@ -993,6 +1019,8 @@ class Ventana(tk.Frame):
                 for indice, picker_id in enumerate(colores_por_picker)
             }
 
+            # La altura se consulta al modelo solo para los IDs que se muestran;
+            # no se duplica esa informacion dentro de la vista.
             def obtener_altura(pid):
                 try:
                     inv = getattr(self.simulacion, "inventario", None)

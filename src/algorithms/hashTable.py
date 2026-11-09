@@ -1,12 +1,15 @@
 
-
+# Tabla hash propia usada por el inventario y los algoritmos de rutas.
+# La lista `casillas` guarda el primer nodo de cada bucket; si dos claves
+# caen en el mismo indice, sus nodos se encadenan para no perder datos.
 
 class nodoH:
     """clase la cual es la base para la implementacion de los nodos de las listas
     enlazadas de la hash table 
     """
 
-    # se puede implementar una estructura de lista pero se tiene que modificar el tipo de nodo
+    # Cada nodo conserva la clave y el valor juntos: al buscar o borrar hay que
+    # comparar la clave, no alcanza con conocer el indice hash.
     def __init__(self, clave, valor):
         self.clave = clave
         self.valor = valor
@@ -24,8 +27,10 @@ class HashTable:
         """cosntructor de la hash table"""
 
         self.capacidad = capacidad
-        self.casillas = [None] * self.capacidad  # lista con longitud = capacidad y None en cada posicion
-        self.cantidad = 0  # cantidad de elementos guardados
+        # Se preasignan buckets vacios para acceder a cada uno directamente
+        # por indice. `cantidad` se mantiene para calcular carga en O(1).
+        self.casillas = [None] * self.capacidad
+        self.cantidad = 0
 
     def _hash(self, clave):
         """crea el hash para una clave, O(1)"""
@@ -37,7 +42,7 @@ class HashTable:
 
         indice = self._hash(clave)
 
-        # ----------------La casilla esta vacia---------------------
+        # Si el bucket esta libre, el nuevo nodo queda como su primer elemento.
         if self.casillas[indice] is None:
             self.casillas[indice] = nodoH(clave, valor)
             self.cantidad += 1
@@ -45,7 +50,8 @@ class HashTable:
                 self.reescalaDeLaTablaHash()
             return
 
-        # ----------------La casilla tiene elementos (colision o clave repetida)---------------------
+        # Una colision se resuelve recorriendo la lista del bucket. Si la clave
+        # ya estaba, se reemplaza su valor para mantener una sola entrada.
         actual = self.casillas[indice]
         while actual:
             if actual.clave == clave:
@@ -55,6 +61,7 @@ class HashTable:
                 break
             actual = actual.siguiente
 
+        # Si no hubo coincidencia, se agrega al final de la cadena.
         actual.siguiente = nodoH(clave, valor)
         self.cantidad += 1
         if self.factorDeCarga() >= 0.75:
@@ -135,6 +142,8 @@ class HashTable:
     def reescalaDeLaTablaHash(self):
         """aumenta en 2 el tamaño de la tabla hash en caso de que el factor de carga sea 
         mayor a 0.75,  O(n) promedio, O(n^2) peor"""
+        # Al cambiar la capacidad tambien cambian los indices hash. Por eso se
+        # crea una tabla nueva y se recalcula el bucket de cada clave.
         casillasAnteriores = self.casillas
 
         self.capacidad *= 2
@@ -151,4 +160,3 @@ class HashTable:
     def __len__(self):
         """retorna la cantidad de elementos que contiene la tabla, O(1) peor caso"""
         return self.cantidad
-

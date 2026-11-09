@@ -1,4 +1,6 @@
-# esta implementado por arrays dinamicos de python en vez de listas enlazadas para mejorar la complejidad temporal
+# Un heap binario se guarda en una lista: para el indice i, los hijos estan en
+# 2*i+1 y 2*i+2, y el padre en (i-1)//2. El arreglo evita crear nodos enlazados
+# y permite acceder a padres e hijos en O(1).
 
 
 # --------------------------------------------------------------------------------
@@ -6,6 +8,8 @@ def heapify(L, size, i, isMaxHeap=True):
     """mantiene la condicion de heap y lo evalua segun la entrada como maxHeap o minHeap,
     O(log n), mejor caso O(1)"""
 
+    # Baja el valor actual hacia el hijo que debe quedar arriba. Solo se mira
+    # el subarbol indicado, que conserva su forma completa de heap.
     target_idx = i
 
     left = 2 * i + 1
@@ -41,6 +45,8 @@ def siftUp(L, i, isMaxHeap=True):
     """Sube el elemento en la posicion i hasta restaurar la condicion de heap,se necesita para insertar
     O(log n), mejor caso O(1)"""
 
+    # Se usa al insertar: el elemento nuevo empieza al final y sube mientras
+    # viole la relacion de prioridad con su padre.
     while i > 0:
         padre = (i - 1) // 2
 
@@ -72,7 +78,8 @@ def minHeapify(L, size, i):
 
 
 def buildMaxHeap(L):
-    # crea un maxHeap
+    # Los nodos desde n//2 en adelante son hojas; se repara desde el ultimo
+    # padre hacia la raiz para construir el heap en tiempo O(n).
     n = len(L)
 
     for i in range((n // 2) - 1, -1, -1):
@@ -80,7 +87,7 @@ def buildMaxHeap(L):
 
 
 def buildMinHeap(L):
-    # crea un minHeap
+    # Mismo armado que el max-heap, invirtiendo la comparacion de prioridades.
     n = len(L)
 
     for i in range((n // 2) - 1, -1, -1):
@@ -100,7 +107,8 @@ def heapSort(L, ascending=True):
     if n <= 1:
         return  # retorna None ya que el array no tiene elementos
 
-    # Construir el Heap
+    # La raiz contiene el siguiente extremo del orden. Al mandarla al final y
+    # reducir el heap, cada posicion finaliza una sola vez.
     if ascending:
         buildMaxHeap(L)
     else:

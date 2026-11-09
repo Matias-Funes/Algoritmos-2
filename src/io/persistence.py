@@ -11,6 +11,8 @@ from typing import Any
 
 
 def _leer(objeto: Any, atributo: str, alternativa: str | None = None) -> Any:
+    # Aceptar modelos y diccionarios permite que el guardado sirva tanto para
+    # configuraciones crudas como para objetos ya creados por la simulacion.
     if isinstance(objeto, dict):
         if atributo in objeto:
             return objeto[atributo]
@@ -24,6 +26,8 @@ def _leer(objeto: Any, atributo: str, alternativa: str | None = None) -> Any:
 
 
 def _coordenadas(ubicacion: Any, incluir_altura: bool = False) -> dict[str, int]:
+    # JSON no tiene tuplas; se normalizan coordenadas a objetos con nombres
+    # x/y(/z), evitando que dos formatos de entrada produzcan esquemas distintos.
     if isinstance(ubicacion, dict):
         coordenadas = {
             "x": int(ubicacion["x"]),
@@ -42,6 +46,8 @@ def _coordenadas(ubicacion: Any, incluir_altura: bool = False) -> dict[str, int]
 
 
 def _serializar_warehouse(warehouse: Any) -> dict[str, Any]:
+    # Se serializan las entidades originales (rectangulos y puertas), no la
+    # grilla derivada; el cargador reconstruye esa grilla al abrir el archivo.
     return {
         "dimensiones": {
             "ancho_x": warehouse.ancho_x,
@@ -122,6 +128,8 @@ def _serializar_pedido(pedido: Any) -> dict[str, Any]:
 def _serializar_picker(picker: Any) -> dict[str, Any]:
     if isinstance(picker, dict):
         datos = copy.deepcopy(picker)
+        # Un escenario define el inicio del picker. Su posicion y carga actuales
+        # pertenecen al snapshot de partida y no deben alterar ese escenario.
         for campo in (
             "posicion_actual",
             "carga_actual_kg",
@@ -188,6 +196,8 @@ def guardar_escenario(
         config,
     )
 
+    # El temporal queda en la misma carpeta para que os.replace sea atomico en
+    # el mismo volumen. Si la escritura falla, el destino anterior se conserva.
     temporal: str | None = None
     try:
         with tempfile.NamedTemporaryFile(

@@ -33,6 +33,8 @@ def construir_warehouse(datos):
     dim = datos["dimensiones"]
     wh = Warehouse(dim["ancho_x"], dim["largo_y"])
 
+    # Se reutilizan las mismas clases y validaciones que usa la aplicacion; el
+    # benchmark no mantiene una segunda implementacion simplificada del mapa.
     for p in datos["pasillos"]:
         u = p["ubicacion"]
         wh.add_pasillo(
@@ -136,11 +138,15 @@ def correr_escenario(nombre, escenario, repeticiones=REPETICIONES):
     las waves. Devuelve (filas, waves): una fila (dict) por estrategia."""
     wh = escenario["warehouse"]
     inv = escenario["inventario"]
+    # Se prepara el mapa y la asignacion una vez. Cada estrategia recibe un
+    # cache nuevo por wave para medir tambien el costo de sus busquedas iniciales.
     grafo = construir_grafo(wh)
     waves = generar_waves(escenario["pedidos"], inv, grafo, escenario["config"])
 
     filas = []
     for etiqueta, estrategia in ESTRATEGIAS.items():
+        # Se conserva el menor tiempo de varias corridas para reducir el efecto
+        # de pausas del sistema operativo sobre la medicion.
         mejor_ms = float("inf")
         for _ in range(repeticiones):
             distancia = nodos = ms = 0
@@ -226,6 +232,8 @@ def comparar_estrategias(grafo, waves, warehouse, inventario, estrategias=None):
             "errores": [],
         }
 
+    # El resultado guarda detalle por wave y acumulados globales; los errores
+    # quedan asociados a una estrategia concreta sin cancelar las demas.
     por_wave, errores = [], []
     totales = {e: dict(_METRICAS_VACIAS) for e in estrategias}
     exitos = {e: 0 for e in estrategias}
